@@ -1,0 +1,43 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+apply plugin: 'java'
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+
+def starmadeDirectory = 'C:/Program Files (x86)/Steam/steamapps/common/StarMade/StarMade/'
+def jarName = 'CombatTweaks'
+mainClassName = 'thederpgamer.combattweaks.CombatTweaks'
+group 'thederpgamer.combattweaks'
+version '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation(files(starmadeDirectory + "StarMade.jar"))
+    implementation(fileTree(dir: (starmadeDirectory + "lib"), include: "*.jar"))
+}
+
+compileJava.options.encoding = 'UTF-8'
+
+jar {
+    duplicatesStrategy(DuplicatesStrategy.EXCLUDE)
+    destinationDirectory.set(file(starmadeDirectory + "mods"))
+    archiveFileName = jarName + 'v' + version  + '.jar'
+    manifest.attributes('Main-Class': mainClassName)
+    from {
+        configurations.runtimeClasspath.collect {
+            if(!it.getPath().contains("StarMade") && it.getName().endsWith(".jar")) {
+                it.isDirectory() ? it : zipTree(it)
+            } else return null;
+        }
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
