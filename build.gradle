@@ -20,6 +20,7 @@ repositories {
 dependencies {
     implementation(files(starmadeDirectory + "StarMade.jar"))
     implementation(fileTree(dir: (starmadeDirectory + "lib"), include: "*.jar"))
+    implementation(fileTree(dir: ("lib"), include: "*.jar"))
 }
 
 compileJava.options.encoding = 'UTF-8'
