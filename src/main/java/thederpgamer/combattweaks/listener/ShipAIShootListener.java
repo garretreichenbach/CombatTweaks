@@ -34,7 +34,7 @@ public class ShipAIShootListener implements ShipAIEntityAttemptToShootListener {
 					for(RepairUnit unit : collectionManager.getElementCollections()) {
 						if(unit.size() > 0 && !unit.isReloading(timer.currentTime) && unit.canUse(timer.currentTime, false)) {
 							unit.fire(aiControllerStateUnit, timer);
-							DebugFile.log("[INFO]: Entity "+ shipAIEntity.getEntity().getName() + " firing repair beam.", CombatTweaks.getInstance());
+							DebugFile.log("[INFO]: Entity " + shipAIEntity.getEntity().getName() + " firing repair beam.", CombatTweaks.getInstance());
 						}
 					}
 				}
