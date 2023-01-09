@@ -36,7 +36,7 @@ public class CombatTweaks extends StarMod {
 		instance = this;
 	}
 
-	private final String[] overwriteClasses = {"RepairPasteFabricatorSystem"};
+	private final String[] overwriteClasses = {"RepairBeamHandler"};
 
 
 	@Override
