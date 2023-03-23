@@ -1,11 +1,10 @@
 plugins {
     id 'java'
     id 'application'
+    id 'com.github.johnrengelman.shadow' version '5.2.0'
 }
 
 apply plugin: 'java'
-sourceCompatibility = 1.7
-targetCompatibility = 1.7
 
 def starmadeDirectory = 'C:/Program Files (x86)/Steam/steamapps/common/StarMade/StarMade/'
 def jarName = 'CombatTweaks'
@@ -15,6 +14,7 @@ version '1.0.0'
 
 repositories {
     mavenCentral()
+    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
@@ -37,8 +37,4 @@ jar {
             } else return null;
         }
     }
-}
-
-test {
-    useJUnitPlatform()
 }

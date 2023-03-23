@@ -1,6 +1,7 @@
 package thederpgamer.combattweaks;
 
 import api.config.BlockConfig;
+import api.listener.events.controller.ClientInitializeEvent;
 import api.mod.StarMod;
 import api.network.packets.PacketUtil;
 import glossar.GlossarCategory;
@@ -8,6 +9,7 @@ import glossar.GlossarEntry;
 import glossar.GlossarInit;
 import org.apache.commons.io.IOUtils;
 import org.schema.schine.resource.ResourceLoader;
+import thederpgamer.combattweaks.calculator.ProjectileCalculator;
 import thederpgamer.combattweaks.element.ElementManager;
 import thederpgamer.combattweaks.element.blocks.systems.RepairPasteFabricator;
 import thederpgamer.combattweaks.manager.ConfigManager;
@@ -35,17 +37,20 @@ public class CombatTweaks extends StarMod {
 	public CombatTweaks() {
 		instance = this;
 	}
-
 	private final String[] overwriteClasses = {"RepairBeamHandler"};
-
 
 	@Override
 	public void onEnable() {
-		super.onEnable();
 		instance = this;
 		ConfigManager.initialize(this);
 		EventManager.initialize(this);
+		ProjectileCalculator.initialize();
 		registerPackets();
+	}
+
+	@Override
+	public void onClientCreated(ClientInitializeEvent clientInitializeEvent) {
+		super.onClientCreated(clientInitializeEvent);
 		initializeGlossary();
 	}
 
@@ -69,7 +74,7 @@ public class CombatTweaks extends StarMod {
 	private byte[] overwriteClass(String className, byte[] byteCode) {
 		byte[] bytes = null;
 		try {
-			ZipInputStream file = new ZipInputStream(Files.newInputStream(this.getSkeleton().getJarFile().toPath()));
+			ZipInputStream file = new ZipInputStream(Files.newInputStream(getSkeleton().getJarFile().toPath()));
 			while(true) {
 				ZipEntry nextEntry = file.getNextEntry();
 				if(nextEntry == null) break;

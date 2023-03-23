@@ -39,6 +39,7 @@ public class RepairPateFabricatorHudOverlay extends GUIAncor {
 
 	public void updateText(SegmentController segmentController, float current, float max) {
 		try {
+			if(textOverlay == null) onInit();
 			if(GameClient.getClientState() != null && segmentController.isFullyLoadedWithDock() && PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()).equals(segmentController)) {
 				if(max > 0) {
 					if(GameClient.getClientState().isInFlightMode() && segmentController.getSegmentBuffer().getPointUnsave(segmentController.getSlotAssignment().getAsIndex(GameClient.getClientPlayerState().getCurrentShipControllerSlot())).getType() == ElementKeyMap.REPAIR_CONTROLLER_ID) {

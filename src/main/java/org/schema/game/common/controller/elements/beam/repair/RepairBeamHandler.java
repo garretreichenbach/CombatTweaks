@@ -1,5 +1,7 @@
 package org.schema.game.common.controller.elements.beam.repair;
 
+import api.listener.fastevents.FastListenerCommon;
+import api.listener.fastevents.RepairBeamHitListener;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
@@ -69,12 +71,19 @@ public class RepairBeamHandler extends BeamHandler {
 			if(hitPiece.getSegmentController().isClientOwnObject() && ((GameClientState) hitPiece.getSegmentController().getState()).getWorldDrawer() != null) {
 				((GameClientState) hitPiece.getSegmentController().getState()).getWorldDrawer().getGuiDrawer().notifyEffectHit(hitPiece.getSegmentController(), OffensiveEffects.REPAIR);
 			}
+
+			//INSERTED CODE
+			for (RepairBeamHitListener listener : FastListenerCommon.repairBeamHitListeners)
+				listener.hitFromShip(this, hittingBeam, beamHits, container, hitPiece, from, to, timer, updatedSegments);
+			///
+
 			if(getBeamShooter().isOnServer()) {
 				final int maxHP = hitPiece.getInfo().getMaxHitPointsByte();
 				if(hitPiece.getHitpointsByte() < maxHP) {
 					hitPiece.setHitpointsByte(maxHP);
 					hitPiece.applyToSegment(getBeamShooter().isOnServer());
-				} else if(hitPiece.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
+				}
+				if(hitPiece.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
 					ManagedUsableSegmentController<?> c = (ManagedUsableSegmentController<?>) hitPiece.getSegmentController();
 					if(c.getBlockKillRecorder().size() > 0) {
 						undo(hittingBeam.controllerPos, c, c.getBlockKillRecorder(), (int) hittingBeam.getPower());
@@ -106,7 +115,7 @@ public class RepairBeamHandler extends BeamHandler {
 			for(int i = 0; i < Math.min(amount, blockRemoveBuffer.size()); i++) {
 				//INSERTED CODE
 				boolean hasEnoughPaste = false;
-				if(!consumeResource(blockRemoveBuffer.peakNextType())) {
+				if(consumeResource(blockRemoveBuffer.peakNextType())) {
 					short nextType = blockRemoveBuffer.peakNextType();
 					ElementInformation elementInfo = ElementKeyMap.getInfo(nextType);
 					float pasteNeeded = elementInfo.getMaxHitPointsFull() + elementInfo.getArmorValue();

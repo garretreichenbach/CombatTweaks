@@ -21,7 +21,7 @@ public class RepairPasteFabricatorSystem extends SimpleDataStorageMCModule {
 
 	public RepairPasteFabricatorSystem(SegmentController ship, ManagerContainer<?> managerContainer) {
 		super(ship, managerContainer, CombatTweaks.getInstance(), ElementManager.getBlock("Repair Paste Fabricator").getId());
-		this.timer = UPDATE_TIMER;
+		timer = UPDATE_TIMER;
 		if(data == null || !(data instanceof RepairPasteSystemData)) data = new RepairPasteSystemData();
 	}
 

@@ -7,6 +7,7 @@ import api.listener.events.register.ManagerContainerRegisterEvent;
 import api.listener.fastevents.FastListenerCommon;
 import api.mod.StarLoader;
 import thederpgamer.combattweaks.CombatTweaks;
+import thederpgamer.combattweaks.listener.CannonProjectileListener;
 import thederpgamer.combattweaks.listener.ShipAIShootListener;
 import thederpgamer.combattweaks.system.RepairPasteFabricatorSystem;
 
@@ -18,9 +19,12 @@ import thederpgamer.combattweaks.system.RepairPasteFabricatorSystem;
 public class EventManager {
 
 	public static ShipAIShootListener shipAIShootListener;
+	public static CannonProjectileListener cannonProjectileListener;
 
 	public static void initialize(CombatTweaks instance) {
 		FastListenerCommon.shipAIEntityAttemptToShootListeners.add(shipAIShootListener = new ShipAIShootListener());
+
+		FastListenerCommon.cannonProjectileHitListeners.add(cannonProjectileListener = new CannonProjectileListener());
 
 		StarLoader.registerListener(HudCreateEvent.class, new Listener<HudCreateEvent>() {
 			@Override
@@ -42,5 +46,6 @@ public class EventManager {
 				event.addModMCModule(new RepairPasteFabricatorSystem(event.getSegmentController(), event.getContainer()));
 			}
 		}, instance);
+
 	}
 }
