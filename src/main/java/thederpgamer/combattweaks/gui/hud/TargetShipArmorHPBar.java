@@ -1,0 +1,114 @@
+package thederpgamer.combattweaks.gui.hud;
+
+import api.utils.game.SegmentControllerUtils;
+import org.schema.common.util.StringTools;
+import org.schema.common.util.linAlg.Vector4i;
+import org.schema.game.client.data.GameClientState;
+import org.schema.game.client.view.gui.shiphud.newhud.FillableHorizontalBar;
+import org.schema.game.client.view.gui.shiphud.newhud.GUIPosition;
+import org.schema.game.common.controller.ManagedUsableSegmentController;
+import org.schema.game.common.controller.elements.ElementCollectionManager;
+import org.schema.game.common.data.world.SimpleTransformableSendableObject;
+import org.schema.schine.common.language.Lng;
+import org.schema.schine.input.InputState;
+import thederpgamer.combattweaks.manager.ConfigManager;
+import thederpgamer.combattweaks.system.armor.ArmorHPCollection;
+
+import javax.vecmath.Vector2f;
+
+/**
+ * [Description]
+ *
+ * @author TheDerpGamer (TheDerpGamer#0027)
+ */
+public class TargetShipArmorHPBar extends FillableHorizontalBar {
+	public TargetShipArmorHPBar(InputState inputState) {
+		super(inputState);
+	}
+
+	@Override
+	public boolean isBarFlippedX() {
+		return ConfigManager.getHudConfig().getBoolean("target-ship-armor-hp-bar-flipped-x");
+	}
+
+	@Override
+	public boolean isBarFlippedY() {
+		return ConfigManager.getHudConfig().getBoolean("target-ship-armor-hp-bar-flipped-y");
+	}
+
+	@Override
+	public boolean isFillStatusTextOnTop() {
+		return ConfigManager.getHudConfig().getBoolean("target-ship-armor-hp-bar-text-on-top");
+	}
+
+	@Override
+	public Vector2f getTextPos() {
+		String textPos = ConfigManager.getHudConfig().getString("target-ship-armor-hp-bar-text-pos");
+		String[] textPosSplit = textPos.split(", ");
+		return new Vector2f(Float.parseFloat(textPosSplit[0]), Float.parseFloat(textPosSplit[1]));
+	}
+
+	@Override
+	public Vector2f getTextDescPos() {
+		String textDescPos = ConfigManager.getHudConfig().getString("target-ship-armor-hp-bar-text-desc-pos");
+		String[] textDescPosSplit = textDescPos.split(", ");
+		return new Vector2f(Float.parseFloat(textDescPosSplit[0]), Float.parseFloat(textDescPosSplit[1]));
+	}
+
+	@Override
+	public float getFilled() {
+		SimpleTransformableSendableObject<?> targetObject = ((GameClientState) getState()).getGlobalGameControlManager().getIngameControlManager().getPlayerGameControlManager().getPlayerIntercationManager().getSelectedEntity();
+		if(targetObject instanceof ManagedUsableSegmentController<?>) {
+			float hp = 0;
+			float maxHP = 0;
+			for(ElementCollectionManager<?, ?, ?> collection : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) targetObject, ArmorHPCollection.class)) {
+				if(collection instanceof ArmorHPCollection) {
+					ArmorHPCollection armorHPCollection = (ArmorHPCollection) collection;
+					hp += armorHPCollection.getCurrentHP();
+					maxHP += armorHPCollection.getMaxHP();
+				}
+			}
+			return hp / maxHP;
+		} else return 0;
+	}
+
+	@Override
+	public String getText() {
+		SimpleTransformableSendableObject<?> targetObject = ((GameClientState) getState()).getGlobalGameControlManager().getIngameControlManager().getPlayerGameControlManager().getPlayerIntercationManager().getSelectedEntity();
+		if(targetObject instanceof ManagedUsableSegmentController<?>) {
+			float hp = 0;
+			float maxHP = 0;
+			for(ElementCollectionManager<?, ?, ?> collection : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) targetObject, ArmorHPCollection.class)) {
+				if(collection instanceof ArmorHPCollection) {
+					ArmorHPCollection armorHPCollection = (ArmorHPCollection) collection;
+					hp += armorHPCollection.getCurrentHP();
+					maxHP += armorHPCollection.getMaxHP();
+				}
+			}
+			return StringTools.massFormat(hp) + " / " + StringTools.massFormat(maxHP);
+		} else return Lng.str("Armor n/a");
+	}
+
+	@Override
+	public Vector4i getConfigColor() {
+		String hex = ConfigManager.getHudConfig().getString("target-ship-armor-hp-bar-color");
+		return new Vector4i(Integer.parseInt(hex.substring(0, 2), 16), Integer.parseInt(hex.substring(2, 4), 16), Integer.parseInt(hex.substring(4, 6), 16), Integer.parseInt(hex.substring(6, 8), 16));
+	}
+
+	@Override
+	public GUIPosition getConfigPosition() {
+		return null;
+	}
+
+	@Override
+	public Vector2f getConfigOffset() {
+		String offset = ConfigManager.getHudConfig().getString("target-ship-armor-hp-bar-offset");
+		String[] offsetSplit = offset.split(", ");
+		return new Vector2f(Float.parseFloat(offsetSplit[0]), Float.parseFloat(offsetSplit[1]));
+	}
+
+	@Override
+	protected String getTag() {
+		return "TargetArmorHPBar";
+	}
+}
