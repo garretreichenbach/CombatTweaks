@@ -27,6 +27,7 @@ public class CannonProjectileListener implements CannonProjectileHitListener {
 				ProjectileHandlerSegmentController.ShotHandler shotHandler = (ProjectileHandlerSegmentController.ShotHandler) shotHandlerObj;
 				shotHandler.forcedResult = ProjectileCalculator.calculate(projectileController, posBeforeUpdate, postAfterUpdate, cubeRayCastResult, shotHandler);
 			}
+			shotHandlerField.set(projectileHandlerSegmentController, shotHandlerObj);
 		} catch(Exception exception) {
 			exception.printStackTrace();
 		}
