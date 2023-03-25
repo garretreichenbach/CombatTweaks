@@ -1,7 +1,7 @@
 package thederpgamer.combattweaks.gui.hud;
 
 import api.utils.game.SegmentControllerUtils;
-import org.schema.common.util.StringTools;
+import org.schema.common.config.ConfigurationElement;
 import org.schema.common.util.linAlg.Vector4i;
 import org.schema.game.client.data.GameClientState;
 import org.schema.game.client.view.gui.shiphud.newhud.FillableHorizontalBar;
@@ -11,10 +11,10 @@ import org.schema.game.common.controller.elements.ElementCollectionManager;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.schine.common.language.Lng;
 import org.schema.schine.input.InputState;
-import thederpgamer.combattweaks.manager.ConfigManager;
 import thederpgamer.combattweaks.system.armor.ArmorHPCollection;
 
 import javax.vecmath.Vector2f;
+import java.awt.*;
 
 /**
  * [Description]
@@ -22,37 +22,55 @@ import javax.vecmath.Vector2f;
  * @author TheDerpGamer (TheDerpGamer#0027)
  */
 public class TargetShipArmorHPBar extends FillableHorizontalBar {
+
+	@ConfigurationElement(name = "Color")
+	public static Vector4i COLOR;
+
+	@ConfigurationElement(name = "Offset")
+	public static Vector2f OFFSET;
+
+	@ConfigurationElement(name = "FlipX")
+	public static boolean FLIPX;
+	@ConfigurationElement(name = "FlipY")
+	public static boolean FLIPY;
+
+	@ConfigurationElement(name = "FillStatusTextOnTop")
+	public static boolean FILL_ON_TOP;
+
+	@ConfigurationElement(name = "TextPos")
+	public static Vector2f TEXT_POS;
+
+	@ConfigurationElement(name = "TextDescPos")
+	public static Vector2f TEXT_DESC_POS;
+
+
 	public TargetShipArmorHPBar(InputState inputState) {
 		super(inputState);
 	}
 
 	@Override
 	public boolean isBarFlippedX() {
-		return ConfigManager.getHudConfig().getBoolean("target-ship-armor-hp-bar-flipped-x");
+		return FLIPX;
 	}
 
 	@Override
 	public boolean isBarFlippedY() {
-		return ConfigManager.getHudConfig().getBoolean("target-ship-armor-hp-bar-flipped-y");
+		return FLIPY;
 	}
 
 	@Override
 	public boolean isFillStatusTextOnTop() {
-		return ConfigManager.getHudConfig().getBoolean("target-ship-armor-hp-bar-text-on-top");
+		return FILL_ON_TOP;
 	}
 
 	@Override
 	public Vector2f getTextPos() {
-		String textPos = ConfigManager.getHudConfig().getString("target-ship-armor-hp-bar-text-pos");
-		String[] textPosSplit = textPos.split(", ");
-		return new Vector2f(Float.parseFloat(textPosSplit[0]), Float.parseFloat(textPosSplit[1]));
+		return new Vector2f(TEXT_POS.x, TEXT_POS.y - 7);
 	}
 
 	@Override
 	public Vector2f getTextDescPos() {
-		String textDescPos = ConfigManager.getHudConfig().getString("target-ship-armor-hp-bar-text-desc-pos");
-		String[] textDescPosSplit = textDescPos.split(", ");
-		return new Vector2f(Float.parseFloat(textDescPosSplit[0]), Float.parseFloat(textDescPosSplit[1]));
+		return new Vector2f(TEXT_DESC_POS.x, TEXT_DESC_POS.y - 7);
 	}
 
 	@Override
@@ -85,14 +103,14 @@ public class TargetShipArmorHPBar extends FillableHorizontalBar {
 					maxHP += armorHPCollection.getMaxHP();
 				}
 			}
-			return StringTools.massFormat(hp) + " / " + StringTools.massFormat(maxHP);
+			return Lng.str("Armor HP") + " " + ((int) (hp / maxHP * 100)) + "%";
 		} else return Lng.str("Armor n/a");
 	}
 
 	@Override
 	public Vector4i getConfigColor() {
-		String hex = ConfigManager.getHudConfig().getString("target-ship-armor-hp-bar-color");
-		return new Vector4i(Integer.parseInt(hex.substring(0, 2), 16), Integer.parseInt(hex.substring(2, 4), 16), Integer.parseInt(hex.substring(4, 6), 16), Integer.parseInt(hex.substring(6, 8), 16));
+		Color color = Color.decode("#7c97a3");
+		return new Vector4i(color.getRed(), color.getGreen(), color.getBlue(), 255);
 	}
 
 	@Override
@@ -102,9 +120,8 @@ public class TargetShipArmorHPBar extends FillableHorizontalBar {
 
 	@Override
 	public Vector2f getConfigOffset() {
-		String offset = ConfigManager.getHudConfig().getString("target-ship-armor-hp-bar-offset");
-		String[] offsetSplit = offset.split(", ");
-		return new Vector2f(Float.parseFloat(offsetSplit[0]), Float.parseFloat(offsetSplit[1]));
+		if(OFFSET.y == 65) OFFSET.y = 136;
+		return OFFSET;
 	}
 
 	@Override

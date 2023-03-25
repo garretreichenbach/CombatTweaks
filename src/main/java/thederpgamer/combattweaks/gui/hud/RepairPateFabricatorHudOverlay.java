@@ -2,18 +2,13 @@ package thederpgamer.combattweaks.gui.hud;
 
 import api.common.GameClient;
 import api.listener.events.gui.HudCreateEvent;
-import api.utils.game.PlayerUtils;
-import org.schema.common.util.StringTools;
-import org.schema.game.client.view.BuildModeDrawer;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelperContainer;
 import org.schema.game.common.controller.SegmentController;
-import org.schema.game.common.data.element.ElementKeyMap;
 import org.schema.schine.graphicsengine.core.GLFrame;
 import org.schema.schine.graphicsengine.forms.font.FontLibrary;
 import org.schema.schine.graphicsengine.forms.gui.GUIAncor;
 import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
 import org.schema.schine.graphicsengine.forms.gui.newgui.GUIHelperIcon;
-import thederpgamer.combattweaks.element.ElementManager;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -40,17 +35,17 @@ public class RepairPateFabricatorHudOverlay extends GUIAncor {
 	public void updateText(SegmentController segmentController, float current, float max) {
 		try {
 			if(textOverlay == null) onInit();
-			if(GameClient.getClientState() != null && segmentController.isFullyLoadedWithDock() && PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()).equals(segmentController)) {
-				if(max > 0) {
-					if(GameClient.getClientState().isInFlightMode() && segmentController.getSegmentBuffer().getPointUnsave(segmentController.getSlotAssignment().getAsIndex(GameClient.getClientPlayerState().getCurrentShipControllerSlot())).getType() == ElementKeyMap.REPAIR_CONTROLLER_ID) {
-						textOverlay.setTextSimple(StringTools.formatPointZero(current) + " / " + StringTools.formatPointZero(max));
-						setTextPos(1);
-					} else if(BuildModeDrawer.currentPiece.getType() == ElementManager.getBlock("Repair Paste Fabricator").getId() && !GameClient.getClientState().isInFlightMode()) {
-						textOverlay.setTextSimple("Repair Paste Fabricator: " + StringTools.formatPointZero(current) + " / " + StringTools.formatPointZero(max));
-						setTextPos(2);
-					} else textOverlay.setTextSimple("");
-				}
-			} else textOverlay.setTextSimple("");
+//			if(GameClient.getClientState() != null && segmentController.isFullyLoadedWithDock() && PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()).equals(segmentController)) {
+//				if(max > 0) {
+//					if(GameClient.getClientState().isInFlightMode() && segmentController.getSegmentBuffer().getPointUnsave(segmentController.getSlotAssignment().getAsIndex(GameClient.getClientPlayerState().getCurrentShipControllerSlot())).getType() == ElementKeyMap.REPAIR_CONTROLLER_ID) {
+//						textOverlay.setTextSimple(StringTools.formatPointZero(current) + " / " + StringTools.formatPointZero(max));
+//						setTextPos(1);
+//					} else if(BuildModeDrawer.currentPiece.getType() == ElementManager.getBlock("Repair Paste Fabricator").getId() && !GameClient.getClientState().isInFlightMode()) {
+//						textOverlay.setTextSimple("Repair Paste Fabricator: " + StringTools.formatPointZero(current) + " / " + StringTools.formatPointZero(max));
+//						setTextPos(2);
+//					} else textOverlay.setTextSimple("");
+//				}
+//			} else textOverlay.setTextSimple("");
 		} catch(Exception exception) {
 			exception.printStackTrace();
 		}

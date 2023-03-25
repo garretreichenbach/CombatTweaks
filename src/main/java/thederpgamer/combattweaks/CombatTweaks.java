@@ -38,7 +38,7 @@ public class CombatTweaks extends StarMod {
 	public CombatTweaks() {
 		instance = this;
 	}
-	private final String[] overwriteClasses = {"RepairBeamHandler"};
+	private final String[] overwriteClasses = {"Hud", "HudConfig", "TargetPanel", "RepairBeamHandler"};
 
 	@Override
 	public void onEnable() {

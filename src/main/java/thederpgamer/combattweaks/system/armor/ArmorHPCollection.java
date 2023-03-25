@@ -1,12 +1,13 @@
 package thederpgamer.combattweaks.system.armor;
 
+import org.schema.common.util.StringTools;
 import org.schema.game.client.data.GameClientState;
 import org.schema.game.client.view.gui.structurecontrol.GUIKeyValueEntry;
 import org.schema.game.client.view.gui.structurecontrol.ModuleValueEntry;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.elements.ElementCollectionManager;
 import org.schema.game.common.controller.elements.VoidElementManager;
-import org.schema.game.common.data.element.ElementKeyMap;
+import org.schema.game.common.data.element.Element;
 import org.schema.schine.common.language.Lng;
 import org.schema.schine.graphicsengine.core.Timer;
 
@@ -22,7 +23,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private double maxHP;
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
-		super(ElementKeyMap.HULL_ID, segmentController, armorHPManager);
+		super(Element.TYPE_ALL, segmentController, armorHPManager);
 	}
 
 	@Override
@@ -54,7 +55,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	@Override
 	public GUIKeyValueEntry[] getGUICollectionStats() {
 		return new GUIKeyValueEntry[] {
-			new ModuleValueEntry(Lng.str("HP Status"), currentHP + "/" + maxHP + " [" + getHPPercentage() + "%]")
+			new ModuleValueEntry(Lng.str("HP Status"), StringTools.formatPointZero(currentHP) + "/" + StringTools.formatPointZero(maxHP) + " [" + getHPPercentage() + "%]")
 		};
 	}
 
@@ -66,12 +67,12 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	@Override
 	public void update(Timer timer) {
 		super.update(timer);
-		if(flagCollectionChanged && getSegmentController().isOnServer() && getSegmentController().isFullyLoadedWithDock()) {
+		if(flagCollectionChanged && getSegmentController().isFullyLoadedWithDock()) {
 			currentHP = 0;
 			maxHP = 0;
 			for(ArmorHPUnit unit : getElementCollections()) {
-				currentHP += unit.size() * unit.getElementCollectionId().getHitpointsFull();
-				maxHP += unit.size() * unit.getElementCollectionId().getInfo().getMaxHitPointsFull();
+				currentHP += unit.size() * unit.getElementCollectionId().getInfo().getArmorValue();
+				maxHP += unit.size() * unit.getElementCollectionId().getInfo().getArmorValue();
 			}
 			if(currentHP < 0) currentHP = 0;
 			if(maxHP < 0) maxHP = 0;

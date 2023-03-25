@@ -1,15 +1,21 @@
 package thederpgamer.combattweaks.manager;
 
 import api.listener.Listener;
+import api.listener.events.block.SegmentPieceAddByMetadataEvent;
+import api.listener.events.block.SegmentPieceAddEvent;
+import api.listener.events.block.SegmentPieceRemoveEvent;
 import api.listener.events.entity.ShipJumpEngageEvent;
 import api.listener.events.gui.HudCreateEvent;
 import api.listener.events.register.ManagerContainerRegisterEvent;
 import api.listener.fastevents.FastListenerCommon;
 import api.mod.StarLoader;
+import api.utils.game.SegmentControllerUtils;
+import org.schema.game.common.controller.ManagedUsableSegmentController;
+import org.schema.game.common.controller.elements.ElementCollectionManager;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.element.Element;
-import org.schema.game.common.data.element.ElementKeyMap;
+import org.schema.game.common.data.element.ElementCollection;
 import thederpgamer.combattweaks.CombatTweaks;
 import thederpgamer.combattweaks.listener.BeamListener;
 import thederpgamer.combattweaks.listener.CannonProjectileListener;
@@ -53,7 +59,46 @@ public class EventManager {
 			@Override
 			public void onEvent(ManagerContainerRegisterEvent event) {
 				event.addModMCModule(new RepairPasteFabricatorSystem(event.getSegmentController(), event.getContainer()));
-				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), Element.TYPE_NONE, ElementKeyMap.HULL_ID));
+				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), Element.TYPE_NONE, Element.TYPE_ALL));
+			}
+		}, instance);
+
+		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<SegmentPieceAddByMetadataEvent>() {
+			@Override
+			public void onEvent(SegmentPieceAddByMetadataEvent event) {
+				for(ElementCollectionManager<?, ?, ?> cm : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getSegment().getSegmentController(), ArmorHPCollection.class)) {
+					if(cm instanceof ArmorHPCollection) {
+						ArmorHPCollection collection = (ArmorHPCollection) cm;
+						collection.doAdd(ElementCollection.getIndex4(event.getSegment().getAbsoluteIndex(event.getX(), event.getY(), event.getZ()), event.getOrientation()), event.getType());
+						return;
+					}
+				}
+			}
+		}, instance);
+
+		StarLoader.registerListener(SegmentPieceAddEvent.class, new Listener<SegmentPieceAddEvent>() {
+			@Override
+			public void onEvent(SegmentPieceAddEvent event) {
+				for(ElementCollectionManager<?, ?, ?> cm : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getSegmentController(), ArmorHPCollection.class)) {
+					if(cm instanceof ArmorHPCollection) {
+						ArmorHPCollection collection = (ArmorHPCollection) cm;
+						collection.doAdd(ElementCollection.getIndex4(event.getAbsIndex(), event.getOrientation()), event.getNewType());
+						return;
+					}
+				}
+			}
+		}, instance);
+
+		StarLoader.registerListener(SegmentPieceRemoveEvent.class, new Listener<SegmentPieceRemoveEvent>() {
+			@Override
+			public void onEvent(SegmentPieceRemoveEvent event) {
+				for(ElementCollectionManager<?, ?, ?> cm : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getSegment().getSegmentController(), ArmorHPCollection.class)) {
+					if(cm instanceof ArmorHPCollection) {
+						ArmorHPCollection collection = (ArmorHPCollection) cm;
+						collection.remove(ElementCollection.getIndex4(event.getSegment().getAbsoluteIndex(event.getX(), event.getY(), event.getZ()), event.getOrientation()));
+						return;
+					}
+				}
 			}
 		}, instance);
 	}
