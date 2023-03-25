@@ -16,6 +16,7 @@ import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.element.Element;
 import org.schema.game.common.data.element.ElementCollection;
+import org.schema.game.common.data.element.ElementKeyMap;
 import thederpgamer.combattweaks.CombatTweaks;
 import thederpgamer.combattweaks.listener.BeamListener;
 import thederpgamer.combattweaks.listener.CannonProjectileListener;
@@ -66,6 +67,7 @@ public class EventManager {
 		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<SegmentPieceAddByMetadataEvent>() {
 			@Override
 			public void onEvent(SegmentPieceAddByMetadataEvent event) {
+				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) return;
 				for(ElementCollectionManager<?, ?, ?> cm : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getSegment().getSegmentController(), ArmorHPCollection.class)) {
 					if(cm instanceof ArmorHPCollection) {
 						ArmorHPCollection collection = (ArmorHPCollection) cm;
@@ -79,6 +81,7 @@ public class EventManager {
 		StarLoader.registerListener(SegmentPieceAddEvent.class, new Listener<SegmentPieceAddEvent>() {
 			@Override
 			public void onEvent(SegmentPieceAddEvent event) {
+				if(!ElementKeyMap.getInfo(event.getNewType()).isArmor()) return;
 				for(ElementCollectionManager<?, ?, ?> cm : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getSegmentController(), ArmorHPCollection.class)) {
 					if(cm instanceof ArmorHPCollection) {
 						ArmorHPCollection collection = (ArmorHPCollection) cm;
@@ -92,6 +95,7 @@ public class EventManager {
 		StarLoader.registerListener(SegmentPieceRemoveEvent.class, new Listener<SegmentPieceRemoveEvent>() {
 			@Override
 			public void onEvent(SegmentPieceRemoveEvent event) {
+				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) return;
 				for(ElementCollectionManager<?, ?, ?> cm : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getSegment().getSegmentController(), ArmorHPCollection.class)) {
 					if(cm instanceof ArmorHPCollection) {
 						ArmorHPCollection collection = (ArmorHPCollection) cm;
