@@ -2,6 +2,7 @@ package org.schema.game.common.controller.elements.beam.repair;
 
 import api.listener.fastevents.FastListenerCommon;
 import api.listener.fastevents.RepairBeamHitListener;
+import api.utils.game.SegmentControllerUtils;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
@@ -15,6 +16,7 @@ import org.schema.game.client.data.GameClientState;
 import org.schema.game.client.view.beam.BeamColors;
 import org.schema.game.common.controller.*;
 import org.schema.game.common.controller.elements.BeamState;
+import org.schema.game.common.controller.elements.ElementCollectionManager;
 import org.schema.game.common.controller.elements.ShipManagerContainer;
 import org.schema.game.common.controller.elements.effectblock.EffectElementManager.OffensiveEffects;
 import org.schema.game.common.data.ManagedSegmentController;
@@ -30,9 +32,11 @@ import org.schema.game.common.util.FastCopyLongOpenHashSet;
 import org.schema.schine.graphicsengine.core.Timer;
 import thederpgamer.combattweaks.element.ElementManager;
 import thederpgamer.combattweaks.system.RepairPasteFabricatorSystem;
+import thederpgamer.combattweaks.system.armor.ArmorHPCollection;
 
 import javax.vecmath.Vector3f;
 import javax.vecmath.Vector4f;
+import java.util.ArrayList;
 import java.util.Collection;
 
 /**
@@ -73,8 +77,7 @@ public class RepairBeamHandler extends BeamHandler {
 			}
 
 			//INSERTED CODE
-			for (RepairBeamHitListener listener : FastListenerCommon.repairBeamHitListeners)
-				listener.hitFromShip(this, hittingBeam, beamHits, container, hitPiece, from, to, timer, updatedSegments);
+			for (RepairBeamHitListener listener : FastListenerCommon.repairBeamHitListeners) listener.hitFromShip(this, hittingBeam, beamHits, container, hitPiece, from, to, timer, updatedSegments);
 			///
 
 			if(getBeamShooter().isOnServer()) {
@@ -133,6 +136,14 @@ public class RepairBeamHandler extends BeamHandler {
 							}
 						} catch(Exception exception) {
 							exception.printStackTrace();
+						}
+					}
+					ArrayList<ElementCollectionManager<?, ?, ?>> managers = SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) getBeamShooter(), ArmorHPCollection.class);
+					for(ElementCollectionManager<?, ?, ?> manager : managers) {
+						if(manager instanceof ArmorHPCollection) {
+							ArmorHPCollection armorHPCollection = (ArmorHPCollection) manager;
+							armorHPCollection.recalcHP();
+							break;
 						}
 					}
 

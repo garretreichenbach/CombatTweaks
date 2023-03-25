@@ -20,14 +20,14 @@ import org.schema.schine.graphicsengine.core.Timer;
  */
 public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, ArmorHPCollection, VoidElementManager<ArmorHPUnit, ArmorHPCollection>> {
 
-	private static final float ARMOR_VALUE_MULT = 10.0f;
+	private static final float ARMOR_VALUE_MULT = 50.0f;
 	private boolean flagCollectionChanged;
 	private double currentHP;
 	private double maxHP;
 	private final Short2IntArrayMap blockMap = new Short2IntArrayMap();
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
-		super(Element.TYPE_ALL, segmentController, armorHPManager);
+		super(Element.TYPE_NONE, segmentController, armorHPManager);
 	}
 
 	@Override
@@ -70,22 +70,23 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	@Override
 	public void update(Timer timer) {
-		super.update(timer);
-		if(currentHP < maxHP) return; //Don't update if the armor is already damaged
-		if(flagCollectionChanged && getSegmentController().isFullyLoadedWithDock()) {
-			currentHP = 0;
-			maxHP = 0;
-			for(short type : blockMap.keySet()) {
-				if(type != 0) {
-					currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * ARMOR_VALUE_MULT) * blockMap.get(type);
-					maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * ARMOR_VALUE_MULT) * blockMap.get(type);
-				}
+		if(currentHP < maxHP && maxHP > 0) return; //Don't update if the armor is already damaged
+		if((flagCollectionChanged || maxHP <= 0) && getSegmentController().isFullyLoadedWithDock()) recalcHP();
+	}
+
+	public void recalcHP() {
+		currentHP = 0;
+		maxHP = 0;
+		for(short type : blockMap.keySet()) {
+			if(type != 0) {
+				currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * ARMOR_VALUE_MULT) * blockMap.get(type);
+				maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * ARMOR_VALUE_MULT) * blockMap.get(type);
 			}
-			if(currentHP < 0) currentHP = 0;
-			if(maxHP < 0) maxHP = 0;
-			if(currentHP > maxHP) currentHP = maxHP;
-			flagCollectionChanged = false;
 		}
+		if(currentHP < 0) currentHP = 0;
+		if(maxHP < 0) maxHP = 0;
+		if(currentHP > maxHP) currentHP = maxHP;
+		flagCollectionChanged = false;
 	}
 
 	public double getCurrentHP() {
@@ -105,15 +106,23 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	public void addBlock(long index, short type) {
+		boolean recalc = false;
 		try {
-			if(rawCollection == null) doAdd(index, type); //Dumb hack to get it to update
-		} catch(Exception ignored) {}
+			if(rawCollection == null) {
+				doAdd(index, type);
+				recalc = true;
+			}
+		} catch(Exception exception) {
+			exception.printStackTrace();
+		}
 		blockMap.put(type, blockMap.get(type) + 1);
 		flagCollectionChanged = true;
+		if(recalc) recalcHP();
 	}
 
-	public void removeBlock(long index, short type) {
+	public void removeBlock(short type) {
 		blockMap.put(type, blockMap.get(type) - 1);
+		if(blockMap.get(type) < 0) blockMap.put(type, 0);
 		flagCollectionChanged = true;
 	}
 }
