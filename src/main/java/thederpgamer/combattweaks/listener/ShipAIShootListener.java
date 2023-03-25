@@ -1,6 +1,5 @@
 package thederpgamer.combattweaks.listener;
 
-import api.DebugFile;
 import api.common.GameCommon;
 import api.common.GameServer;
 import api.listener.fastevents.ShipAIEntityAttemptToShootListener;
@@ -16,7 +15,6 @@ import org.schema.game.server.ai.AIControllerStateUnit;
 import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.schine.graphicsengine.core.Timer;
-import thederpgamer.combattweaks.CombatTweaks;
 
 /**
  * [Description]
@@ -34,10 +32,7 @@ public class ShipAIShootListener implements ShipAIEntityAttemptToShootListener {
 				//if(isValidTarget(shipAIEntity)) {
 					for(RepairBeamCollectionManager collectionManager : elementManager.getCollectionManagers()) {
 						for(RepairUnit unit : collectionManager.getElementCollections()) {
-							if(unit.size() > 0 && !unit.isReloading(timer.currentTime) && unit.canUse(timer.currentTime, false)) {
-								unit.fire(aiControllerStateUnit, timer);
-								DebugFile.log("[INFO]: Entity " + shipAIEntity.getEntity().getName() + " firing repair beam.", CombatTweaks.getInstance());
-							}
+							if(unit.size() > 0 && !unit.isReloading(timer.currentTime) && unit.canUse(timer.currentTime, false)) unit.fire(aiControllerStateUnit, timer);
 						}
 					}
 				//}

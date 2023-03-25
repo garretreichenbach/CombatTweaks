@@ -89,12 +89,24 @@ public class EventManager {
 					event.setCanceled(true);
 				} else {
 					ArmorHPCollection manager = ArmorHPCollection.getCollection(segmentPiece.getSegmentController());
+					int damage = event.getDamage();
 					if(manager != null) {
 						double currentHP = manager.getCurrentHP();
 						double maxHP = manager.getMaxHP();
 						double armorHP = currentHP / maxHP;
 						if(armorHP > 0) {
-							manager.setCurrentHP(currentHP - event.getDamage());
+							switch(event.getDamageType()) {
+								case BEAM:
+									damage *= ConfigManager.getSystemConfig().getDouble("beam-armor-multiplier");
+									break;
+								case PROJECTILE:
+									damage *= ConfigManager.getSystemConfig().getDouble("cannon-armor-multiplier");
+									break;
+								case MISSILE:
+									damage *= ConfigManager.getSystemConfig().getDouble("missile-armor-multiplier");
+									break;
+							}
+							manager.setCurrentHP(currentHP - damage);
 							event.setCanceled(true);
 						}
 					}
@@ -127,7 +139,9 @@ public class EventManager {
 					double maxHP = manager.getMaxHP();
 					double armorHP = currentHP / maxHP;
 					if(armorHP > 0) {
-						manager.setCurrentHP(currentHP - ElementKeyMap.getInfo(ElementKeyMap.HULL_ID).getArmorValue());
+						float damage = (float) (event.getMissile().getDamage() * ConfigManager.getSystemConfig().getDouble("missile-armor-multiplier"));
+						manager.setCurrentHP(currentHP - damage);
+						event.getMissile().setKilledByProjectile(true);
 						event.setCanceled(true);
 					}
 				}

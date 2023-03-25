@@ -19,7 +19,8 @@ import thederpgamer.combattweaks.manager.ConfigManager;
 import java.util.ArrayList;
 
 /**
- * [Description]
+ * CollectionManager for ArmorHP.
+ * <p>Rather than storing each block index, this just stores the type and count for efficiency.</p>
  *
  * @author TheDerpGamer (TheDerpGamer#0027)
  */
@@ -34,10 +35,10 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		return null;
 	}
 
-	private boolean flagCollectionChanged;
+	private final Short2IntArrayMap blockMap = new Short2IntArrayMap();
 	private double currentHP;
 	private double maxHP;
-	private final Short2IntArrayMap blockMap = new Short2IntArrayMap();
+	private boolean flagCollectionChanged;
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(Element.TYPE_NONE, segmentController, armorHPManager);
@@ -83,18 +84,23 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	@Override
 	public void update(Timer timer) {
-		if(currentHP < maxHP && maxHP > 0) return; //Don't update if the armor is already damaged
+		if(currentHP < maxHP && maxHP > 0) flagCollectionChanged = false; //This should prevent people from just placing blocks to get their HP back
 		if((flagCollectionChanged || maxHP <= 0) && getSegmentController().isFullyLoadedWithDock()) recalcHP();
 	}
 
 	public void recalcHP() {
 		currentHP = 0;
 		maxHP = 0;
-		float armorMult = ConfigManager.getSystemConfig().getConfigurableFloat("armor-value-multiplier", 50.0f);
+		float armorMult = (float) ConfigManager.getSystemConfig().getDouble("armor-value-multiplier");
 		for(short type : blockMap.keySet()) {
 			if(type != 0) {
-				currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * blockMap.get(type);
-				maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * blockMap.get(type);
+				int count = blockMap.get(type);
+				if(count <= 0) {
+					blockMap.put(type, 0);
+					continue;
+				}
+				currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
+				maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
 			}
 		}
 		if(currentHP < 0) currentHP = 0;
@@ -120,18 +126,13 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	public void addBlock(long index, short type) {
-		boolean recalc = false;
 		try {
-			if(rawCollection == null) {
-				doAdd(index, type);
-				recalc = true;
-			}
+			if(rawCollection == null && type != 0) doAdd(index, type); //Dumb hack to get it to call the update method
 		} catch(Exception exception) {
 			exception.printStackTrace();
 		}
 		blockMap.put(type, blockMap.get(type) + 1);
 		flagCollectionChanged = true;
-		if(recalc) recalcHP();
 	}
 
 	public void removeBlock(short type) {
