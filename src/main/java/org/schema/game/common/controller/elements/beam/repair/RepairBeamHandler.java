@@ -138,21 +138,20 @@ public class RepairBeamHandler extends BeamHandler {
 							exception.printStackTrace();
 						}
 					}
-					ArrayList<ElementCollectionManager<?, ?, ?>> managers = SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) getBeamShooter(), ArmorHPCollection.class);
-					for(ElementCollectionManager<?, ?, ?> manager : managers) {
-						if(manager instanceof ArmorHPCollection) {
-							ArmorHPCollection armorHPCollection = (ArmorHPCollection) manager;
-							armorHPCollection.recalcHP();
-							break;
-						}
-					}
-
 					if(getBeamShooter().getState().getUpdateTime() - lastSentMsg > 1000) {
 						short sourceType = (short) ElementKeyMap.getInfo(nextType).getSourceReference();
 						short consType = sourceType != 0 ? sourceType : nextType;
 						//if(!hasAnyPaste) getBeamShooter().sendServerMessage(Lng.astr("Not enough resources in connected or player inventory to repair!\nNeed %s", ElementKeyMap.getInfo(consType).getName()), ServerMessage.MESSAGE_TYPE_WARNING);
 						//else if(!hasEnoughPaste) getBeamShooter().sendServerMessage("Not enough repair paste: " + StringTools.formatPointZero(currentPaste) + " / " + pasteNeeded + ".0", ServerMessage.MESSAGE_TYPE_WARNING);
 						lastSentMsg = getBeamShooter().getState().getUpdateTime();
+						ArrayList<ElementCollectionManager<?, ?, ?>> managers = SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) getBeamShooter(), ArmorHPCollection.class);
+						for(ElementCollectionManager<?, ?, ?> manager : managers) {
+							if(manager instanceof ArmorHPCollection && hasEnoughPaste) {
+								ArmorHPCollection armorHPCollection = (ArmorHPCollection) manager;
+								armorHPCollection.setCurrentHP(armorHPCollection.getCurrentHP() + ElementKeyMap.getInfo(consType).getArmorValue());
+							}
+							break;
+						}
 					}
 					if(!hasEnoughPaste) return;
 				}

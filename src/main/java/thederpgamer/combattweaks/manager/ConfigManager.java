@@ -23,7 +23,8 @@ public class ConfigManager {
 		"repair-paste-capacity-per-block: 10",
 		"repair-paste-regen-per-block: 5",
 		"repair-paste-power-consumed-per-block-resting: 5",
-		"repair-paste-power-consumed-per-block-charging: 15"
+		"repair-paste-power-consumed-per-block-charging: 15",
+		"armor-value-multiplier: 50.0"
 	};
 
 	public static void initialize(CombatTweaks instance) {

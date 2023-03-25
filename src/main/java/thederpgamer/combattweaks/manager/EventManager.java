@@ -8,9 +8,7 @@ import api.listener.events.register.ManagerContainerRegisterEvent;
 import api.listener.events.weapon.MissileHitEvent;
 import api.listener.fastevents.FastListenerCommon;
 import api.mod.StarLoader;
-import api.utils.game.SegmentControllerUtils;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
-import org.schema.game.common.controller.elements.ElementCollectionManager;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.SegmentPiece;
@@ -20,8 +18,6 @@ import thederpgamer.combattweaks.CombatTweaks;
 import thederpgamer.combattweaks.listener.ShipAIShootListener;
 import thederpgamer.combattweaks.system.RepairPasteFabricatorSystem;
 import thederpgamer.combattweaks.system.armor.ArmorHPCollection;
-
-import java.util.ArrayList;
 
 /**
  * [Description]
@@ -33,12 +29,14 @@ public class EventManager {
 
 	public static void initialize(CombatTweaks instance) {
 		FastListenerCommon.shipAIEntityAttemptToShootListeners.add(shipAIShootListener = new ShipAIShootListener());
+
 		StarLoader.registerListener(HudCreateEvent.class, new Listener<HudCreateEvent>() {
 			@Override
 			public void onEvent(HudCreateEvent event) {
 				HudManager.initialize(event);
 			}
 		}, instance);
+
 		StarLoader.registerListener(ShipJumpEngageEvent.class, new Listener<ShipJumpEngageEvent>() {
 			@Override
 			public void onEvent(ShipJumpEngageEvent event) {
@@ -52,108 +50,70 @@ public class EventManager {
 				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), Element.TYPE_NONE, Element.TYPE_NONE));
 			}
 		}, instance);
+
 		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<SegmentPieceAddByMetadataEvent>() {
 			@Override
 			public void onEvent(SegmentPieceAddByMetadataEvent event) {
 				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) return;
 				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) return;
-				for(ElementCollectionManager<?, ?, ?> cm : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getSegment().getSegmentController(), ArmorHPCollection.class)) {
-					if(cm instanceof ArmorHPCollection) {
-						try {
-							ArmorHPCollection collection = (ArmorHPCollection) cm;
-							collection.addBlock(event.getAbsIndex(), event.getType());
-							return;
-						} catch(Exception exception) {
-							exception.printStackTrace();
-						}
-					}
-				}
+				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController());
+				if(manager != null) manager.addBlock(event.getAbsIndex(), event.getType());
 			}
 		}, instance);
+
 		StarLoader.registerListener(SegmentPieceAddEvent.class, new Listener<SegmentPieceAddEvent>() {
 			@Override
 			public void onEvent(SegmentPieceAddEvent event) {
 				if(!ElementKeyMap.getInfo(event.getNewType()).isArmor()) return;
-				for(ElementCollectionManager<?, ?, ?> cm : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getSegmentController(), ArmorHPCollection.class)) {
-					if(cm instanceof ArmorHPCollection) {
-						ArmorHPCollection collection = (ArmorHPCollection) cm;
-						collection.addBlock(event.getAbsIndex(), event.getNewType());
-						return;
-					}
-				}
+				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) return;
+				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController());
+				if(manager != null) manager.addBlock(event.getAbsIndex(), event.getNewType());
 			}
 		}, instance);
+
 		StarLoader.registerListener(SegmentPieceRemoveEvent.class, new Listener<SegmentPieceRemoveEvent>() {
 			@Override
 			public void onEvent(SegmentPieceRemoveEvent event) {
 				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) return;
-				for(ElementCollectionManager<?, ?, ?> cm : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getSegment().getSegmentController(), ArmorHPCollection.class)) {
-					if(cm instanceof ArmorHPCollection) {
-						ArmorHPCollection collection = (ArmorHPCollection) cm;
-						collection.removeBlock(event.getType());
-						return;
-					}
-				}
+				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController());
+				if(manager != null) manager.removeBlock(event.getType());
 			}
 		}, instance);
+
 		StarLoader.registerListener(SegmentPieceDamageEvent.class, new Listener<SegmentPieceDamageEvent>() {
 			@Override
 			public void onEvent(SegmentPieceDamageEvent event) {
 				SegmentPiece segmentPiece = event.getController().getSegmentBuffer().getPointUnsave(event.getPos());
 				if(segmentPiece.getType() == 14) { //Check if hit block was a warhead, if so, have it act as ERA and stop the projectile
-					segmentPiece.setActive(true); //Activate the Warhead, exploding it if not already done
-					segmentPiece.getSegmentController().sendBlockActivation(event.getPos());
-					System.err.println("Warhead hit - Stopping projectile");
-					segmentPiece.getSegmentController().sendBlockKill(segmentPiece);
+					segmentPiece.getSegmentController().sendBlockKill(segmentPiece); //Remove the Warhead without blowing it up
 					event.setCanceled(true);
 				} else {
-					ArrayList<ElementCollectionManager<?, ?, ?>> managers = SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) segmentPiece.getSegmentController(), ArmorHPCollection.class);
-					for(ElementCollectionManager<?, ?, ?> manager : managers) {
-						if(manager instanceof ArmorHPCollection) {
-							ArmorHPCollection armorHPCollection = (ArmorHPCollection) manager;
-							double currentHP = armorHPCollection.getCurrentHP();
-							double maxHP = armorHPCollection.getMaxHP();
-							double armorHP = currentHP / maxHP;
-							float damage = event.getDamage();
-							if(armorHP > 0) {
-								armorHPCollection.setCurrentHP(currentHP - damage);
-								event.setDamage(0);
-								event.setCanceled(true);
-							}
-//							if(armorHP >= 0.3) {
-//								System.err.println("Armor HP is " + armorHP + " - Stopping projectile");
-//								armorHPCollection.setCurrentHP(currentHP - damage);
-//								event.setDamage(0);
-//								event.setCanceled(true);
-//							} else if(armorHP > 0) {
-//								System.err.println("Armor HP is " + armorHP + " - Stopping projectile with reduced damage");
-//								armorHPCollection.setCurrentHP(currentHP - damage);
-//								event.setDamage((int) (damage - (damage * armorHP)));
-//							}
+					ArmorHPCollection manager = ArmorHPCollection.getCollection(segmentPiece.getSegmentController());
+					if(manager != null) {
+						double currentHP = manager.getCurrentHP();
+						double maxHP = manager.getMaxHP();
+						double armorHP = currentHP / maxHP;
+						if(armorHP > 0) {
+							manager.setCurrentHP(currentHP - event.getDamage());
+							event.setCanceled(true);
 						}
-						return;
 					}
 				}
 			}
 		}, instance);
+
 		StarLoader.registerListener(SegmentPieceKillEvent.class, new Listener<SegmentPieceKillEvent>() {
 			@Override
 			public void onEvent(SegmentPieceKillEvent event) {
-				SegmentPiece segmentPiece = event.getController().getSegmentBuffer().getPointUnsave(event.getPiece().getAbsoluteIndex());
-				ArrayList<ElementCollectionManager<?, ?, ?>> managers = SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) segmentPiece.getSegmentController(), ArmorHPCollection.class);
-				for(ElementCollectionManager<?, ?, ?> manager : managers) {
-					if(manager instanceof ArmorHPCollection) {
-						ArmorHPCollection armorHPCollection = (ArmorHPCollection) manager;
-						double currentHP = armorHPCollection.getCurrentHP();
-						double maxHP = armorHPCollection.getMaxHP();
-						double armorHP = currentHP / maxHP;
-						if(armorHP > 0) {
-							System.err.println("Armor HP is " + armorHP + " - Stopping projectile");
-							armorHPCollection.setCurrentHP(currentHP - ElementKeyMap.getInfo(ElementKeyMap.HULL_ID).getArmorValue());
-							event.setCanceled(true);
-						}
+				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getPiece().getSegmentController());
+				if(manager != null) {
+					double currentHP = manager.getCurrentHP();
+					double maxHP = manager.getMaxHP();
+					double armorHP = currentHP / maxHP;
+					if(armorHP > 0) {
+						manager.setCurrentHP(currentHP - ElementKeyMap.getInfo(ElementKeyMap.HULL_ID).getArmorValue());
+						event.setCanceled(true);
 					}
-					return;
 				}
 			}
 		}, instance);
@@ -161,20 +121,15 @@ public class EventManager {
 		StarLoader.registerListener(MissileHitEvent.class, new Listener<MissileHitEvent>() {
 			@Override
 			public void onEvent(MissileHitEvent event) {
-				ArrayList<ElementCollectionManager<?, ?, ?>> managers = SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) event.getRaycast().getSegment().getSegmentController(), ArmorHPCollection.class);
-				for(ElementCollectionManager<?, ?, ?> manager : managers) {
-					if(manager instanceof ArmorHPCollection) {
-						ArmorHPCollection armorHPCollection = (ArmorHPCollection) manager;
-						double currentHP = armorHPCollection.getCurrentHP();
-						double maxHP = armorHPCollection.getMaxHP();
-						double armorHP = currentHP / maxHP;
-						if(armorHP > 0) {
-							System.err.println("Armor HP is " + armorHP + " - Stopping projectile");
-							armorHPCollection.setCurrentHP(currentHP - ElementKeyMap.getInfo(ElementKeyMap.HULL_ID).getArmorValue());
-							event.setCanceled(true);
-						}
+				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getRaycast().getSegment().getSegmentController());
+				if(manager != null) {
+					double currentHP = manager.getCurrentHP();
+					double maxHP = manager.getMaxHP();
+					double armorHP = currentHP / maxHP;
+					if(armorHP > 0) {
+						manager.setCurrentHP(currentHP - ElementKeyMap.getInfo(ElementKeyMap.HULL_ID).getArmorValue());
+						event.setCanceled(true);
 					}
-					return;
 				}
 			}
 		}, instance);
