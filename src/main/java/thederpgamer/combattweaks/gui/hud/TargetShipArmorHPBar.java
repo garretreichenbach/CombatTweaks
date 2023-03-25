@@ -2,6 +2,7 @@ package thederpgamer.combattweaks.gui.hud;
 
 import api.utils.game.SegmentControllerUtils;
 import org.schema.common.config.ConfigurationElement;
+import org.schema.common.util.StringTools;
 import org.schema.common.util.linAlg.Vector4i;
 import org.schema.game.client.data.GameClientState;
 import org.schema.game.client.view.gui.shiphud.newhud.FillableHorizontalBar;
@@ -103,7 +104,7 @@ public class TargetShipArmorHPBar extends FillableHorizontalBar {
 					maxHP += armorHPCollection.getMaxHP();
 				}
 			}
-			return Lng.str("Armor HP") + " " + ((int) (hp / maxHP * 100)) + "%";
+			return Lng.str("Armor HP") + " " + StringTools.massFormat(hp) + " / " + StringTools.massFormat(maxHP);
 		} else return Lng.str("Armor n/a");
 	}
 

@@ -1,5 +1,6 @@
 package thederpgamer.combattweaks.system.armor;
 
+import it.unimi.dsi.fastutil.shorts.Short2IntArrayMap;
 import org.schema.common.util.StringTools;
 import org.schema.game.client.data.GameClientState;
 import org.schema.game.client.view.gui.structurecontrol.GUIKeyValueEntry;
@@ -8,6 +9,7 @@ import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.elements.ElementCollectionManager;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.element.Element;
+import org.schema.game.common.data.element.ElementKeyMap;
 import org.schema.schine.common.language.Lng;
 import org.schema.schine.graphicsengine.core.Timer;
 
@@ -18,9 +20,11 @@ import org.schema.schine.graphicsengine.core.Timer;
  */
 public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, ArmorHPCollection, VoidElementManager<ArmorHPUnit, ArmorHPCollection>> {
 
+	private static final float ARMOR_VALUE_MULT = 10.0f;
 	private boolean flagCollectionChanged;
 	private double currentHP;
 	private double maxHP;
+	private final Short2IntArrayMap blockMap = new Short2IntArrayMap();
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(Element.TYPE_ALL, segmentController, armorHPManager);
@@ -67,12 +71,15 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	@Override
 	public void update(Timer timer) {
 		super.update(timer);
+		if(currentHP < maxHP) return; //Don't update if the armor is already damaged
 		if(flagCollectionChanged && getSegmentController().isFullyLoadedWithDock()) {
 			currentHP = 0;
 			maxHP = 0;
-			for(ArmorHPUnit unit : getElementCollections()) {
-				currentHP += unit.size() * unit.getElementCollectionId().getInfo().getArmorValue();
-				maxHP += unit.size() * unit.getElementCollectionId().getInfo().getArmorValue();
+			for(short type : blockMap.keySet()) {
+				if(type != 0) {
+					currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * ARMOR_VALUE_MULT) * blockMap.get(type);
+					maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * ARMOR_VALUE_MULT) * blockMap.get(type);
+				}
 			}
 			if(currentHP < 0) currentHP = 0;
 			if(maxHP < 0) maxHP = 0;
@@ -95,5 +102,18 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	public double getHPPercentage() {
 		return currentHP / maxHP * 100;
+	}
+
+	public void addBlock(long index, short type) {
+		try {
+			if(rawCollection == null) doAdd(index, type); //Dumb hack to get it to update
+		} catch(Exception ignored) {}
+		blockMap.put(type, blockMap.get(type) + 1);
+		flagCollectionChanged = true;
+	}
+
+	public void removeBlock(long index, short type) {
+		blockMap.put(type, blockMap.get(type) - 1);
+		flagCollectionChanged = true;
 	}
 }

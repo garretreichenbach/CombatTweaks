@@ -3,7 +3,7 @@
   "author": "TheDerpGamer",
   "description": "Useful combat-related game additions.",
   "version": "1.0.0",
-  "starmade_version": "0.203.133",
+  "starmade_version": "0.203.138",
   "client_mod": false,
   "server_mod": false,
   "main_class": "thederpgamer.combattweaks.CombatTweaks",

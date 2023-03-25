@@ -9,8 +9,6 @@ import glossar.GlossarEntry;
 import glossar.GlossarInit;
 import org.apache.commons.io.IOUtils;
 import org.schema.schine.resource.ResourceLoader;
-import thederpgamer.combattweaks.calculator.BeamCalculator;
-import thederpgamer.combattweaks.calculator.ProjectileCalculator;
 import thederpgamer.combattweaks.element.ElementManager;
 import thederpgamer.combattweaks.element.blocks.systems.RepairPasteFabricator;
 import thederpgamer.combattweaks.manager.ConfigManager;
@@ -45,8 +43,6 @@ public class CombatTweaks extends StarMod {
 		instance = this;
 		ConfigManager.initialize(this);
 		EventManager.initialize(this);
-		ProjectileCalculator.initialize();
-		BeamCalculator.initialize();
 		registerPackets();
 	}
 
