@@ -10,10 +10,12 @@ import glossar.GlossarInit;
 import org.apache.commons.io.IOUtils;
 import org.schema.schine.resource.ResourceLoader;
 import thederpgamer.combattweaks.element.ElementManager;
+import thederpgamer.combattweaks.element.blocks.systems.AIRemoteController;
 import thederpgamer.combattweaks.element.blocks.systems.RepairPasteFabricator;
 import thederpgamer.combattweaks.manager.ConfigManager;
 import thederpgamer.combattweaks.manager.EventManager;
 import thederpgamer.combattweaks.manager.ResourceManager;
+import thederpgamer.combattweaks.network.client.SendAIRemoteControlStartPacket;
 import thederpgamer.combattweaks.network.server.JumpHudUpdatePacket;
 
 import java.io.IOException;
@@ -60,6 +62,7 @@ public class CombatTweaks extends StarMod {
 	@Override
 	public void onBlockConfigLoad(BlockConfig blockConfig) {
 		ElementManager.addBlock(new RepairPasteFabricator());
+		ElementManager.addBlock(new AIRemoteController());
 		ElementManager.initialize();
 	}
 
@@ -88,6 +91,7 @@ public class CombatTweaks extends StarMod {
 
 	private void registerPackets() {
 		PacketUtil.registerPacket(JumpHudUpdatePacket.class);
+		PacketUtil.registerPacket(SendAIRemoteControlStartPacket.class);
 	}
 
 	private void initializeGlossary() {

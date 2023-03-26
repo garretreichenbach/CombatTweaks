@@ -15,6 +15,9 @@ import org.schema.game.common.data.SegmentPiece;
 import org.schema.game.common.data.element.Element;
 import org.schema.game.common.data.element.ElementKeyMap;
 import thederpgamer.combattweaks.CombatTweaks;
+import thederpgamer.combattweaks.element.ElementManager;
+import thederpgamer.combattweaks.element.blocks.Block;
+import thederpgamer.combattweaks.element.blocks.BlockActivationInterface;
 import thederpgamer.combattweaks.listener.ShipAIShootListener;
 import thederpgamer.combattweaks.system.RepairPasteFabricatorSystem;
 import thederpgamer.combattweaks.system.armor.ArmorHPCollection;
@@ -48,6 +51,30 @@ public class EventManager {
 			public void onEvent(ManagerContainerRegisterEvent event) {
 				event.addModMCModule(new RepairPasteFabricatorSystem(event.getSegmentController(), event.getContainer()));
 				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), Element.TYPE_NONE, Element.TYPE_NONE));
+			}
+		}, instance);
+
+		StarLoader.registerListener(SegmentPieceActivateByPlayer.class, new Listener<SegmentPieceActivateByPlayer>() {
+			@Override
+			public void onEvent(SegmentPieceActivateByPlayer event) {
+				for(Block block : ElementManager.getBlockList()) {
+					if(block instanceof BlockActivationInterface && block.getId() == event.getSegmentPiece().getType()) {
+						((BlockActivationInterface) block).onPlayerActivate(event);
+						return;
+					}
+				}
+			}
+		}, instance);
+
+		StarLoader.registerListener(SegmentPieceActivateEvent.class, new Listener<SegmentPieceActivateEvent>() {
+			@Override
+			public void onEvent(SegmentPieceActivateEvent event) {
+				for(Block block : ElementManager.getBlockList()) {
+					if(block instanceof BlockActivationInterface && block.getId() == event.getSegmentPiece().getType()) {
+						((BlockActivationInterface) block).onLogicActivate(event);
+						return;
+					}
+				}
 			}
 		}, instance);
 

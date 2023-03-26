@@ -1,12 +1,15 @@
 package thederpgamer.combattweaks.element.blocks.systems;
 
 import api.config.BlockConfig;
+import api.listener.events.block.SegmentPieceActivateByPlayer;
+import api.listener.events.block.SegmentPieceActivateEvent;
 import org.schema.game.client.view.cubes.shapes.BlockStyle;
 import org.schema.game.common.data.element.ElementKeyMap;
 import org.schema.game.common.data.element.FactoryResource;
 import org.schema.schine.graphicsengine.core.GraphicsContext;
 import thederpgamer.combattweaks.element.ElementManager;
 import thederpgamer.combattweaks.element.blocks.Block;
+import thederpgamer.combattweaks.element.blocks.BlockActivationInterface;
 import thederpgamer.combattweaks.manager.ResourceManager;
 
 /**
@@ -14,7 +17,7 @@ import thederpgamer.combattweaks.manager.ResourceManager;
  *
  * @author TheDerpGamer
  */
-public class AIRemoteController extends Block {
+public class AIRemoteController extends Block implements BlockActivationInterface {
 
 	public AIRemoteController() {
 		super("AI Remote Controller", ElementKeyMap.getInfo(ElementKeyMap.AI_ELEMENT).getType());
@@ -47,5 +50,14 @@ public class AIRemoteController extends Block {
 		                      new FactoryResource(1, ElementKeyMap.FACTION_BLOCK),
 		                      new FactoryResource(5, ElementKeyMap.LOGIC_WIRELESS));
 		BlockConfig.add(blockInfo);
+	}
+
+	@Override
+	public void onPlayerActivate(SegmentPieceActivateByPlayer event) {
+
+	}
+
+	@Override
+	public void onLogicActivate(SegmentPieceActivateEvent event) {
 	}
 }

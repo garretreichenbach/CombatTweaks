@@ -4,6 +4,7 @@ import api.config.BlockConfig;
 import org.apache.commons.lang3.StringUtils;
 import org.schema.game.common.data.SegmentPiece;
 import org.schema.game.common.data.element.ElementCategory;
+import org.schema.game.common.data.element.ElementInformation;
 import org.schema.game.common.data.element.ElementKeyMap;
 import thederpgamer.combattweaks.element.blocks.Block;
 import thederpgamer.combattweaks.element.items.Item;
@@ -61,11 +62,18 @@ public class ElementManager {
     }
 
     public static void addBlock(Block block) {
+        runFixes(block.getBlockInfo());
         blockList.add(block);
     }
 
     public static void addItem(Item item) {
+        runFixes(item.getItemInfo());
         itemList.add(item);
+    }
+
+    private static void runFixes(ElementInformation info) {
+        if(info.getVolume() <= 0) info.volume = 0.1f;
+        if(info.getMass() <= 0) info.mass = 0.1f;
     }
 
     public static ElementCategory getCategory(String path) {
