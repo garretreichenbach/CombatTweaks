@@ -86,7 +86,6 @@ public class CombatTweaks extends StarMod {
 		else return byteCode;
 	}
 
-
 	private void registerPackets() {
 		PacketUtil.registerPacket(JumpHudUpdatePacket.class);
 	}
@@ -98,7 +97,7 @@ public class CombatTweaks extends StarMod {
 		combatTweaks.addEntry(new GlossarEntry("Repair Paste Fabricator", "Put these on your ship and they will allow your Astrotech beams to use repair paste instead of resources to repair entities."));
 		combatTweaks.addEntry(new GlossarEntry("Misc. Changes", "- Added an indicator to show incoming jumps to your sector. Having a higher recon level will increase the accuracy of the marker.\n" +
 				"- Jumps now take longer to complete the further away they are from your sector.\n" +
-				"- AI can use Astrotech Beams to repair friendly entities."));
+				"- AI can now use Astrotech Beams to repair friendly entities."));
 		GlossarInit.addCategory(combatTweaks);
 	}
 }

@@ -121,7 +121,7 @@ public class TargetShipArmorHPBar extends FillableHorizontalBar {
 
 	@Override
 	public Vector2f getConfigOffset() {
-		if(OFFSET.y == 65) OFFSET.y = 136;
+		OFFSET.y = 136;
 		return OFFSET;
 	}
 
