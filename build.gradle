@@ -6,11 +6,14 @@ plugins {
 
 apply plugin: 'java'
 
+targetCompatibility = 1.7
+sourceCompatibility = 1.7
+
 def starmadeDirectory = 'C:/Program Files (x86)/Steam/steamapps/common/StarMade/StarMade/'
 def jarName = 'CombatTweaks'
 mainClassName = 'thederpgamer.combattweaks.CombatTweaks'
 group 'thederpgamer.combattweaks'
-version '1.0.0'
+version '1.0.2'
 
 repositories {
     mavenCentral()

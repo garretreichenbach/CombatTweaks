@@ -2,12 +2,12 @@
   "name": "CombatTweaks",
   "author": "TheDerpGamer",
   "description": "Useful combat-related game additions.",
-  "version": "1.0.0",
-  "starmade_version": "0.203.138",
+  "version": "1.0.2",
+  "starmade_version": "0.203.139",
   "client_mod": false,
   "server_mod": false,
   "main_class": "thederpgamer.combattweaks.CombatTweaks",
-  "smd_resource_id": 9999,
+  "smd_resource_id": 8559,
   "dependencies": [
 	-1
   ],
