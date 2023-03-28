@@ -80,14 +80,23 @@ public class RepairBeamHandler extends BeamHandler {
 			for (RepairBeamHitListener listener : FastListenerCommon.repairBeamHitListeners) listener.hitFromShip(this, hittingBeam, beamHits, container, hitPiece, from, to, timer, updatedSegments);
 			///
 
+			ArrayList<ElementCollectionManager<?, ?, ?>> managers = SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) hitPiece.getSegmentController(), ArmorHPCollection.class);
+			for(ElementCollectionManager<?, ?, ?> manager : managers) {
+				if(manager instanceof ArmorHPCollection) {
+					ArmorHPCollection armorHPCollection = (ArmorHPCollection) manager;
+					armorHPCollection.setCurrentHP(armorHPCollection.getCurrentHP() + (ElementKeyMap.getInfo(ElementKeyMap.HULL_ID).getArmorValue() * 1000));
+				}
+				break;
+			}
 			if(getBeamShooter().isOnServer()) {
-				final int maxHP = hitPiece.getInfo().getMaxHitPointsByte();
+				int maxHP = hitPiece.getInfo().getMaxHitPointsByte();
 				if(hitPiece.getHitpointsByte() < maxHP) {
 					hitPiece.setHitpointsByte(maxHP);
 					hitPiece.applyToSegment(getBeamShooter().isOnServer());
 				}
 				if(hitPiece.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
 					ManagedUsableSegmentController<?> c = (ManagedUsableSegmentController<?>) hitPiece.getSegmentController();
+					c.getHpController().forceReset();
 					if(c.getBlockKillRecorder().size() > 0) {
 						undo(hittingBeam.controllerPos, c, c.getBlockKillRecorder(), (int) hittingBeam.getPower());
 					}
@@ -144,14 +153,6 @@ public class RepairBeamHandler extends BeamHandler {
 						//if(!hasAnyPaste) getBeamShooter().sendServerMessage(Lng.astr("Not enough resources in connected or player inventory to repair!\nNeed %s", ElementKeyMap.getInfo(consType).getName()), ServerMessage.MESSAGE_TYPE_WARNING);
 						//else if(!hasEnoughPaste) getBeamShooter().sendServerMessage("Not enough repair paste: " + StringTools.formatPointZero(currentPaste) + " / " + pasteNeeded + ".0", ServerMessage.MESSAGE_TYPE_WARNING);
 						lastSentMsg = getBeamShooter().getState().getUpdateTime();
-						ArrayList<ElementCollectionManager<?, ?, ?>> managers = SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) getBeamShooter(), ArmorHPCollection.class);
-						for(ElementCollectionManager<?, ?, ?> manager : managers) {
-							if(manager instanceof ArmorHPCollection && hasEnoughPaste) {
-								ArmorHPCollection armorHPCollection = (ArmorHPCollection) manager;
-								armorHPCollection.setCurrentHP(armorHPCollection.getCurrentHP() + ElementKeyMap.getInfo(consType).getArmorValue());
-							}
-							break;
-						}
 					}
 					if(!hasEnoughPaste) return;
 				}
@@ -178,6 +179,7 @@ public class RepairBeamHandler extends BeamHandler {
 					// Prevent crash caused from too many undo/redo calls too quick
 					continue;
 				}
+
 				Vector3i pos = p.getAbsolutePos(new Vector3i());
 
 				c.build(pos.x, pos.y, pos.z, p.getType(), p.getOrientation(), p.isActive(), b, absOnOut, new int[] {0, 1}, null, null);
@@ -186,7 +188,6 @@ public class RepairBeamHandler extends BeamHandler {
 					//
 					for(long l : r.connectedFromThis) {
 						c.getControlElementMap().removeControlledFromAll(ElementCollection.getPosIndexFrom4(l), (short) ElementCollection.getType(l), true);
-
 						c.getControlElementMap().addControllerForElement(p.getAbsoluteIndex(), ElementCollection.getPosIndexFrom4(l), (short) ElementCollection.getType(l));
 					}
 				}

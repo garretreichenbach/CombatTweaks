@@ -261,7 +261,7 @@ public class TargetPanel extends HudConfig {
 		shieldBar.getPos().set(TargetShieldBar.OFFSET.x, TargetShieldBar.OFFSET.y, 0);
 		playerHealthBar.getPos().set(PlayerHealthBar.OFFSET.x, PlayerHealthBar.OFFSET.y, 0);
 		shipHPBar.getPos().set(TargetShipHPBar.OFFSET.x, TargetShipHPBar.OFFSET.y, 0);
-		shipArmorHPBar.getPos().set(TargetShipArmorHPBar.OFFSET.x, TargetShipArmorHPBar.OFFSET.y, 0);
+		shipArmorHPBar.getPos().set(TargetShipArmorHPBar.OFFSET.x, 136, 0);
 
 		mass.setPos(massOffset.x, massOffset.y + shipArmorHPBar.getHeight(), 0);
 		speed.setPos(speedOffset.x, speedOffset.y + shipArmorHPBar.getHeight(), 0);

@@ -16,15 +16,14 @@ import java.io.IOException;
  *
  * @author TheDerpGamer (TheDerpGamer#0027)
  */
-public class JumpHudUpdatePacket extends Packet {
+public class JumpHudRemovePacket extends Packet {
 
 	private Sendable controller;
 
-	public JumpHudUpdatePacket() {
-
+	public JumpHudRemovePacket() {
 	}
 
-	public JumpHudUpdatePacket(SegmentController controller) {
+	public JumpHudRemovePacket(SegmentController controller) {
 		this.controller = controller;
 	}
 
@@ -40,11 +39,10 @@ public class JumpHudUpdatePacket extends Packet {
 
 	@Override
 	public void processPacketOnClient() {
-		HudManager.addNewIncomingJump((SendableSegmentController) controller);
+		HudManager.removeIncomingJump((SendableSegmentController) controller);
 	}
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-
 	}
 }

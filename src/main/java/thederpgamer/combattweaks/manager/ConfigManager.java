@@ -24,8 +24,8 @@ public class ConfigManager {
 		"repair-paste-regen-per-block: 5",
 		"repair-paste-power-consumed-per-block-resting: 5",
 		"repair-paste-power-consumed-per-block-charging: 15",
-		"armor-value-multiplier: 10.0",
-		"cannon-armor-multiplier: 1.0",
+		"armor-value-multiplier: 30.0",
+		"cannon-armor-multiplier: 0.9",
 		"beam-armor-multiplier: 0.35",
 		"missile-armor-multiplier: 0.75",
 	};

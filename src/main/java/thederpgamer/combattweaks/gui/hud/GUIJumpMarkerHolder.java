@@ -64,7 +64,7 @@ public class GUIJumpMarkerHolder extends GUIElement {
 		return 0;
 	}
 
-	public void addNewIncomingJump(SendableSegmentController controller, Vector3i originalSector, Vector3i newSector) {
+	public void addNewIncomingJump(SendableSegmentController controller) {
 		String displayedName = "INCOMING CONTACT ";
 		PlayerControllable controlled = PlayerUtils.getCurrentControl(((GameClientState) getState()).getPlayer());
 		if(controlled instanceof ManagedUsableSegmentController<?>) {
@@ -81,6 +81,16 @@ public class GUIJumpMarkerHolder extends GUIElement {
 		} else displayedName += "[UNKNOWN]\nUnknown Mass";
 		incoming.add(new JumpMarkerInfo(getIncomingTransform(controller, controlled), controller, displayedName));
 	}
+
+	public void removeIncomingJump(SendableSegmentController controller) {
+		for(JumpMarkerInfo info : incoming) {
+			if(info.controller.equals(controller)) {
+				incoming.remove(info);
+				break;
+			}
+		}
+	}
+
 
 	private String getRelation(PlayerControllable controlled, SendableSegmentController controller) {
 		FactionRelation.RType relation;
