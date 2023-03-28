@@ -43,7 +43,6 @@ import java.util.Collection;
  * Modified version of RepairBeamHandler.
  */
 public class RepairBeamHandler extends BeamHandler {
-
 	private final Object2ObjectOpenHashMap<Inventory, IntOpenHashSet> connectedInventories = new Object2ObjectOpenHashMap<Inventory, IntOpenHashSet>();
 	private final Short2IntOpenHashMap consTmp = new Short2IntOpenHashMap();
 	private final Short2IntOpenHashMap haveTmp = new Short2IntOpenHashMap();
@@ -75,11 +74,9 @@ public class RepairBeamHandler extends BeamHandler {
 			if(hitPiece.getSegmentController().isClientOwnObject() && ((GameClientState) hitPiece.getSegmentController().getState()).getWorldDrawer() != null) {
 				((GameClientState) hitPiece.getSegmentController().getState()).getWorldDrawer().getGuiDrawer().notifyEffectHit(hitPiece.getSegmentController(), OffensiveEffects.REPAIR);
 			}
-
 			//INSERTED CODE
-			for (RepairBeamHitListener listener : FastListenerCommon.repairBeamHitListeners) listener.hitFromShip(this, hittingBeam, beamHits, container, hitPiece, from, to, timer, updatedSegments);
+			for(RepairBeamHitListener listener : FastListenerCommon.repairBeamHitListeners) listener.hitFromShip(this, hittingBeam, beamHits, container, hitPiece, from, to, timer, updatedSegments);
 			///
-
 			ArrayList<ElementCollectionManager<?, ?, ?>> managers = SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) hitPiece.getSegmentController(), ArmorHPCollection.class);
 			for(ElementCollectionManager<?, ?, ?> manager : managers) {
 				if(manager instanceof ArmorHPCollection) {
@@ -97,9 +94,7 @@ public class RepairBeamHandler extends BeamHandler {
 				if(hitPiece.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
 					ManagedUsableSegmentController<?> c = (ManagedUsableSegmentController<?>) hitPiece.getSegmentController();
 					c.getHpController().forceReset();
-					if(c.getBlockKillRecorder().size() > 0) {
-						undo(hittingBeam.controllerPos, c, c.getBlockKillRecorder(), (int) hittingBeam.getPower());
-					}
+					if(c.getBlockKillRecorder().size() > 0) undo(hittingBeam.controllerPos, c, c.getBlockKillRecorder(), (int) hittingBeam.getPower());
 				}
 			}
 		}
@@ -114,7 +109,6 @@ public class RepairBeamHandler extends BeamHandler {
 			r.where = new SegmentPiece();
 			r.connectedFromThis = new LongOpenHashSet();
 			SegmentCollisionCheckerCallback cb = new SegmentCollisionCheckerCallback();
-
 			//		for (final Remove r : blockRemoveBuffer.getRemoves()) {
 			//			SegmentPiece p = r.where;
 			//			SegmentCollisionCheckerCallback cb = new SegmentCollisionCheckerCallback();
@@ -158,12 +152,9 @@ public class RepairBeamHandler extends BeamHandler {
 				}
 				//
 				blockRemoveBuffer.createInstruction(c, r);
-
 				if(c.getCollisionChecker().checkPieceCollision(r.where, cb, false)) return;
-
 				Vector3i absOnOut = new Vector3i(); //doen't matter since we have no callback
 				BuildCallback b = new BuildCallback() {
-
 					@Override
 					public void onBuild(Vector3i posBuilt, Vector3i posNextToBuild, short type) {
 					}
@@ -174,14 +165,11 @@ public class RepairBeamHandler extends BeamHandler {
 					}
 				};
 				final SegmentPiece p = r.where;
-
 				if(p.getType() == 0) {
 					// Prevent crash caused from too many undo/redo calls too quick
 					continue;
 				}
-
 				Vector3i pos = p.getAbsolutePos(new Vector3i());
-
 				c.build(pos.x, pos.y, pos.z, p.getType(), p.getOrientation(), p.isActive(), b, absOnOut, new int[] {0, 1}, null, null);
 				//INSERTED CODE
 				if(r.connectedFromThis != null && !hasEnoughPaste) {
@@ -196,7 +184,6 @@ public class RepairBeamHandler extends BeamHandler {
 			for(it.unimi.dsi.fastutil.objects.Object2ObjectMap.Entry<Inventory, IntOpenHashSet> e : connectedInventories.object2ObjectEntrySet()) {
 				e.getKey().sendInventoryModification(e.getValue());
 			}
-
 			connectedInventories.clear();
 			consTmp.clear();
 			haveTmp.clear();
@@ -209,7 +196,6 @@ public class RepairBeamHandler extends BeamHandler {
 		if(cm == null) {
 			return;
 		}
-
 		for(short t : cm.keySet()) {
 			if(ElementKeyMap.isValidType(t) && ElementKeyMap.getInfoFast(t).isInventory()) {
 				FastCopyLongOpenHashSet invSet = cm.get(t);
@@ -221,13 +207,11 @@ public class RepairBeamHandler extends BeamHandler {
 				}
 			}
 		}
-
 		if(connectedInventories.isEmpty()) {
 			if(getBeamShooter().getOwnerState() != null) {
 				connectedInventories.put(getBeamShooter().getOwnerState().getInventory(), new IntOpenHashSet());
 			}
 		}
-
 	}
 
 	private void checkInventories(BlockBuffer blockRemoveBuffer, int amount) {
@@ -235,7 +219,6 @@ public class RepairBeamHandler extends BeamHandler {
 		haveTmp.clear();
 		amount = Math.min(blockRemoveBuffer.size(), amount);
 		blockRemoveBuffer.peak(amount, consTmp);
-
 		for(short type : consTmp.keySet()) {
 			for(Inventory e : connectedInventories.keySet()) {
 				short sourceType = (short) ElementKeyMap.getInfo(type).getSourceReference();
@@ -279,5 +262,4 @@ public class RepairBeamHandler extends BeamHandler {
 		ElementInformation f = ElementKeyMap.getInfoFast(type);
 		return f.isDrawnOnlyInBuildMode() && !f.hasLod();
 	}
-
 }
