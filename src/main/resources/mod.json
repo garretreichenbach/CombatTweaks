@@ -2,7 +2,7 @@
   "name": "CombatTweaks",
   "author": "TheDerpGamer",
   "description": "Useful combat-related game additions.",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "starmade_version": "0.203.139",
   "client_mod": false,
   "server_mod": false,
