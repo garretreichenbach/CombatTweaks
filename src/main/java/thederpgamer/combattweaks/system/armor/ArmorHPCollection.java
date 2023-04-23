@@ -43,6 +43,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private double maxHP;
 	private boolean flagCollectionChanged;
 	public final List<EffectConfigElement> activeArmorEffects = new ArrayList<>();
+	private float time;
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
@@ -88,6 +89,8 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	@Override
 	public void update(Timer timer) {
+		if(timer.currentTime - time < 1000) return;
+		time = timer.currentTime;
 		if(currentHP < maxHP && maxHP > 0) flagCollectionChanged = false; //This should prevent people from just placing blocks to get their HP back
 		for(ConfigGroup group : getSegmentController().getConfigManager().getPermanentEffects()) {
 			for(EffectConfigElement elements : group.elements) {
@@ -95,8 +98,10 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 					activeArmorEffects.add(elements);
 					currentHP += maxHP * elements.getFloatValue();
 					if(currentHP > maxHP) currentHP = maxHP;
-				} else if(elements.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) activeArmorEffects.add(elements);
-				else if(elements.getType() == StatusEffectType.ARMOR_HP_ABSORPTION) activeArmorEffects.add(elements);
+				} else if(elements.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) {
+					activeArmorEffects.add(elements);
+					flagCollectionChanged = true;
+				} else if(elements.getType() == StatusEffectType.ARMOR_HP_ABSORPTION) activeArmorEffects.add(elements);
 			}
 		}
 		if((flagCollectionChanged || maxHP <= 0) && getSegmentController().isFullyLoadedWithDock()) recalcHP();
