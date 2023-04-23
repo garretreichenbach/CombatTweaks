@@ -12,7 +12,8 @@ import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.SegmentPiece;
-import org.schema.game.common.data.element.Element;
+import org.schema.game.common.data.blockeffects.config.EffectConfigElement;
+import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.element.ElementKeyMap;
 import thederpgamer.combattweaks.CombatTweaks;
 import thederpgamer.combattweaks.listener.ShipAIShootListener;
@@ -43,11 +44,12 @@ public class EventManager {
 				JumpHandler.onJumpEngage(event);
 			}
 		}, instance);
+
 		StarLoader.registerListener(ManagerContainerRegisterEvent.class, new Listener<ManagerContainerRegisterEvent>() {
 			@Override
 			public void onEvent(ManagerContainerRegisterEvent event) {
 				event.addModMCModule(new RepairPasteFabricatorSystem(event.getSegmentController(), event.getContainer()));
-				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), Element.TYPE_NONE, Element.TYPE_NONE));
+				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID));
 			}
 		}, instance);
 
@@ -105,6 +107,13 @@ public class EventManager {
 								case MISSILE:
 									damage *= ConfigManager.getSystemConfig().getDouble("missile-armor-multiplier");
 									break;
+							}
+							for(EffectConfigElement element : manager.activeArmorEffects) {
+								if(element.getType() == StatusEffectType.ARMOR_HP_ABSORPTION) {
+									damage *= (1 - element.getFloatValue());
+									if(damage < 0) damage = 0;
+									break;
+								}
 							}
 							manager.setCurrentHP(currentHP - damage);
 							event.setCanceled(true);
