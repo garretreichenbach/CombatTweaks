@@ -181,12 +181,12 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			exception.printStackTrace();
 		}
 		blockMap.put(type, blockMap.get(type) + 1);
-		flagCollectionChanged = true;
+//		flagCollectionChanged = true;
 	}
 
 	public void removeBlock(short type) {
 		blockMap.put(type, blockMap.get(type) - 1);
 		if(blockMap.get(type) < 0) blockMap.put(type, 0);
-		flagCollectionChanged = true;
+//		flagCollectionChanged = true;
 	}
 }
