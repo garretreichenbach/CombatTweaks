@@ -128,11 +128,12 @@ public class EventManager {
 			public void onEvent(SegmentPieceKillEvent event) {
 				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getPiece().getSegmentController());
 				if(manager != null) {
+					short id = event.getPiece().getType();
 					double currentHP = manager.getCurrentHP();
 					double maxHP = manager.getMaxHP();
 					double armorHP = currentHP / maxHP;
 					if(armorHP > 0) {
-						manager.setCurrentHP(currentHP - ElementKeyMap.getInfo(ElementKeyMap.HULL_ID).getArmorValue());
+						manager.setCurrentHP(currentHP - ElementKeyMap.getInfo(id).getArmorValue());
 						event.setCanceled(true);
 					}
 				}

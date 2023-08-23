@@ -96,9 +96,9 @@ public class CombatTweaks extends StarMod {
 		GlossarInit.initGlossar(this);
 		GlossarCategory combatTweaks = new GlossarCategory("Combat Tweaks");
 		combatTweaks.addEntry(new GlossarEntry("Armor HP", "Armor HP has been re-added to the game. This allows armor to act as a sort of \"second shield\" system. Armor HP is a percentage of the total amount of armor provided by all armor blocks on the entity. When your Armor HP reaches 0, your entity will begin to take damage. Armor HP can be restored by using repair beams. This system also accounts for Armor thickness at contact points."));
-		combatTweaks.addEntry(new GlossarEntry("Repair Paste Fabricator", "Put these on your ship and they will allow your Astrotech beams to use repair paste instead of resources to repair entities."));
+//		combatTweaks.addEntry(new GlossarEntry("Repair Paste Fabricator", "Put these on your ship and they will allow your Astrotech beams to use repair paste instead of resources to repair entities."));
 		combatTweaks.addEntry(new GlossarEntry("Misc. Changes", "- Added an indicator to show incoming jumps to your sector. Having a higher recon level will increase the accuracy of the marker.\n" +
-				"- Jumps now take longer to complete the further away they are from your sector.\n" +
+//				"- Jumps now take longer to complete the further away they are from your sector.\n" +
 				"- AI can now use Astrotech Beams to repair friendly entities."));
 		GlossarInit.addCategory(combatTweaks);
 	}

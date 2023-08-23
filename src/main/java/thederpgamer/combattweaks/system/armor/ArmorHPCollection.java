@@ -1,5 +1,6 @@
 package thederpgamer.combattweaks.system.armor;
 
+import api.DebugFile;
 import api.utils.game.SegmentControllerUtils;
 import it.unimi.dsi.fastutil.shorts.Short2IntArrayMap;
 import org.schema.common.util.StringTools;
@@ -42,8 +43,9 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private double currentHP;
 	private double maxHP;
 	private boolean flagCollectionChanged;
+	private boolean updateMaxOnly;
 	public final List<EffectConfigElement> activeArmorEffects = new ArrayList<>();
-	private float time;
+	private long lastUpdate;
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
@@ -89,30 +91,54 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	@Override
 	public void update(Timer timer) {
-		if(timer.currentTime - time < 1000) return;
-		time = timer.currentTime;
-		if(currentHP < maxHP && maxHP > 0) flagCollectionChanged = false; //This should prevent people from just placing blocks to get their HP back
-		for(ConfigGroup group : getSegmentController().getConfigManager().getPermanentEffects()) {
-			for(EffectConfigElement elements : group.elements) {
-				if(elements.getType() == StatusEffectType.ARMOR_HP_REGENERATION) {
-					activeArmorEffects.add(elements);
-					currentHP += maxHP * elements.getFloatValue();
-					if(currentHP > maxHP) currentHP = maxHP;
-				} else if(elements.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) {
-					activeArmorEffects.add(elements);
-					flagCollectionChanged = true;
-				} else if(elements.getType() == StatusEffectType.ARMOR_HP_ABSORPTION) activeArmorEffects.add(elements);
+		if((flagCollectionChanged || maxHP <= 0) && getSegmentController().isFullyLoadedWithDock()) recalcHP();
+		if(System.currentTimeMillis() - lastUpdate >= 10000) {
+			lastUpdate = System.currentTimeMillis();
+			DebugFile.log("Updating effects...");
+			if(currentHP < maxHP && maxHP > 0) flagCollectionChanged = false; //This should prevent people from just placing blocks to get their HP back
+			boolean hasArmorBuff = false;
+			for(ConfigGroup group : getSegmentController().getConfigManager().getPermanentEffects()) {
+				for(EffectConfigElement elements : group.elements) {
+					if(elements.getType() == StatusEffectType.ARMOR_HP_REGENERATION) {
+						if(!activeArmorEffects.contains(elements)) {
+							DebugFile.log("Found HP Regeneration effect");
+							activeArmorEffects.add(elements);
+						}
+					} else if(elements.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) {
+						DebugFile.log("Found HP Efficiency effect");
+						if(!activeArmorEffects.contains(elements)) {
+							activeArmorEffects.add(elements);
+							flagCollectionChanged = true;
+							updateMaxOnly = true;
+							hasArmorBuff = true;
+						}
+					} else if(elements.getType() == StatusEffectType.ARMOR_HP_ABSORPTION) {
+						if(!activeArmorEffects.contains(elements)) {
+							DebugFile.log("Found HP Absorption effect");
+							activeArmorEffects.add(elements);
+						}
+					}
+				}
+			}
+			if(!hasArmorBuff) {
+				for(EffectConfigElement element : activeArmorEffects) {
+					if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) {
+						flagCollectionChanged = true; //Force recalculation of HP
+						break;
+					}
+				}
+				if(flagCollectionChanged) activeArmorEffects.clear();
 			}
 		}
-		if((flagCollectionChanged || maxHP <= 0) && getSegmentController().isFullyLoadedWithDock()) recalcHP();
 	}
 
 	public void recalcHP() {
+		DebugFile.log("Recalculating Armor HP...");
 		currentHP = 0;
 		maxHP = 0;
 		float armorMult = (float) ConfigManager.getSystemConfig().getDouble("armor-value-multiplier");
 		for(EffectConfigElement element : activeArmorEffects) {
-			if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) armorMult += element.getFloatValue();
+			if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY && element.getFloatValue() > 1.0f) armorMult += element.getFloatValue();
 		}
 		for(short type : blockMap.keySet()) {
 			if(type != 0) {
@@ -121,7 +147,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 					blockMap.put(type, 0);
 					continue;
 				}
-				currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
+				if(!updateMaxOnly) currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
 				maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
 			}
 		}
@@ -129,6 +155,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		if(maxHP < 0) maxHP = 0;
 		if(currentHP > maxHP) currentHP = maxHP;
 		flagCollectionChanged = false;
+		updateMaxOnly = false;
 	}
 
 	public double getCurrentHP() {
