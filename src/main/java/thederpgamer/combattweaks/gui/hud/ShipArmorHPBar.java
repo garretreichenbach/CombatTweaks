@@ -8,6 +8,7 @@ import org.schema.game.client.view.gui.shiphud.newhud.FillableBarOne;
 import org.schema.game.client.view.gui.shiphud.newhud.GUIPosition;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ElementCollectionManager;
+import org.schema.game.common.data.ManagedSegmentController;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.schine.common.language.Lng;
 import org.schema.schine.input.InputState;
@@ -47,7 +48,7 @@ public class ShipArmorHPBar extends FillableBarOne {
 		if(currentPlayerObject instanceof ManagedUsableSegmentController<?>) {
 			float hp = 0;
 			float maxHP = 0;
-			for(ElementCollectionManager<?, ?, ?> collection : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) currentPlayerObject, ArmorHPCollection.class)) {
+			for(ElementCollectionManager<?, ?, ?> collection : SegmentControllerUtils.getCollectionManagers((ManagedSegmentController<?>) currentPlayerObject, ArmorHPCollection.class)) {
 				if(collection instanceof ArmorHPCollection) {
 					ArmorHPCollection armorHPCollection = (ArmorHPCollection) collection;
 					hp += armorHPCollection.getCurrentHP();

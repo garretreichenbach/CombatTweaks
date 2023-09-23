@@ -1,6 +1,5 @@
 package thederpgamer.combattweaks.system.armor;
 
-import api.DebugFile;
 import api.utils.game.SegmentControllerUtils;
 import it.unimi.dsi.fastutil.shorts.Short2IntArrayMap;
 import org.schema.common.util.StringTools;
@@ -94,18 +93,15 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		if((flagCollectionChanged || maxHP <= 0) && getSegmentController().isFullyLoadedWithDock()) recalcHP();
 		if(System.currentTimeMillis() - lastUpdate >= 10000) {
 			lastUpdate = System.currentTimeMillis();
-			DebugFile.log("Updating effects...");
 			if(currentHP < maxHP && maxHP > 0) flagCollectionChanged = false; //This should prevent people from just placing blocks to get their HP back
 			boolean hasArmorBuff = false;
 			for(ConfigGroup group : getSegmentController().getConfigManager().getPermanentEffects()) {
 				for(EffectConfigElement elements : group.elements) {
 					if(elements.getType() == StatusEffectType.ARMOR_HP_REGENERATION) {
 						if(!activeArmorEffects.contains(elements)) {
-							DebugFile.log("Found HP Regeneration effect");
 							activeArmorEffects.add(elements);
 						}
 					} else if(elements.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) {
-						DebugFile.log("Found HP Efficiency effect");
 						if(!activeArmorEffects.contains(elements)) {
 							activeArmorEffects.add(elements);
 							flagCollectionChanged = true;
@@ -114,7 +110,6 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 						}
 					} else if(elements.getType() == StatusEffectType.ARMOR_HP_ABSORPTION) {
 						if(!activeArmorEffects.contains(elements)) {
-							DebugFile.log("Found HP Absorption effect");
 							activeArmorEffects.add(elements);
 						}
 					}
@@ -133,7 +128,6 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	public void recalcHP() {
-		DebugFile.log("Recalculating Armor HP...");
 		currentHP = 0;
 		maxHP = 0;
 		float armorMult = (float) ConfigManager.getSystemConfig().getDouble("armor-value-multiplier");
@@ -180,13 +174,14 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		} catch(Exception exception) {
 			exception.printStackTrace();
 		}
-		blockMap.put(type, blockMap.get(type) + 1);
-//		flagCollectionChanged = true;
+		if(blockMap.containsKey(type)) blockMap.put(type, blockMap.get(type) + 1);
+		else blockMap.put(type, 1);
+		flagCollectionChanged = true;
 	}
 
 	public void removeBlock(short type) {
 		blockMap.put(type, blockMap.get(type) - 1);
 		if(blockMap.get(type) < 0) blockMap.put(type, 0);
-//		flagCollectionChanged = true;
+		flagCollectionChanged = true;
 	}
 }
