@@ -14,7 +14,7 @@ public class ConfigManager {
 	private static FileConfiguration mainConfig;
 	public static final String[] defaultMainConfig = {
 		"debug-mode: false",
-		"max-world-logs: 5"
+		"tactical-map-view-distance: 1.2"
 	};
 
 	//System Config
@@ -27,7 +27,7 @@ public class ConfigManager {
 		"armor-value-multiplier: 30.0",
 		"cannon-armor-multiplier: 0.9",
 		"beam-armor-multiplier: 0.35",
-		"missile-armor-multiplier: 0.75",
+		"missile-armor-multiplier: 0.75"
 	};
 
 	public static void initialize(CombatTweaks instance) {

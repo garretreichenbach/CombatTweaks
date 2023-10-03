@@ -1,6 +1,7 @@
 package thederpgamer.combattweaks.manager;
 
 import api.utils.textures.StarLoaderTexture;
+import org.schema.schine.graphicsengine.forms.Sprite;
 import thederpgamer.combattweaks.CombatTweaks;
 
 import javax.imageio.ImageIO;
@@ -13,14 +14,16 @@ import java.util.Objects;
  * @author TheDerpGamer (TheDerpGamer#0027)
  */
 public class ResourceManager {
-
 	private static final String[] textureNames = {
-			"repair-paste-fabricator-caps",
-			"repair-paste-fabricator-sides",
-			"repair-paste-fabricator-icon"
+		"repair-paste-fabricator-caps",
+		"repair-paste-fabricator-sides",
+		"repair-paste-fabricator-icon"
 	};
-
+	private static final String[] spriteNames = {
+		"tactical-map-indicators"
+	};
 	private static final HashMap<String, StarLoaderTexture> textureMap = new HashMap<>();
+	private static final HashMap<String, Sprite> spriteMap = new HashMap<>();
 
 	public static void loadResources(final CombatTweaks instance) {
 		StarLoaderTexture.runOnGraphicsThread(new Runnable() {
@@ -31,7 +34,14 @@ public class ResourceManager {
 						if(textureName.endsWith("icon")) textureMap.put(textureName, StarLoaderTexture.newIconTexture(ImageIO.read(Objects.requireNonNull(instance.getClass().getResourceAsStream("/textures/" + textureName + ".png")))));
 						else textureMap.put(textureName, StarLoaderTexture.newBlockTexture(ImageIO.read(Objects.requireNonNull(instance.getClass().getResourceAsStream("/textures/" + textureName + ".png")))));
 					} catch(Exception exception) {
-						exception.printStackTrace();
+						instance.logException("Failed to load texture: " + textureName, exception);
+					}
+				}
+				for(String spriteName : spriteNames) {
+					try {
+						spriteMap.put(spriteName, StarLoaderTexture.newSprite(ImageIO.read(Objects.requireNonNull(instance.getClass().getResourceAsStream("/sprites/" + spriteName + ".png"))), instance, spriteName));
+					} catch(Exception exception) {
+						instance.logException("Failed to load sprite: " + spriteName, exception);
 					}
 				}
 			}
@@ -40,5 +50,9 @@ public class ResourceManager {
 
 	public static StarLoaderTexture getTexture(String name) {
 		return textureMap.get(name);
+	}
+
+	public static Sprite getSprite(String name) {
+		return spriteMap.get(name);
 	}
 }

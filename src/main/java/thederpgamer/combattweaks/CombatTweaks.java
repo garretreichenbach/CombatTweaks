@@ -14,6 +14,7 @@ import thederpgamer.combattweaks.element.blocks.systems.RepairPasteFabricator;
 import thederpgamer.combattweaks.manager.ConfigManager;
 import thederpgamer.combattweaks.manager.EventManager;
 import thederpgamer.combattweaks.manager.ResourceManager;
+import thederpgamer.combattweaks.network.client.SendAttackPacket;
 import thederpgamer.combattweaks.network.server.JumpHudRemovePacket;
 import thederpgamer.combattweaks.network.server.JumpHudUpdatePacket;
 
@@ -90,6 +91,7 @@ public class CombatTweaks extends StarMod {
 	private void registerPackets() {
 		PacketUtil.registerPacket(JumpHudUpdatePacket.class);
 		PacketUtil.registerPacket(JumpHudRemovePacket.class);
+		PacketUtil.registerPacket(SendAttackPacket.class);
 	}
 
 	private void initializeGlossary() {

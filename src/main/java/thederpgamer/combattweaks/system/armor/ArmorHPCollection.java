@@ -1,5 +1,6 @@
 package thederpgamer.combattweaks.system.armor;
 
+import api.DebugFile;
 import api.utils.game.SegmentControllerUtils;
 import it.unimi.dsi.fastutil.shorts.Short2IntArrayMap;
 import org.schema.common.util.StringTools;
@@ -16,7 +17,6 @@ import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.element.ElementKeyMap;
 import org.schema.schine.common.language.Lng;
 import org.schema.schine.graphicsengine.core.Timer;
-import thederpgamer.combattweaks.manager.ConfigManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +28,16 @@ import java.util.List;
  * @author TheDerpGamer (TheDerpGamer#0027)
  */
 public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, ArmorHPCollection, VoidElementManager<ArmorHPUnit, ArmorHPCollection>> {
+	public final List<EffectConfigElement> activeArmorEffects = new ArrayList<>();
+	private final Short2IntArrayMap blockMap = new Short2IntArrayMap();
+	private double currentHP;
+	private double maxHP;
+	private boolean flagCollectionChanged;
+	private boolean updateMaxOnly;
+	private long lastUpdate;
+	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
+		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
+	}
 
 	public static ArmorHPCollection getCollection(SegmentController segmentController) {
 		if(!(segmentController instanceof ManagedUsableSegmentController)) return null;
@@ -36,18 +46,6 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			if(manager instanceof ArmorHPCollection) return (ArmorHPCollection) manager;
 		}
 		return null;
-	}
-
-	private final Short2IntArrayMap blockMap = new Short2IntArrayMap();
-	private double currentHP;
-	private double maxHP;
-	private boolean flagCollectionChanged;
-	private boolean updateMaxOnly;
-	public final List<EffectConfigElement> activeArmorEffects = new ArrayList<>();
-	private long lastUpdate;
-
-	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
-		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
 	}
 
 	@Override
@@ -77,6 +75,42 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	@Override
+	public void update(Timer timer) {
+		if((flagCollectionChanged || (maxHP <= 0 && hasAnyArmorBlocks())) && getSegmentController().isFullyLoadedWithDock()) recalcHP();
+		if(System.currentTimeMillis() - lastUpdate >= 10000) {
+			lastUpdate = System.currentTimeMillis();
+			if(currentHP < maxHP && maxHP > 0) flagCollectionChanged = false; //This should prevent people from just placing blocks to get their HP back
+			boolean hasArmorBuff = false;
+			for(ConfigGroup group : getSegmentController().getConfigManager().getPermanentEffects()) {
+				for(EffectConfigElement elements : group.elements) {
+					if(elements.getType() == StatusEffectType.ARMOR_HP_REGENERATION) {
+						if(!activeArmorEffects.contains(elements)) activeArmorEffects.add(elements);
+					} else if(elements.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) {
+						if(!activeArmorEffects.contains(elements)) {
+							activeArmorEffects.add(elements);
+							flagCollectionChanged = true;
+							updateMaxOnly = true;
+							hasArmorBuff = true;
+						}
+					} else if(elements.getType() == StatusEffectType.ARMOR_HP_ABSORPTION) {
+						if(!activeArmorEffects.contains(elements)) activeArmorEffects.add(elements);
+					}
+				}
+			}
+			if(!hasArmorBuff) {
+				for(EffectConfigElement element : activeArmorEffects) {
+					if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) {
+						flagCollectionChanged = true; //Force recalculation of HP
+						updateMaxOnly = true;
+						break;
+					}
+				}
+				if(flagCollectionChanged) activeArmorEffects.clear();
+			}
+		}
+	}
+
+	@Override
 	public GUIKeyValueEntry[] getGUICollectionStats() {
 		return new GUIKeyValueEntry[] {
 			new ModuleValueEntry(Lng.str("HP Status"), StringTools.formatPointZero(currentHP) + "/" + StringTools.formatPointZero(maxHP) + " [" + getHPPercentage() + "%]")
@@ -88,49 +122,22 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		return Lng.str("Armor HP System");
 	}
 
-	@Override
-	public void update(Timer timer) {
-		if((flagCollectionChanged || maxHP <= 0) && getSegmentController().isFullyLoadedWithDock()) recalcHP();
-		if(System.currentTimeMillis() - lastUpdate >= 10000) {
-			lastUpdate = System.currentTimeMillis();
-			if(currentHP < maxHP && maxHP > 0) flagCollectionChanged = false; //This should prevent people from just placing blocks to get their HP back
-			boolean hasArmorBuff = false;
-			for(ConfigGroup group : getSegmentController().getConfigManager().getPermanentEffects()) {
-				for(EffectConfigElement elements : group.elements) {
-					if(elements.getType() == StatusEffectType.ARMOR_HP_REGENERATION) {
-						if(!activeArmorEffects.contains(elements)) {
-							activeArmorEffects.add(elements);
-						}
-					} else if(elements.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) {
-						if(!activeArmorEffects.contains(elements)) {
-							activeArmorEffects.add(elements);
-							flagCollectionChanged = true;
-							updateMaxOnly = true;
-							hasArmorBuff = true;
-						}
-					} else if(elements.getType() == StatusEffectType.ARMOR_HP_ABSORPTION) {
-						if(!activeArmorEffects.contains(elements)) {
-							activeArmorEffects.add(elements);
-						}
-					}
-				}
-			}
-			if(!hasArmorBuff) {
-				for(EffectConfigElement element : activeArmorEffects) {
-					if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY) {
-						flagCollectionChanged = true; //Force recalculation of HP
-						break;
-					}
-				}
-				if(flagCollectionChanged) activeArmorEffects.clear();
-			}
+	public double getHPPercentage() {
+		return currentHP / maxHP * 100;
+	}
+
+	private boolean hasAnyArmorBlocks() {
+		for(int count : blockMap.values()) {
+			if(count != 0) return true;
 		}
+		return false;
 	}
 
 	public void recalcHP() {
+		DebugFile.log("Recalculating Armor HP...");
 		currentHP = 0;
 		maxHP = 0;
-		float armorMult = (float) ConfigManager.getSystemConfig().getDouble("armor-value-multiplier");
+		float armorMult = 8.5f;
 		for(EffectConfigElement element : activeArmorEffects) {
 			if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY && element.getFloatValue() > 1.0f) armorMult += element.getFloatValue();
 		}
@@ -150,6 +157,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		if(currentHP > maxHP) currentHP = maxHP;
 		flagCollectionChanged = false;
 		updateMaxOnly = false;
+		lastUpdate = System.currentTimeMillis();
 	}
 
 	public double getCurrentHP() {
@@ -164,24 +172,19 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		return maxHP;
 	}
 
-	public double getHPPercentage() {
-		return currentHP / maxHP * 100;
-	}
-
 	public void addBlock(long index, short type) {
 		try {
 			if(rawCollection == null && type != 0) doAdd(index, type); //Dumb hack to get it to call the update method
 		} catch(Exception exception) {
 			exception.printStackTrace();
 		}
-		if(blockMap.containsKey(type)) blockMap.put(type, blockMap.get(type) + 1);
-		else blockMap.put(type, 1);
-		flagCollectionChanged = true;
+		blockMap.put(type, blockMap.get(type) + 1);
+//		flagCollectionChanged = true;
 	}
 
 	public void removeBlock(short type) {
 		blockMap.put(type, blockMap.get(type) - 1);
 		if(blockMap.get(type) < 0) blockMap.put(type, 0);
-		flagCollectionChanged = true;
+//		flagCollectionChanged = true;
 	}
 }
