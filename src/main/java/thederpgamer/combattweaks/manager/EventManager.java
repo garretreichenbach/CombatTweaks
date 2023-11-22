@@ -40,9 +40,11 @@ public class EventManager {
 		StarLoader.registerListener(KeyPressEvent.class, new Listener<KeyPressEvent>() {
 			@Override
 			public void onEvent(KeyPressEvent event) {
-				if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
-					if(event.getKey() == Keyboard.KEY_COMMA && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) TacticalMapGUIDrawer.getInstance().toggleDraw();
-					else if(event.getKey() == Keyboard.KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().toggleDraw) TacticalMapGUIDrawer.getInstance().toggleDraw();
+				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
+					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
+						if(event.getKey() == Keyboard.KEY_COMMA && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) TacticalMapGUIDrawer.getInstance().toggleDraw();
+						else if(event.getKey() == Keyboard.KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().toggleDraw) TacticalMapGUIDrawer.getInstance().toggleDraw();
+					}
 				}
 			}
 		}, instance);

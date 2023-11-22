@@ -67,10 +67,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
+		selectedEntities.add(indicator.getEntity());
 		selectionOverlay.addSelected(indicator.getEntity());
 	}
 
 	public void removeSelection(TacticalMapEntityIndicator indicator) {
+		selectedEntities.remove(indicator.getEntity());
 		selectionOverlay.removeSelected(indicator.getEntity());
 	}
 
@@ -110,7 +112,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	public void recreateSelectionOverlay() {
-		(selectionOverlay = new TacticalMapSelectionOverlay(controlManager.getState(), this)).onInit();
+		(selectionOverlay = new TacticalMapSelectionOverlay(controlManager.getState())).onInit();
 		selectionOverlay.orientate(GUIElement.ORIENTATION_LEFT | GUIElement.ORIENTATION_VERTICAL_MIDDLE);
 		selectionOverlay.getPos().x += 10.0f;
 	}
@@ -141,10 +143,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
 			drawGrid(-sectorSize, sectorSize);
 			drawIndicators();
-			drawOutlines();
 			GUIElement.enableOrthogonal();
 			selectionOverlay.draw();
 			GUIElement.disableOrthogonal();
+			drawOutlines();
 			/*
 			if(buttonPane.active && !selectedEntities.isEmpty()) {
 				GUIElement.enableOrthogonal();

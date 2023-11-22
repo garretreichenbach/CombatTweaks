@@ -15,13 +15,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author TheDerpGamer
  */
 public class TacticalMapSelectionOverlay extends GUIAncor {
-	private TacticalMapGUIDrawer drawer;
+
 	private GUIElementList entityList;
 	private ConcurrentHashMap<Integer, String> selectedEntities;
 
-	public TacticalMapSelectionOverlay(InputState inputState, TacticalMapGUIDrawer drawer) {
+	public TacticalMapSelectionOverlay(InputState inputState) {
 		super(inputState);
-		this.drawer = drawer;
 	}
 
 	@Override
@@ -47,17 +46,19 @@ public class TacticalMapSelectionOverlay extends GUIAncor {
 		entityOverlay.setUserPointer(entity.getId());
 		Vector4f color = new Vector4f(Color.white.r, Color.white.g, Color.white.b, 0.0f);
 		if(selectedEntities.containsKey(entity.getId())) color.w = 0.5f;
-		GUIColoredRectangle rectangle = new GUIColoredRectangle(getState(), entityOverlay.getFont().getWidth(entityOverlay.getText().toString()), 30, color);
-		rectangle.setUserPointer(entity.getId());
-		rectangle.rounded = 4.0f;
-		rectangle.onInit();
 		GUITextOverlay selectedOverlay = new GUITextOverlay(30, 20, getState());
 		selectedOverlay.onInit();
 		selectedOverlay.setFont(FontLibrary.FontSize.MEDIUM.getFont());
 		selectedOverlay.setTextSimple(entity.getRealName());
 		selectedOverlay.setUserPointer(entity.getId());
-		rectangle.attach(selectedOverlay);
-		GUIListElement element = new GUIListElement(entityOverlay, rectangle, getState());
+		GUIListElement element = new GUIListElement(entityOverlay, getState()) {
+			@Override
+			public void draw() {
+				super.draw();
+				if(selectedEntities.containsKey(getContent().getUserPointer())) ((GUITextOverlay) getContent()).setColor(new Vector4f(Color.yellow.r, Color.yellow.g, Color.yellow.b, 1.0f));
+				else ((GUITextOverlay) getContent()).setColor(new Vector4f(Color.white.r, Color.white.g, Color.white.b, 1.0f));
+			}
+		};
 		element.onInit();
 		entityList.add(element);
 	}

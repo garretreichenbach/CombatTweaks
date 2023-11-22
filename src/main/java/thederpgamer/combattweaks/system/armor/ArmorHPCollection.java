@@ -137,7 +137,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		DebugFile.log("Recalculating Armor HP...");
 		currentHP = 0;
 		maxHP = 0;
-		float armorMult = 8.5f;
+		float armorMult = 15.0f;
 		for(EffectConfigElement element : activeArmorEffects) {
 			if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY && element.getFloatValue() > 1.0f) armorMult += element.getFloatValue();
 		}

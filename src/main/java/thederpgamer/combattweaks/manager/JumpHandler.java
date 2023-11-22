@@ -20,7 +20,7 @@ public class JumpHandler {
 	private static final HashMap<SegmentController, Boolean> events = new HashMap<>();
 
 	public static void onJumpEngage(ShipJumpEngageEvent event) {
-		if(!event.getController().isOnServer()) return;
+//		if(!event.getController().isOnServer()) return;
 //		if(events.containsKey(event.getController())) {
 //			if(events.get(event.getController())) {
 //				events.remove(event.getController());
@@ -31,9 +31,9 @@ public class JumpHandler {
 //			return;
 //		}
 		//Get all nearby players and send a hud update packet to notify them of incoming jump
-		for(PlayerState playerState : GameServer.getServerState().getPlayerStatesByName().values()) {
-			if(getDistance(playerState.getCurrentSector(), event.getController().getSector(new Vector3i())) <= 10) PacketUtil.sendPacket(playerState, new JumpHudUpdatePacket(event.getController()));
-		}
+//		for(PlayerState playerState : GameServer.getServerState().getPlayerStatesByName().values()) {
+//			if(getDistance(playerState.getCurrentSector(), event.getController().getSector(new Vector3i())) <= 10) PacketUtil.sendPacket(playerState, new JumpHudUpdatePacket(event.getController()));
+//		}
 
 //		event.setCanceled(true); //Cancel the event, so we can handle the jump ourselves
 //		final int distance = getDistance(event.getOriginalSectorPos(), event.getNewSector());

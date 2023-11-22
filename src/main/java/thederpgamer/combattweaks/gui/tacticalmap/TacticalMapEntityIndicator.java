@@ -11,6 +11,7 @@ import org.lwjgl.opengl.GL11;
 import org.schema.common.util.StringTools;
 import org.schema.common.util.linAlg.Vector3fTools;
 import org.schema.common.util.linAlg.Vector3i;
+import org.schema.game.client.controller.PlayerOkCancelInput;
 import org.schema.game.client.data.gamemap.entry.SelectableMapEntry;
 import org.schema.game.client.view.effects.ConstantIndication;
 import org.schema.game.client.view.effects.Indication;
@@ -203,7 +204,7 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 			if(attachedPlayers.size() > 1) builder.append(" + ").append(attachedPlayers.size() - 1).append(" others");
 			builder.append(">\n");
 		}
-		if(entity.getFactionId() > 0) {
+		if(entity.getFaction() != null) {
 			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) builder.append("[").append(distortString(entity.getFaction().getName())).append("]\n");
 			else builder.append("[").append(entity.getFaction().getName()).append("]\n");
 		}
@@ -460,10 +461,10 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 
 	@Override
 	public void onSelect(float depth) {
+		drawIndication = true;
+		selectDepth = depth;
+		selected = true;
 		if(Mouse.getEventButton() == 0 && Mouse.getEventButtonState() && getDrawer().selectedEntities.size() < 10) {
-			drawIndication = true;
-			selectDepth = depth;
-			selected = true;
 			if(entity.getFactionId() == GameClient.getClientPlayerState().getFactionId()) {
 				if(!Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) getDrawer().selectedEntities.clear();
 				getDrawer().addSelection(this);
@@ -475,16 +476,34 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 					}
 				}
 				getDrawer().selectedEntities.clear();
-				getDrawer().addSelection(this);
+			} else if(GameCommon.getGameState().getFactionManager().isNeutral(entity.getFactionId(), GameClient.getClientPlayerState().getFactionId())) {
+				(new PlayerOkCancelInput("ATTACK_WARNING", GameClient.getClientState(), "ATTACK WARNING", "Doing this may put you at war with the target, are you sure you wish to proceed?") {
+					@Override
+					public void onDeactivate() {
+
+					}
+
+					@Override
+					public void pressedOK() {
+						for(SegmentController segmentController : getDrawer().selectedEntities) {
+							if(segmentController instanceof Ship) {
+								Ship ship = (Ship) segmentController;
+								PacketUtil.sendPacketToServer(new SendAttackPacket(ship, entity));
+							}
+						}
+						getDrawer().selectedEntities.clear();
+						deactivate();
+					}
+				}).activate();
 			}
 		}
 	}
 
 	@Override
 	public void onUnSelect() {
+		drawIndication = true;
+		selected = false;
 		if(Mouse.getEventButton() == 0 && Mouse.getEventButtonState() && !Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) {
-			drawIndication = true;
-			selected = false;
 			getDrawer().selectedEntities.remove(entity);
 			getDrawer().removeSelection(this);
 		}
