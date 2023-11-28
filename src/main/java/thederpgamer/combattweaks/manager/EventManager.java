@@ -40,7 +40,7 @@ public class EventManager {
 		StarLoader.registerListener(KeyPressEvent.class, new Listener<KeyPressEvent>() {
 			@Override
 			public void onEvent(KeyPressEvent event) {
-				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
+				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
 					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
 						if(event.getKey() == Keyboard.KEY_COMMA && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) TacticalMapGUIDrawer.getInstance().toggleDraw();
 						else if(event.getKey() == Keyboard.KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().toggleDraw) TacticalMapGUIDrawer.getInstance().toggleDraw();
@@ -79,6 +79,7 @@ public class EventManager {
 				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) return;
 				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) return;
 				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController());
+				if(event.getSegment().getSegmentController().railController.isDocked()) manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController().railController.getRoot());
 				if(manager != null) manager.addBlock(event.getAbsIndex(), event.getType());
 			}
 		}, instance);
@@ -88,6 +89,7 @@ public class EventManager {
 				if(!ElementKeyMap.getInfo(event.getNewType()).isArmor()) return;
 				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) return;
 				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController());
+				if(event.getSegment().getSegmentController().railController.isDocked()) manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController().railController.getRoot());
 				if(manager != null) manager.addBlock(event.getAbsIndex(), event.getNewType());
 			}
 		}, instance);
@@ -96,9 +98,11 @@ public class EventManager {
 			public void onEvent(SegmentPieceRemoveEvent event) {
 				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) return;
 				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController());
+				if(event.getSegment().getSegmentController().railController.isDocked()) manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController().railController.getRoot());
 				if(manager != null) manager.removeBlock(event.getType());
 			}
 		}, instance);
+
 		StarLoader.registerListener(SegmentPieceDamageEvent.class, new Listener<SegmentPieceDamageEvent>() {
 			@Override
 			public void onEvent(SegmentPieceDamageEvent event) {

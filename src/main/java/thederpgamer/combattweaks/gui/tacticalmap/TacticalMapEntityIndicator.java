@@ -476,7 +476,7 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 					}
 				}
 				getDrawer().selectedEntities.clear();
-			} else if(GameCommon.getGameState().getFactionManager().isNeutral(entity.getFactionId(), GameClient.getClientPlayerState().getFactionId())) {
+			} else if(GameCommon.getGameState().getFactionManager().isNeutral(entity.getFactionId(), GameClient.getClientPlayerState().getFactionId()) && !getDrawer().selectedEntities.isEmpty() && !getDrawer().selectedEntities.contains(entity)) {
 				(new PlayerOkCancelInput("ATTACK_WARNING", GameClient.getClientState(), "ATTACK WARNING", "Doing this may put you at war with the target, are you sure you wish to proceed?") {
 					@Override
 					public void onDeactivate() {

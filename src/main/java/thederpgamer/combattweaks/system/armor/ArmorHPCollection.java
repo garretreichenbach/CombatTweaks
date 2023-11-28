@@ -1,6 +1,5 @@
 package thederpgamer.combattweaks.system.armor;
 
-import api.DebugFile;
 import api.utils.game.SegmentControllerUtils;
 import it.unimi.dsi.fastutil.shorts.Short2IntArrayMap;
 import org.schema.common.util.StringTools;
@@ -134,7 +133,6 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	public void recalcHP() {
-		DebugFile.log("Recalculating Armor HP...");
 		currentHP = 0;
 		maxHP = 0;
 		float armorMult = 15.0f;
