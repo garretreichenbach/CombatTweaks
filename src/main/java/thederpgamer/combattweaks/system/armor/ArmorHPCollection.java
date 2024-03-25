@@ -27,6 +27,9 @@ import java.util.List;
  * @author TheDerpGamer (TheDerpGamer#0027)
  */
 public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, ArmorHPCollection, VoidElementManager<ArmorHPUnit, ArmorHPCollection>> {
+
+	private static final float BASE_ARMOR_MULTIPLIER = 20.0f;
+
 	public final List<EffectConfigElement> activeArmorEffects = new ArrayList<>();
 	private final Short2IntArrayMap blockMap = new Short2IntArrayMap();
 	private double currentHP;
@@ -135,7 +138,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	public void recalcHP() {
 		currentHP = 0;
 		maxHP = 0;
-		float armorMult = 15.0f;
+		float armorMult = BASE_ARMOR_MULTIPLIER;
 		for(EffectConfigElement element : activeArmorEffects) {
 			if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY && element.getFloatValue() > 1.0f) armorMult += element.getFloatValue();
 		}
@@ -176,13 +179,16 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		} catch(Exception exception) {
 			exception.printStackTrace();
 		}
-		blockMap.put(type, blockMap.get(type) + 1);
+		if(!blockMap.containsKey(type)) blockMap.put(type, 1);
+		else blockMap.put(type, blockMap.get(type) + 1);
 //		flagCollectionChanged = true;
 	}
 
 	public void removeBlock(short type) {
-		blockMap.put(type, blockMap.get(type) - 1);
-		if(blockMap.get(type) < 0) blockMap.put(type, 0);
+		if(blockMap.containsKey(type)) {
+			blockMap.put(type, blockMap.get(type) - 1);
+			if(blockMap.get(type) < 0) blockMap.put(type, 0);
+		}
 //		flagCollectionChanged = true;
 	}
 }
