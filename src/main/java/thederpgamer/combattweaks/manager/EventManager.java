@@ -12,7 +12,7 @@ import api.listener.events.weapon.MissileHitEvent;
 import api.listener.fastevents.FastListenerCommon;
 import api.mod.StarLoader;
 import api.utils.game.PlayerUtils;
-import org.lwjgl.input.Keyboard;
+import org.schema.common.ParseException;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
@@ -20,6 +20,7 @@ import org.schema.game.common.data.SegmentPiece;
 import org.schema.game.common.data.blockeffects.config.EffectConfigElement;
 import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.element.ElementKeyMap;
+import org.schema.schine.input.Keyboard;
 import thederpgamer.combattweaks.CombatTweaks;
 import thederpgamer.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
 import thederpgamer.combattweaks.listener.ShipAIShootListener;
@@ -42,8 +43,21 @@ public class EventManager {
 			public void onEvent(KeyPressEvent event) {
 				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
 					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
-						if(event.getKey() == Keyboard.KEY_COMMA && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) TacticalMapGUIDrawer.getInstance().toggleDraw();
-						else if(event.getKey() == Keyboard.KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().toggleDraw) TacticalMapGUIDrawer.getInstance().toggleDraw();
+						if(event.getKey() == org.lwjgl.input.Keyboard.KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().toggleDraw) TacticalMapGUIDrawer.getInstance().toggleDraw();
+						else {
+							String keyName = ConfigManager.getKeyboardConfig().getString("tactical-map-key");
+							try {
+								if(keyName != null) {
+									int keyCode = Keyboard.getKeyFromName(keyName);
+									if(event.getKey() == keyCode && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) TacticalMapGUIDrawer.getInstance().toggleDraw();
+								}
+							} catch(ParseException exception) {
+								exception.printStackTrace();
+							} catch(Exception ignored) {
+							}
+						}
+//						if(event.getKey() == Keyboard.KEY_COMMA && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) TacticalMapGUIDrawer.getInstance().toggleDraw();
+//						else if(event.getKey() == Keyboard.KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().toggleDraw) TacticalMapGUIDrawer.getInstance().toggleDraw();
 					}
 				}
 			}

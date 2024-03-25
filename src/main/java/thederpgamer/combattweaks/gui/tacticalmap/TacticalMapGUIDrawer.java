@@ -15,7 +15,6 @@ import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.Camera;
 import org.schema.schine.graphicsengine.core.*;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
-import org.schema.schine.graphicsengine.forms.gui.GUIAncor;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.shader.ShaderLibrary;
 import thederpgamer.combattweaks.CombatTweaks;
@@ -47,7 +46,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private SegmentDrawer segmentDrawer;
 	private boolean initialized;
 	private boolean firstTime = true;
-	private GUIAncor buttonPaneAnchor;
 	private TacticalMapSelectionOverlay selectionOverlay;
 	private long updateTimer;
 
@@ -140,6 +138,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(toggleDraw && Controller.getCamera() instanceof TacticalMapCamera) {
 			//GlUtil.glEnable(GL11.GL_BLEND);
 			//GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+			GlUtil.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
 			drawGrid(-sectorSize, sectorSize);
 			drawIndicators();
@@ -147,14 +146,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			selectionOverlay.draw();
 			GUIElement.disableOrthogonal();
 			drawOutlines();
-			/*
-			if(buttonPane.active && !selectedEntities.isEmpty()) {
-				GUIElement.enableOrthogonal();
-				buttonPaneAnchor.draw();
-				buttonPane.draw();
-				GUIElement.disableOrthogonal();
-			} else buttonPane.cleanUp();
-			 */
+			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
 			//GlUtil.glDisable(GL11.GL_BLEND);
 		} else cleanUp();
 	}
@@ -490,7 +483,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		camera.reset();
 		camera.alwaysAllowWheelZoom = false;
 		recreateSelectionOverlay();
-//		recreateButtonPane(false);
 		initialized = true;
 	}
 

@@ -16,6 +16,7 @@ import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.element.ElementKeyMap;
 import org.schema.schine.common.language.Lng;
 import org.schema.schine.graphicsengine.core.Timer;
+import thederpgamer.combattweaks.manager.ConfigManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,8 +28,6 @@ import java.util.List;
  * @author TheDerpGamer (TheDerpGamer#0027)
  */
 public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, ArmorHPCollection, VoidElementManager<ArmorHPUnit, ArmorHPCollection>> {
-
-	private static final float BASE_ARMOR_MULTIPLIER = 20.0f;
 
 	public final List<EffectConfigElement> activeArmorEffects = new ArrayList<>();
 	private final Short2IntArrayMap blockMap = new Short2IntArrayMap();
@@ -138,7 +137,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	public void recalcHP() {
 		currentHP = 0;
 		maxHP = 0;
-		float armorMult = BASE_ARMOR_MULTIPLIER;
+		float armorMult = ConfigManager.getSystemConfig().getConfigurableFloat("armor-value-multiplier", 20.0f);
 		for(EffectConfigElement element : activeArmorEffects) {
 			if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY && element.getFloatValue() > 1.0f) armorMult += element.getFloatValue();
 		}

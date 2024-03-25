@@ -24,10 +24,16 @@ public class ConfigManager {
 		"repair-paste-regen-per-block: 5",
 		"repair-paste-power-consumed-per-block-resting: 5",
 		"repair-paste-power-consumed-per-block-charging: 15",
-		"armor-value-multiplier: 30.0",
+		"armor-value-multiplier: 20.0",
 		"cannon-armor-multiplier: 0.9",
 		"beam-armor-multiplier: 0.35",
 		"missile-armor-multiplier: 0.75"
+	};
+
+	//Keyboard Config
+	private static FileConfiguration keyboardConfig;
+	public static final String[] defaultKeyboardConfig = {
+		"tactical-map-key: KEY_COMMA"
 	};
 
 	public static void initialize(CombatTweaks instance) {
@@ -36,6 +42,9 @@ public class ConfigManager {
 
 		systemConfig = instance.getConfig("system-config");
 		systemConfig.saveDefault(defaultSystemConfig);
+
+		keyboardConfig = instance.getConfig("keyboard-config");
+		keyboardConfig.saveDefault(defaultKeyboardConfig);
 	}
 
 	public static FileConfiguration getMainConfig() {
@@ -44,5 +53,9 @@ public class ConfigManager {
 
 	public static FileConfiguration getSystemConfig() {
 		return systemConfig;
+	}
+
+	public static FileConfiguration getKeyboardConfig() {
+		return keyboardConfig;
 	}
 }
