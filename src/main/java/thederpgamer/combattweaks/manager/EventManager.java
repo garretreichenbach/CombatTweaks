@@ -51,9 +51,9 @@ public class EventManager {
 									int keyCode = Keyboard.getKeyFromName(keyName);
 									if(event.getKey() == keyCode && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) TacticalMapGUIDrawer.getInstance().toggleDraw();
 								}
-							} catch(ParseException exception) {
+							} catch(ParseException ignored) {
+							} catch(Exception exception) {
 								exception.printStackTrace();
-							} catch(Exception ignored) {
 							}
 						}
 //						if(event.getKey() == Keyboard.KEY_COMMA && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) TacticalMapGUIDrawer.getInstance().toggleDraw();

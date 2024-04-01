@@ -33,7 +33,7 @@ public class ConfigManager {
 	//Keyboard Config
 	private static FileConfiguration keyboardConfig;
 	public static final String[] defaultKeyboardConfig = {
-		"tactical-map-key: KEY_COMMA"
+		"tactical-map-key: COMMA"
 	};
 
 	public static void initialize(CombatTweaks instance) {
