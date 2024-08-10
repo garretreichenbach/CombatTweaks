@@ -1,7 +1,6 @@
 package thederpgamer.combattweaks.system.armor;
 
 import api.utils.game.SegmentControllerUtils;
-import it.unimi.dsi.fastutil.shorts.Short2IntArrayMap;
 import org.schema.common.util.StringTools;
 import org.schema.game.client.data.GameClientState;
 import org.schema.game.client.view.gui.structurecontrol.GUIKeyValueEntry;
@@ -19,6 +18,7 @@ import org.schema.schine.graphicsengine.core.Timer;
 import thederpgamer.combattweaks.manager.ConfigManager;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -30,12 +30,13 @@ import java.util.List;
 public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, ArmorHPCollection, VoidElementManager<ArmorHPUnit, ArmorHPCollection>> {
 
 	public final List<EffectConfigElement> activeArmorEffects = new ArrayList<>();
-	private final Short2IntArrayMap blockMap = new Short2IntArrayMap();
+	private final HashMap<Short, Integer> blockMap = new HashMap<>();
 	private double currentHP;
 	private double maxHP;
 	private boolean flagCollectionChanged;
 	private boolean updateMaxOnly;
 	private long lastUpdate;
+
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
 	}
@@ -175,18 +176,23 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	public void addBlock(long index, short type) {
 		try {
 			if(rawCollection == null && type != 0) doAdd(index, type); //Dumb hack to get it to call the update method
+			if(!blockMap.containsKey(type)) blockMap.put(type, 1);
+			else blockMap.put(type, blockMap.get(type) + 1);
 		} catch(Exception exception) {
 			exception.printStackTrace();
 		}
-		if(!blockMap.containsKey(type)) blockMap.put(type, 1);
-		else blockMap.put(type, blockMap.get(type) + 1);
+
 //		flagCollectionChanged = true;
 	}
 
 	public void removeBlock(short type) {
-		if(blockMap.containsKey(type)) {
-			blockMap.put(type, blockMap.get(type) - 1);
-			if(blockMap.get(type) < 0) blockMap.put(type, 0);
+		try {
+			if(blockMap.containsKey(type)) {
+				blockMap.put(type, blockMap.get(type) - 1);
+				if(blockMap.get(type) < 0) blockMap.put(type, 0);
+			}
+		} catch(Exception exception) {
+			exception.printStackTrace();
 		}
 //		flagCollectionChanged = true;
 	}
