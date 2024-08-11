@@ -176,18 +176,17 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	public void addBlock(long index, short type) {
 		try {
 			if(rawCollection == null && type != 0) doAdd(index, type); //Dumb hack to get it to call the update method
-			if(!blockMap.containsKey(type)) blockMap.put(type, 1);
+			if(blockMap.get(type) != null) blockMap.put(type, 1);
 			else blockMap.put(type, blockMap.get(type) + 1);
 		} catch(Exception exception) {
 			exception.printStackTrace();
 		}
-
 //		flagCollectionChanged = true;
 	}
 
 	public void removeBlock(short type) {
 		try {
-			if(blockMap.containsKey(type)) {
+			if(blockMap.get(type) != null) {
 				blockMap.put(type, blockMap.get(type) - 1);
 				if(blockMap.get(type) < 0) blockMap.put(type, 0);
 			}
