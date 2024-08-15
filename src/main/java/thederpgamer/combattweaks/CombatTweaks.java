@@ -38,7 +38,7 @@ public class CombatTweaks extends StarMod {
 	public CombatTweaks() {
 		instance = this;
 	}
-	private final String[] overwriteClasses = {"Hud", "HudConfig", "TargetPanel", "RepairBeamHandler"}; //Todo: Find some way of doing this without overwriting classes
+	private final String[] overwriteClasses = {"Hud", "HudConfig", "TargetPanel", "RepairBeamHandler", "RailRelation"}; //Todo: Find some way of doing this without overwriting classes
 
 	@Override
 	public void onEnable() {

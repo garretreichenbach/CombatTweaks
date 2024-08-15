@@ -77,7 +77,7 @@ public class EventManager {
 		StarLoader.registerListener(ShipJumpEngageEvent.class, new Listener<ShipJumpEngageEvent>() {
 			@Override
 			public void onEvent(ShipJumpEngageEvent event) {
-				JumpHandler.onJumpEngage(event);
+//				JumpHandler.onJumpEngage(event);
 			}
 		}, instance);
 		StarLoader.registerListener(ManagerContainerRegisterEvent.class, new Listener<ManagerContainerRegisterEvent>() {
