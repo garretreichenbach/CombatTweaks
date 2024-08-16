@@ -13,7 +13,7 @@ def starmadeDirectory = 'C:/Program Files (x86)/Steam/steamapps/common/StarMade/
 def jarName = 'CombatTweaks'
 mainClassName = 'thederpgamer.combattweaks.CombatTweaks'
 group 'thederpgamer.combattweaks'
-version '1.1.13 - Tactical'
+version '1.1.14 - Tactical'
 
 repositories {
     mavenCentral()
