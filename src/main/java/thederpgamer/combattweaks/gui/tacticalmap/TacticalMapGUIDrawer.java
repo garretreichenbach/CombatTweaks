@@ -89,14 +89,14 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			toggleDraw = false;
 		} else toggleDraw = !toggleDraw;
 		if(toggleDraw) {
-			Controller.setCamera(camera);
+			if(camera != null) Controller.setCamera(camera);
 			controlManager.onSwitch(true);
 			if(firstTime) {
 				camera.reset();
 				firstTime = false;
 			}
 		} else {
-			Controller.setCamera(getDefaultCamera());
+			if(camera != null) Controller.setCamera(getDefaultCamera());
 			controlManager.onSwitch(false);
 		}
 	}

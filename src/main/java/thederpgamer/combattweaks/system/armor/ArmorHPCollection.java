@@ -142,15 +142,18 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		for(EffectConfigElement element : activeArmorEffects) {
 			if(element.getType() == StatusEffectType.ARMOR_HP_EFFICIENCY && element.getFloatValue() > 1.0f) armorMult += element.getFloatValue();
 		}
-		for(short type : blockMap.keySet()) {
-			if(type != 0) {
-				int count = blockMap.get(type);
-				if(count <= 0) {
-					blockMap.put(type, 0);
-					continue;
+		
+		if(!blockMap.isEmpty()) {
+			for(short type : blockMap.keySet()) {
+				if(type != 0) {
+					int count = blockMap.get(type);
+					if(count <= 0) {
+						blockMap.put(type, 0);
+						continue;
+					}
+					if(!updateMaxOnly) currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
+					maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
 				}
-				if(!updateMaxOnly) currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
-				maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
 			}
 		}
 		if(currentHP < 0) currentHP = 0;
