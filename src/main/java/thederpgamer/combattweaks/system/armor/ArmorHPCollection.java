@@ -146,8 +146,8 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		if(!blockMap.isEmpty()) {
 			for(short type : blockMap.keySet()) {
 				if(type != 0) {
-					int count = blockMap.get(type);
-					if(count <= 0) {
+					Integer count = blockMap.get(type);
+					if(count == null || count <= 0) {
 						blockMap.put(type, 0);
 						continue;
 					}
