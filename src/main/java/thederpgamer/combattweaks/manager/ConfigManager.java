@@ -9,6 +9,7 @@ public class ConfigManager {
 			"debug_mode: false",
 			"tactical_map_view_distance: 1.2"
 	};
+
 	public static final String[] defaultSystemConfig = {
 			"repair_paste_capacity_per_block: 10",
 			"repair_paste_regen_per_block: 5",
@@ -22,9 +23,7 @@ public class ConfigManager {
 			"beam_armor_multiplier: 0.35",
 			"missile_armor_multiplier: 0.75"
 	};
-	public static final String[] defaultKeyboardConfig = {
-			"tactical_map_key: PEROID"
-	};
+	
 	//Main Config
 	private static FileConfiguration mainConfig;
 	//System Config
@@ -38,9 +37,6 @@ public class ConfigManager {
 
 		systemConfig = instance.getConfig("system_config");
 		systemConfig.saveDefault(defaultSystemConfig);
-
-		keyboardConfig = instance.getConfig("keyboard_config");
-		keyboardConfig.saveDefault(defaultKeyboardConfig);
 	}
 
 	public static FileConfiguration getMainConfig() {
@@ -49,9 +45,5 @@ public class ConfigManager {
 
 	public static FileConfiguration getSystemConfig() {
 		return systemConfig;
-	}
-
-	public static FileConfiguration getKeyboardConfig() {
-		return keyboardConfig;
 	}
 }
