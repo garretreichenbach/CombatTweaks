@@ -8,20 +8,11 @@ import javax.imageio.ImageIO;
 import java.util.HashMap;
 import java.util.Objects;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer (TheDerpGamer#0027)
- */
 public class ResourceManager {
 	private static final String[] textureNames = {
-		"repair-paste-fabricator-caps",
-		"repair-paste-fabricator-sides",
-		"repair-paste-fabricator-icon"
+
 	};
-	private static final String[] spriteNames = {
-		"tactical-map-indicators"
-	};
+	private static final String[] spriteNames = {"tactical-map-indicators"};
 	private static final HashMap<String, StarLoaderTexture> textureMap = new HashMap<>();
 	private static final HashMap<String, Sprite> spriteMap = new HashMap<>();
 
@@ -31,8 +22,10 @@ public class ResourceManager {
 			public void run() {
 				for(String textureName : textureNames) {
 					try {
-						if(textureName.endsWith("icon")) textureMap.put(textureName, StarLoaderTexture.newIconTexture(ImageIO.read(Objects.requireNonNull(instance.getClass().getResourceAsStream("/textures/" + textureName + ".png")))));
-						else textureMap.put(textureName, StarLoaderTexture.newBlockTexture(ImageIO.read(Objects.requireNonNull(instance.getClass().getResourceAsStream("/textures/" + textureName + ".png")))));
+						if(textureName.endsWith("icon"))
+							textureMap.put(textureName, StarLoaderTexture.newIconTexture(ImageIO.read(Objects.requireNonNull(instance.getClass().getResourceAsStream("/textures/" + textureName + ".png")))));
+						else
+							textureMap.put(textureName, StarLoaderTexture.newBlockTexture(ImageIO.read(Objects.requireNonNull(instance.getClass().getResourceAsStream("/textures/" + textureName + ".png")))));
 					} catch(Exception exception) {
 						instance.logException("Failed to load texture: " + textureName, exception);
 					}

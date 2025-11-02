@@ -12,11 +12,6 @@ import thederpgamer.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
 
 import java.io.IOException;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer
- */
 public class SendAttackPacket extends Packet {
 	private Ship entity;
 	private SegmentController target;
@@ -48,7 +43,9 @@ public class SendAttackPacket extends Packet {
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
 		entity.activateAI(true, true);
-		if(!(entity.getAiConfiguration().getAiEntityState().getCurrentProgram() instanceof SimpleSearchAndDestroyProgram)) entity.getAiConfiguration().getAiEntityState().setCurrentProgram(new SimpleSearchAndDestroyProgram(entity.getAiConfiguration().getAiEntityState(), false));
+		if(!(entity.getAiConfiguration().getAiEntityState().getCurrentProgram() instanceof SimpleSearchAndDestroyProgram)) {
+			entity.getAiConfiguration().getAiEntityState().setCurrentProgram(new SimpleSearchAndDestroyProgram(entity.getAiConfiguration().getAiEntityState(), false));
+		}
 		((TargetProgram<?>) entity.getAiConfiguration().getAiEntityState().getCurrentProgram()).setTarget(target);
 		TacticalMapGUIDrawer.getInstance().drawMap.get(entity.getId()).setCurrentTarget(target);
 	}

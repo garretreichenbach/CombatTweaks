@@ -2,8 +2,8 @@
   "name": "CombatTweaks",
   "author": "TheDerpGamer",
   "description": "Useful combat-related game additions.",
-  "version": "1.1.17",
-  "starmade_version": "0.203.175",
+  "version": "2.0.0",
+  "starmade_version": "0.204.6",
   "client_mod": false,
   "server_mod": false,
   "main_class": "thederpgamer.combattweaks.CombatTweaks",
@@ -11,7 +11,7 @@
   "dependencies": [
 	-1
   ],
-  "core_mod": true,
-  "requires_class_resize": true,
-  "hard_load_all_classes": true
+  "core_mod": false,
+  "requires_class_resize": false,
+  "hard_load_all_classes": false
 }

@@ -1,5 +1,6 @@
 package thederpgamer.combattweaks.gui.hud;
 
+import api.common.GameClient;
 import api.utils.game.SegmentControllerUtils;
 import org.schema.common.config.ConfigurationElement;
 import org.schema.common.util.linAlg.Vector4i;
@@ -17,29 +18,40 @@ import thederpgamer.combattweaks.system.armor.ArmorHPCollection;
 import javax.vecmath.Vector2f;
 import java.awt.*;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer (TheDerpGamer#0027)
- */
 public class ShipArmorHPBar extends FillableBarOne {
+
 	@ConfigurationElement(name = "Color")
-	public static Vector4i COLOR;
+	public static Vector4i COLOR = new Vector4i(98, 210, 66, 0);
+
 	@ConfigurationElement(name = "Position")
-	public static GUIPosition POSITION;
+	public static GUIPosition POSITION = new GUIPosition();
+
 	@ConfigurationElement(name = "Offset")
-	public static Vector2f OFFSET;
+	public static Vector2f OFFSET = new Vector2f(115, 0);
+
 	@ConfigurationElement(name = "FlipX")
-	public static boolean FLIPX;
+	public static boolean FLIPX = true;
+
 	@ConfigurationElement(name = "FlipY")
 	public static boolean FLIPY;
+
 	@ConfigurationElement(name = "FillStatusTextOnTop")
 	public static boolean FILL_ON_TOP;
+
 	@ConfigurationElement(name = "OffsetText")
-	public static Vector2f OFFSET_TEXT;
+	public static Vector2f OFFSET_TEXT = new Vector2f(8, 0);
 
 	public ShipArmorHPBar(InputState inputState) {
 		super(inputState);
+		POSITION.value = ORIENTATION_VERTICAL_MIDDLE | ORIENTATION_LEFT;
+	}
+
+	@Override
+	public void draw() {
+		if(!GameClient.getClientState().isInFlightMode()) {
+			return;
+		}
+		super.draw();
 	}
 
 	@Override
@@ -51,12 +63,14 @@ public class ShipArmorHPBar extends FillableBarOne {
 			for(ElementCollectionManager<?, ?, ?> collection : SegmentControllerUtils.getCollectionManagers((ManagedSegmentController<?>) currentPlayerObject, ArmorHPCollection.class)) {
 				if(collection instanceof ArmorHPCollection) {
 					ArmorHPCollection armorHPCollection = (ArmorHPCollection) collection;
-					hp += armorHPCollection.getCurrentHP();
-					maxHP += armorHPCollection.getMaxHP();
+					hp += (float) armorHPCollection.getCurrentHP();
+					maxHP += (float) armorHPCollection.getMaxHP();
 				}
 			}
-			return hp / maxHP;
-		} else return 0;
+			return Math.max(0, Math.min(1, hp / maxHP));
+		} else {
+			return 0;
+		}
 	}
 
 	@Override
@@ -93,12 +107,14 @@ public class ShipArmorHPBar extends FillableBarOne {
 			for(ElementCollectionManager<?, ?, ?> collection : SegmentControllerUtils.getCollectionManagers((ManagedUsableSegmentController<?>) currentPlayerObject, ArmorHPCollection.class)) {
 				if(collection instanceof ArmorHPCollection) {
 					ArmorHPCollection armorHPCollection = (ArmorHPCollection) collection;
-					hp += armorHPCollection.getCurrentHP();
-					maxHP += armorHPCollection.getMaxHP();
+					hp += (float) armorHPCollection.getCurrentHP();
+					maxHP += (float) armorHPCollection.getMaxHP();
 				}
 			}
 			return (hp / maxHP) * 100 + "%";
-		} else return "0%";
+		} else {
+			return "0%";
+		}
 	}
 
 	@Override
@@ -114,7 +130,9 @@ public class ShipArmorHPBar extends FillableBarOne {
 
 	@Override
 	public Vector2f getConfigOffset() {
-		if(OFFSET.x == 115) OFFSET.x = 78;
+		if(OFFSET.x == 115) {
+			OFFSET.x = 78;
+		}
 		return OFFSET;
 	}
 

@@ -16,12 +16,7 @@ import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.schine.graphicsengine.core.Timer;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer (TheDerpGamer#0027)
- */
-public class ShipAIShootListener implements ShipAIEntityAttemptToShootListener {
+public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListener {
 
 	@Override
 	public void doShooting(ShipAIEntity shipAIEntity, AIControllerStateUnit<?> aiControllerStateUnit, Timer timer) {
@@ -30,11 +25,12 @@ public class ShipAIShootListener implements ShipAIEntityAttemptToShootListener {
 			if(elementManager != null && elementManager.totalSize > 0) {
 				//if(!isValidTarget(shipAIEntity)) changeTarget(shipAIEntity);
 				//if(isValidTarget(shipAIEntity)) {
-					for(RepairBeamCollectionManager collectionManager : elementManager.getCollectionManagers()) {
-						for(RepairUnit unit : collectionManager.getElementCollections()) {
-							if(unit.size() > 0 && !unit.isReloading(timer.currentTime) && unit.canUse(timer.currentTime, false)) unit.fire(aiControllerStateUnit, timer);
-						}
+				for(RepairBeamCollectionManager collectionManager : elementManager.getCollectionManagers()) {
+					for(RepairUnit unit : collectionManager.getElementCollections()) {
+						if(unit.size() > 0 && !unit.isReloading(timer.currentTime) && unit.canUse(timer.currentTime, false))
+							unit.fire(aiControllerStateUnit, timer);
 					}
+				}
 				//}
 			}
 		} catch(Exception exception) {
@@ -48,7 +44,7 @@ public class ShipAIShootListener implements ShipAIEntityAttemptToShootListener {
 			for(SimpleGameObject simpleGameObject : sector.getEntities()) {
 				if(simpleGameObject instanceof SegmentController) {
 					SegmentController segmentController = (SegmentController) simpleGameObject;
-					if((GameCommon.getGameState().getFactionManager().isFriend(shipAIEntity.getEntity().getFactionId(), segmentController.getFactionId()) || shipAIEntity.getEntity().getFactionId() == segmentController.getFactionId()) && shipAIEntity.getEntity().getId() != segmentController.getId())  {
+					if((GameCommon.getGameState().getFactionManager().isFriend(shipAIEntity.getEntity().getFactionId(), segmentController.getFactionId()) || shipAIEntity.getEntity().getFactionId() == segmentController.getFactionId()) && shipAIEntity.getEntity().getId() != segmentController.getId()) {
 						if(((ManagedSegmentController<?>) segmentController).getManagerContainer().getPowerInterface().getCurrentHp() < ((ManagedSegmentController<?>) segmentController).getManagerContainer().getPowerInterface().getCurrentMaxHp()) {
 							((TargetProgram<?>) ((shipAIEntity.getEntity()).getAiConfiguration().getAiEntityState().getCurrentProgram())).setTarget(segmentController);
 							return;
@@ -56,10 +52,12 @@ public class ShipAIShootListener implements ShipAIEntityAttemptToShootListener {
 					}
 				}
 			}
-		} catch(Exception ignored) { }
+		} catch(Exception ignored) {
+		}
 		try {
 			((TargetProgram<?>) ((shipAIEntity.getEntity()).getAiConfiguration().getAiEntityState().getCurrentProgram())).setTarget(null);
-		} catch(Exception ignored) { }
+		} catch(Exception ignored) {
+		}
 	}
 
 	private boolean isValidTarget(ShipAIEntity shipAIEntity) {
@@ -73,7 +71,8 @@ public class ShipAIShootListener implements ShipAIEntityAttemptToShootListener {
 					}
 				}
 			}
-		} catch(Exception ignored) { }
+		} catch(Exception ignored) {
+		}
 		return false;
 	}
 }

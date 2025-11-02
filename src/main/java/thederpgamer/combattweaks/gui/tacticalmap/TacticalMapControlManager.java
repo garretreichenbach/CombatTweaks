@@ -32,7 +32,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	public TacticalMapControlManager(TacticalMapGUIDrawer guiDrawer) {
 		super(GameClient.getClientState());
 		this.guiDrawer = guiDrawer;
-		viewDistance = (float) ConfigManager.getMainConfig().getDouble("tactical-map-view-distance");
+		viewDistance = (float) ConfigManager.getMainConfig().getDouble("tactical_map_view_distance");
 	}
 
 	public static boolean isOpen() {
@@ -126,7 +126,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		}
 		Vector3f newPos = new Vector3f(guiDrawer.camera.getWorldTransform().origin);
 		newPos.add(move);
-		if(getDistanceFromControl(newPos) < (int) ServerConfig.SECTOR_SIZE.getCurrentState() * ConfigManager.getMainConfig().getDouble("tactical-map-view-distance"))
+		if(getDistanceFromControl(newPos) < (int) ServerConfig.SECTOR_SIZE.getCurrentState() * ConfigManager.getMainConfig().getDouble("tactical_map_view_distance"))
 			guiDrawer.camera.getWorldTransform().origin.set(newPos);
 	}
 

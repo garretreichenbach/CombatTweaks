@@ -1,30 +1,21 @@
 package thederpgamer.combattweaks.manager;
 
 import api.listener.events.gui.HudCreateEvent;
-import org.schema.game.common.controller.SendableSegmentController;
-import thederpgamer.combattweaks.gui.hud.GUIJumpMarkerHolder;
-import thederpgamer.combattweaks.gui.hud.RepairPateFabricatorHudOverlay;
+import api.listener.events.gui.TargetPanelCreateEvent;
+import thederpgamer.combattweaks.gui.hud.ShipArmorHPBar;
+import thederpgamer.combattweaks.gui.hud.TargetShipArmorHPBar;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer (TheDerpGamer#0027)
- */
 public class HudManager {
 
-	private static GUIJumpMarkerHolder jumpMarkers;
-	public static RepairPateFabricatorHudOverlay repairPasteHudOverlay;
+	private static ShipArmorHPBar shipArmorHPBar;
 
-	public static void initialize(HudCreateEvent event) {
-		jumpMarkers = new GUIJumpMarkerHolder(event);
-		repairPasteHudOverlay = new RepairPateFabricatorHudOverlay(event);
+	private static TargetShipArmorHPBar targetShipArmorHPBar;
+
+	public static void initializeHud(HudCreateEvent event) {
+		event.elements.add(shipArmorHPBar = new ShipArmorHPBar(event.getInputState()));
 	}
 
-	public static void addNewIncomingJump(SendableSegmentController controller) {
-		if(jumpMarkers != null) jumpMarkers.addNewIncomingJump(controller);
-	}
-
-	public static void removeIncomingJump(SendableSegmentController controller) {
-		if(jumpMarkers != null) jumpMarkers.removeIncomingJump(controller);
+	public static void initializeTargetPanel(TargetPanelCreateEvent event) {
+		event.getCustomElements().add(targetShipArmorHPBar = new TargetShipArmorHPBar(event.getTargetPanel().getState()));
 	}
 }
