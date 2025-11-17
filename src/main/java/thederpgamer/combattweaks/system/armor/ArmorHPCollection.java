@@ -100,10 +100,11 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			flagCollectionChanged = false; //This should prevent people from just placing blocks to get their HP back
 			return;
 		}
-		if((flagCollectionChanged || (maxHP <= 0 && hasAnyArmorBlocks())) && getSegmentController().isFullyLoadedWithDock()) {
-			recalcHP();
-		}
-		if(System.currentTimeMillis() - lastUpdate >= UPDATE_FREQUENCY) {
+
+		if(System.currentTimeMillis() - lastUpdate >= UPDATE_FREQUENCY || flagCollectionChanged) {
+			if(maxHP <= 0 && hasAnyArmorBlocks() && getSegmentController().isFullyLoadedWithDock()) {
+				recalcHP();
+			}
 			lastUpdate = System.currentTimeMillis();
 			regenEnabled = getSegmentController().getConfigManager().apply(StatusEffectType.ARMOR_HP_REGENERATION, 1.0f) > 1.0f;
 		}
@@ -144,7 +145,8 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	private boolean hasAnyArmorBlocks() {
-		for(short type : armorMap.keySet()) {
+		Iterable<Short> types = armorMap.keySet();
+		for(short type : types) {
 			if(type != 0 && getCount(type) > 0) {
 				return true;
 			}
@@ -172,7 +174,8 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		float armorMult = ConfigManager.getSystemConfig().getConfigurableFloat("armor_hp_value_multiplier", 20.0f);
 
 		// Iterate through all armor types to calculate HP values
-		for(short type : armorMap.keySet()) {
+		Iterable<Short> types = armorMap.keySet();
+		for(short type : types) {
 			if(type != 0) {
 				int count = getCount(type);
 				if(count > 0) {
