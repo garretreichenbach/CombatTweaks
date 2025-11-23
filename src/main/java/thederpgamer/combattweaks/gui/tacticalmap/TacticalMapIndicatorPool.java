@@ -48,7 +48,9 @@ public class TacticalMapIndicatorPool {
 	}
 
 	public void releaseSprite(Sprite s) {
-		if(s == null) return;
+		if(s == null) {
+			return;
+		}
 		// Reset transform/state but do not call cleanUp() because we intend to reuse the object
 		try {
 			s.setTransform(null);
@@ -73,10 +75,6 @@ public class TacticalMapIndicatorPool {
 			}
 			try {
 				o.onInit();
-			} catch(Exception ignored) {
-			}
-			// Mirror previous behavior
-			try {
 				o.getScale().y *= -1;
 			} catch(Exception ignored) {
 			}
