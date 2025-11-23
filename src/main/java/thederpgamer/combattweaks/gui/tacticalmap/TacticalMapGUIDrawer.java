@@ -3,23 +3,26 @@ package thederpgamer.combattweaks.gui.tacticalmap;
 import api.common.GameClient;
 import api.common.GameCommon;
 import api.utils.draw.ModWorldDrawer;
+import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 import org.schema.common.util.ByteUtil;
 import org.schema.common.util.linAlg.Vector3i;
 import org.schema.game.client.view.SegmentDrawer;
 import org.schema.game.client.view.effects.Indication;
-import org.schema.game.client.view.gui.shiphud.HudIndicatorOverlay;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelpManager;
+import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelperContainer;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.Camera;
 import org.schema.schine.graphicsengine.core.*;
+import org.schema.schine.graphicsengine.core.settings.ContextFilter;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.shader.ShaderLibrary;
 import org.schema.schine.input.InputType;
 import thederpgamer.combattweaks.CombatTweaks;
+import thederpgamer.combattweaks.data.ControlBindingData;
 
 import javax.vecmath.Vector3f;
 import java.util.ArrayList;
@@ -35,6 +38,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public final Vector3f labelOffset;
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap;
 	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
+	private final HudContextHelpManager hud;
 	public float selectedRange;
 	public TacticalMapControlManager controlManager;
 	public TacticalMapCamera camera;
@@ -54,6 +58,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		maxDrawDistance = sectorSize * 4.0f;
 		labelOffset = new Vector3f(0.0f, -20.0f, 0.0f);
 		drawMap = new ConcurrentHashMap<>();
+		hud = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
 		// outlinesFBO creation deferred to onInit to avoid creating GL resources before GL context is ready
 		outlinesFBO = null;
 		// sensible default to reduce immediate heavy population on first frame
@@ -66,23 +71,31 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
 		selectedEntities.add(indicator.getEntity());
-		if(selectionOverlay != null) selectionOverlay.addSelected(indicator.getEntity());
+		if(selectionOverlay != null) {
+			selectionOverlay.addSelected(indicator.getEntity());
+		}
 	}
 
 	public void removeSelection(TacticalMapEntityIndicator indicator) {
 		selectedEntities.remove(indicator.getEntity());
-		if(selectionOverlay != null) selectionOverlay.removeSelected(indicator.getEntity());
+		if(selectionOverlay != null) {
+			selectionOverlay.removeSelected(indicator.getEntity());
+		}
 	}
 
 	public void removeAll() {
-		if(selectionOverlay != null) selectionOverlay.removeAll();
+		if(selectionOverlay != null) {
+			selectionOverlay.removeAll();
+		}
 	}
 
 	public void clearSelected() {
 		ArrayList<SegmentController> temp = new ArrayList<>(selectedEntities);
 		for(SegmentController i : temp) {
 			TacticalMapEntityIndicator indicator = drawMap.get(i.getId());
-			if(indicator != null) indicator.onUnSelect();
+			if(indicator != null) {
+				indicator.onUnSelect();
+			}
 		}
 	}
 
@@ -128,10 +141,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		selectionOverlay.getPos().x += 10.0f;
 	}
 
-	public HudContextHelpManager getHud() {
-		return GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
-	}
-
 	@Override
 	public void update(Timer timer) {
 		if(!toggleDraw || !(Controller.getCamera() instanceof TacticalMapCamera)) {
@@ -157,8 +166,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	@Override
 	public void draw() {
-		if(!initialized) onInit();
+		if(!initialized) {
+			onInit();
+		}
 		if(toggleDraw && Controller.getCamera() instanceof TacticalMapCamera) {
+			drawHudIndicators(true);
 			GlUtil.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
 			drawGrid(-sectorSize, sectorSize);
@@ -170,6 +182,21 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		} else {
 			cleanUp();
+			drawHudIndicators(false);
+		}
+	}
+
+	private void drawHudIndicators(boolean active) {
+		if(active) {
+			hud.addHelper(InputType.KEYBOARD, ControlBindingData.getBinding("Tactical Map - Open").getBinding(), "Close Tactical Map UI", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, ControlBindingData.getBinding("Tactical Map - Toggle Movement Paths").getBinding(), "Toggle Path Drawing", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.MOUSE, 1, "Rotate camera (Hold)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.MOUSE, 0, "Select/Deselect entity (Friendly Entities)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_LSHIFT, "Multi-Select (Friendly Entities)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.MOUSE, 0, "Send Attack Order (Hostile or Neutral Entities)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+		} else {
+			hud.addHelper(InputType.KEYBOARD, ControlBindingData.getBinding("Tactical Map - Open").getBinding(), "Open Tactical Map UI", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
 	}
 
@@ -306,7 +333,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public void onInit() {
 		controlManager = new TacticalMapControlManager(this);
 		camera = new TacticalMapCamera();
-		camera.reset();
 		camera.alwaysAllowWheelZoom = false;
 		recreateSelectionOverlay();
 		// create FBO now that we're initialising within a (likely) GL context

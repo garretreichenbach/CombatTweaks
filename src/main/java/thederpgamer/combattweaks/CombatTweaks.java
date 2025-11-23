@@ -6,7 +6,9 @@ import api.mod.StarMod;
 import api.network.packets.PacketUtil;
 import glossar.GlossarCategory;
 import glossar.GlossarInit;
+import org.lwjgl.input.Keyboard;
 import org.schema.schine.resource.ResourceLoader;
+import thederpgamer.combattweaks.data.ControlBindingData;
 import thederpgamer.combattweaks.element.ElementManager;
 import thederpgamer.combattweaks.manager.ConfigManager;
 import thederpgamer.combattweaks.manager.EventManager;
@@ -36,6 +38,7 @@ public class CombatTweaks extends StarMod {
 	public void onClientCreated(ClientInitializeEvent clientInitializeEvent) {
 		super.onClientCreated(clientInitializeEvent);
 		initializeGlossary();
+		registerBindings();
 	}
 
 	@Override
@@ -56,5 +59,12 @@ public class CombatTweaks extends StarMod {
 		GlossarInit.initGlossar(this);
 		GlossarCategory combatTweaks = new GlossarCategory("Combat Tweaks");
 		GlossarInit.addCategory(combatTweaks);
+	}
+
+	public void registerBindings() {
+		ControlBindingData.load(this);
+		ControlBindingData.registerBinding(instance, "Tactical Map - Open", "Opens/Closes the Tactical Map UI.", Keyboard.KEY_COMMA);
+		ControlBindingData.registerBinding(instance, "Tactical Map - Toggle Movement Paths", "Toggles the display of movement paths on the Tactical Map.", Keyboard.KEY_LMENU);
+		logInfo("Registered Bindings");
 	}
 }

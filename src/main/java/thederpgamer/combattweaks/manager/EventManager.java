@@ -7,11 +7,13 @@ import api.listener.events.block.SegmentPieceAddEvent;
 import api.listener.events.block.SegmentPieceRemoveEvent;
 import api.listener.events.draw.RegisterWorldDrawersEvent;
 import api.listener.events.gui.HudCreateEvent;
+import api.listener.events.gui.MainWindowTabAddEvent;
 import api.listener.events.gui.TargetPanelCreateEvent;
 import api.listener.events.input.KeyPressEvent;
 import api.listener.events.register.ManagerContainerRegisterEvent;
 import api.listener.fastevents.FastListenerCommon;
 import api.mod.StarLoader;
+import api.mod.StarMod;
 import api.utils.game.PlayerUtils;
 import org.lwjgl.input.Keyboard;
 import org.schema.common.util.linAlg.Vector3i;
@@ -20,11 +22,19 @@ import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.element.ElementCollection;
 import org.schema.game.common.data.element.ElementKeyMap;
+import org.schema.schine.common.language.Lng;
+import org.schema.schine.graphicsengine.forms.gui.newgui.GUIContentPane;
+import org.schema.schine.graphicsengine.forms.gui.newgui.GUITabbedContent;
 import thederpgamer.combattweaks.CombatTweaks;
+import thederpgamer.combattweaks.data.ControlBindingData;
+import thederpgamer.combattweaks.gui.controls.ControlBindingsScrollableList;
 import thederpgamer.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
 import thederpgamer.combattweaks.listener.DamageReductionByArmorCalcListenerImpl;
 import thederpgamer.combattweaks.listener.ShipAIShootListenerImpl;
 import thederpgamer.combattweaks.system.armor.ArmorHPCollection;
+
+import java.util.ArrayList;
+import java.util.Locale;
 
 public class EventManager {
 
@@ -34,6 +44,32 @@ public class EventManager {
 	public static void initialize(CombatTweaks instance) {
 		FastListenerCommon.shipAIEntityAttemptToShootListeners.add(shipAIShootListener = new ShipAIShootListenerImpl());
 		FastListenerCommon.damageReductionByArmorCalcListeners.add(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl());
+
+		StarLoader.registerListener(MainWindowTabAddEvent.class, new Listener<MainWindowTabAddEvent>() {
+			@Override
+			public void onEvent(MainWindowTabAddEvent event) {
+				if(event.getTitleAsString().equals(Lng.str("Keyboard"))) { //Fix for the tab name being lowercase for some reason
+					event.getPane().getTabNameText().setTextSimple(Lng.str("KEYBOARD"));
+				} else if(event.getTitleAsString().equals(Lng.str("CONTROLS")) && event.getWindow().getTabs().size() == 2) { //Make sure we aren't adding a duplicate tab
+					GUIContentPane modControlsPane = event.getWindow().addTab(Lng.str("MOD CONTROLS"));
+					GUITabbedContent tabbedContent = new GUITabbedContent(modControlsPane.getState(), modControlsPane.getContent(0));
+					tabbedContent.activationInterface = event.getWindow().activeInterface;
+					tabbedContent.onInit();
+					tabbedContent.setPos(0, 2, 0);
+					modControlsPane.getContent(0).attach(tabbedContent);
+
+					for(StarMod mod : ControlBindingData.getBindings().keySet()) {
+						ArrayList<ControlBindingData> modBindings = ControlBindingData.getBindings().get(mod);
+						if(!modBindings.isEmpty()) {
+							GUIContentPane modTab = tabbedContent.addTab(mod.getName().toUpperCase(Locale.ENGLISH));
+							ControlBindingsScrollableList scrollableList = new ControlBindingsScrollableList(modTab.getState(), modTab.getContent(0), mod);
+							scrollableList.onInit();
+							modTab.getContent(0).attach(scrollableList);
+						}
+					}
+				}
+			}
+		}, instance);
 
 		StarLoader.registerListener(HudCreateEvent.class, new Listener<HudCreateEvent>() {
 
@@ -55,14 +91,15 @@ public class EventManager {
 			public void onEvent(KeyPressEvent event) {
 				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
 					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
-						if((event.getKey() == Keyboard.KEY_ESCAPE || event.getKey() == Keyboard.KEY_PERIOD) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
+						if((event.getKey() == Keyboard.KEY_ESCAPE || event.getKey() == ControlBindingData.getBinding("Tactical Map - Open").getBinding()) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
 							TacticalMapGUIDrawer.getInstance().toggleDraw();
 						} else {
 							try {
-								if(event.getKey() == Keyboard.KEY_PERIOD && event.isKeyDown() && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
+								if(event.getKey() == ControlBindingData.getBinding("Tactical Map - Open").getBinding() && event.isKeyDown() && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
 									TacticalMapGUIDrawer.getInstance().toggleDraw();
 								}
 							} catch(Exception exception) {
+								exception.printStackTrace();
 								CombatTweaks.getInstance().logException("Error processing tactical map key press", exception);
 							}
 						}

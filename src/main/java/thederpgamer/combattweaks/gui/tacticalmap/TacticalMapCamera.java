@@ -14,8 +14,7 @@ public class TacticalMapCamera extends Camera {
 
 	public Transform transform;
 
-	// Reusable temporary vector to avoid allocations
-	private final Vector3f tmpBack = new Vector3f();
+	private Vector3f tmpBack = new Vector3f();
 
 	public TacticalMapCamera() {
 		super(GameClient.getClientState(), new PositionableViewer());
@@ -25,22 +24,28 @@ public class TacticalMapCamera extends Camera {
 	public void reset() {
 		super.reset();
 		if(GameClient.getCurrentControl() != null && GameClient.getCurrentControl() instanceof SegmentController) {
-			TacticalMapGUIDrawer drawer = TacticalMapGUIDrawer.getInstance();
-			Transform defaultTransform = new Transform();
-			if(transform == null) transform = (((SegmentController) GameClient.getCurrentControl()).getWorldTransform());
-			defaultTransform.set(transform);
-			defaultTransform.origin.add(new Vector3f(drawer.sectorSize, drawer.sectorSize, -drawer.sectorSize));
-			setLookAlgorithm(new TacticalCameraLook(this, transform));
+			try {
+				TacticalMapGUIDrawer drawer = TacticalMapGUIDrawer.getInstance();
+				Transform defaultTransform = new Transform();
+				if(transform == null) {
+					transform = (((SegmentController) GameClient.getCurrentControl()).getWorldTransform());
+				}
+				defaultTransform.set(transform);
+				defaultTransform.origin.add(new Vector3f(drawer.sectorSize, drawer.sectorSize, -drawer.sectorSize));
+				setLookAlgorithm(new TacticalCameraLook(this, transform));
 
-			Transform temp = new Transform(transform);
-			temp.basis.set(lookAt(false).basis);
-			temp.basis.invert();
-			getWorldTransform().set(temp);
+				Transform temp = new Transform(transform);
+				temp.basis.set(lookAt(false).basis);
+				temp.basis.invert();
+				getWorldTransform().set(temp);
 
-			tmpBack.set(getForward());
-			tmpBack.scale(((SegmentController) GameClient.getCurrentControl()).getBoundingBox().maxSize() + 15);
-			tmpBack.negate();
-			getWorldTransform().origin.add(tmpBack);
+				tmpBack.set(getForward());
+				tmpBack.scale(((SegmentController) GameClient.getCurrentControl()).getBoundingBox().maxSize() + 15);
+				tmpBack.negate();
+				getWorldTransform().origin.add(tmpBack);
+			} catch(NullPointerException exception) {
+				exception.printStackTrace();
+			}
 		}
 	}
 

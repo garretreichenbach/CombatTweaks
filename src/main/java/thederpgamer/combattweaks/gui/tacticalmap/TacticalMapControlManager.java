@@ -15,6 +15,7 @@ import org.schema.schine.graphicsengine.core.MouseEvent;
 import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.input.KeyEventInterface;
 import org.schema.schine.input.KeyboardMappings;
+import thederpgamer.combattweaks.data.ControlBindingData;
 import thederpgamer.combattweaks.manager.ConfigManager;
 
 import javax.vecmath.Vector3f;
@@ -82,10 +83,9 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			Vector3f movement = new Vector3f();
 			int amount = 100;
 			if(Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) {
-				if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) amount = 5000;
-				else amount = 1000;
+				amount = 1000;
 			}
-			if(Keyboard.getEventKey() == Keyboard.KEY_LMENU && Keyboard.getEventKeyState()) {
+			if(Keyboard.getEventKey() == ControlBindingData.getBinding("Tactical Map - Toggle Movement Paths").getBinding() && Keyboard.getEventKeyState()) {
 				guiDrawer.drawMovementPaths = !TacticalMapGUIDrawer.getInstance().drawMovementPaths;
 			}
 			if(Keyboard.isKeyDown(Keyboard.KEY_X)) {
@@ -113,11 +113,17 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			move(movement);
 			if(Mouse.hasWheel() && Mouse.getEventDWheel() != 0) {
 				float wheelAmount = (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) ? 1000 : 100;
-				if(Mouse.getEventDWheel() == 0) wheelAmount = 0;
-				else if(Mouse.getEventDWheel() < 0) wheelAmount *= -1;
+				if(Mouse.getEventDWheel() == 0) {
+					wheelAmount = 0;
+				} else if(Mouse.getEventDWheel() < 0) {
+					wheelAmount *= -1;
+				}
 				float newRange = guiDrawer.selectedRange + wheelAmount;
-				if(newRange > 20000) newRange = 20000;
-				else if(newRange < 100) newRange = 100;
+				if(newRange > 20000) {
+					newRange = 20000;
+				} else if(newRange < 100) {
+					newRange = 100;
+				}
 				guiDrawer.selectedRange = newRange;
 			}
 		}
