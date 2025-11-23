@@ -12,11 +12,6 @@ import javax.vecmath.Quat4f;
 import javax.vecmath.Vector2f;
 import javax.vecmath.Vector3f;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer
- */
 public class TacticalCameraLook implements MouseLookAlgorithm {
 	public final Transform following = new Transform();
 	private final Camera camera;

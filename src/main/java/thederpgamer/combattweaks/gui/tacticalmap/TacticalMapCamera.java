@@ -10,11 +10,6 @@ import org.schema.schine.input.Mouse;
 
 import javax.vecmath.Vector3f;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer
- */
 public class TacticalMapCamera extends Camera {
 
 	public Transform transform;

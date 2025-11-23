@@ -31,6 +31,11 @@ import static java.lang.Math.max;
  */
 public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, ArmorHPCollection, VoidElementManager<ArmorHPUnit, ArmorHPCollection>> {
 
+	private final double armorHPValueMultiplier;
+	private final double armorHPLostPerDamageAbsorbed;
+	private final double baseArmorHPBleedthroughStart;
+	private final double minArmorHPBleedthroughStart;
+
 	private static final long UPDATE_FREQUENCY = 5000;
 	private static final long REGEN_FREQUENCY = 1000;
 	private final Short2IntArrayMap armorMap = new Short2IntArrayMap();
@@ -44,6 +49,10 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
+		armorHPValueMultiplier = ConfigManager.getSystemConfig().getDouble("armor_hp_value_multiplier");
+		armorHPLostPerDamageAbsorbed = ConfigManager.getSystemConfig().getDouble("armor_hp_lost_per_damage_absorbed");
+		baseArmorHPBleedthroughStart = ConfigManager.getSystemConfig().getDouble("base_armor_hp_bleedthrough_start");
+		minArmorHPBleedthroughStart = ConfigManager.getSystemConfig().getDouble("min_armor_hp_bleedthrough_start");
 		if(armorMap.isEmpty()) {
 			for(ElementInformation info : ElementKeyMap.getInfoArray()) {
 				if(info != null && info.isArmor()) {
@@ -170,9 +179,6 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		currentHP = 0;
 		maxHP = 0;
 
-		// Get the armor multiplier
-		float armorMult = ConfigManager.getSystemConfig().getConfigurableFloat("armor_hp_value_multiplier", 20.0f);
-
 		// Iterate through all armor types to calculate HP values
 		Iterable<Short> types = armorMap.keySet();
 		for(short type : types) {
@@ -181,10 +187,10 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 				if(count > 0) {
 					if(!updateMaxOnly) {
 						// Update current HP based on armor value and count
-						currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
+						currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorHPValueMultiplier) * count;
 					}
 					// Update maximum HP based on armor value and count
-					maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorMult) * count;
+					maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorHPValueMultiplier) * count;
 				} else {
 					armorMap.put(type, 0); //clean up any negative counts
 				}
@@ -284,13 +290,10 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		double hpPercent = getHPPercent(); // 0..1
 		double bleedThreshold = getBleedthroughThreshold();
 
-		// config: how much AHP is lost per 1 point of damage absorbed
-		float hpLostPerDamage = ConfigManager.getSystemConfig().getConfigurableFloat("armor_hp_lost_per_damage_absorbed", 1.0f);
-
 		// If we're above the bleedthrough threshold, AHP fully absorbs damage (entity takes 0)
 		if(hpPercent >= bleedThreshold) {
 			// reduce AHP by the full post-armor damage amount (scaled by configured loss)
-			double hpLoss = dmgAfterBaseArmorProtection * hpLostPerDamage;
+			double hpLoss = dmgAfterBaseArmorProtection * armorHPLostPerDamageAbsorbed;
 			setCurrentHP(currentHP - hpLoss);
 			return 0.0f;
 		}
@@ -304,11 +307,11 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		double desiredAbsorbed = dmgAfterBaseArmorProtection * (1.0 - bleedFrac);
 
 		// How much damage the current AHP can actually absorb
-		double absorbCapacity = currentHP / hpLostPerDamage; // damage-per-AHP conversion
+		double absorbCapacity = currentHP / armorHPLostPerDamageAbsorbed; // damage-per-AHP conversion
 		double actualAbsorbed = Math.min(desiredAbsorbed, absorbCapacity);
 
 		// Deduct HP based on actual absorbed damage
-		double hpLoss = actualAbsorbed * hpLostPerDamage;
+		double hpLoss = actualAbsorbed * armorHPLostPerDamageAbsorbed;
 		setCurrentHP(currentHP - hpLoss);
 
 		// Any damage not actually absorbed (either because it was intended to bleed or because AHP was exhausted) bleeds through
@@ -317,6 +320,6 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	private double getBleedthroughThreshold() {
-		return max(ConfigManager.getSystemConfig().getConfigurableFloat("min_armor_hp_bleedthrough_start", 0.5f), getConfigManager().apply(StatusEffectType.ARMOR_HP_ABSORPTION, ConfigManager.getSystemConfig().getConfigurableFloat("base_armor_hp_bleedthrough_start", 0.75f)));
+		return max(minArmorHPBleedthroughStart, getConfigManager().apply(StatusEffectType.ARMOR_HP_ABSORPTION, baseArmorHPBleedthroughStart));
 	}
 }

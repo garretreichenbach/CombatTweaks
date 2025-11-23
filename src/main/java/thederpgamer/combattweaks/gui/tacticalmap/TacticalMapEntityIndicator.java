@@ -74,6 +74,10 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		this.entity = entity;
 	}
 
+	private static Camera getCamera() {
+		return TacticalMapGUIDrawer.getInstance().camera;
+	}
+
 	public void drawSprite() {
 		if(entity.isCloakedFor(getCurrentEntity())) return;
 		if(sprite == null) {
@@ -90,13 +94,15 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 			sprite.onInit();
 		}
 		entityTransform.set(entity.getWorldTransform());
-		if(!getSector().equals(Objects.requireNonNull(getCurrentEntity()).getSector(new Vector3i()))) SectorUtils.transformToSector(entityTransform, getCurrentEntity().getSector(new Vector3i()), getSector());
+		if(!getSector().equals(Objects.requireNonNull(getCurrentEntity()).getSector(new Vector3i())))
+			SectorUtils.transformToSector(entityTransform, getCurrentEntity().getSector(new Vector3i()), getSector());
 		if(sprite != null && !entity.isCoreOverheating()) {
 			sprite.setSelectedMultiSprite(getSpriteIndex());
 			sprite.setTransform(entityTransform);
-			if(selected || getDrawer().selectedEntities.contains(entity)) sprite.setTint(new Vector4f(1.0f, 1.0f, 0.0f, 1.0f));
+			if(selected || getDrawer().selectedEntities.contains(entity))
+				sprite.setTint(new Vector4f(1.0f, 1.0f, 0.0f, 1.0f));
 			else sprite.setTint(new Vector4f(1.0f, 1.0f, 1.0f, 1.0f));
-			Sprite.draw3D(sprite, new PositionableSubSprite[] {this}, getCamera());
+			Sprite.draw3D(sprite, new PositionableSubSprite[]{this}, getCamera());
 		}
 	}
 
@@ -114,7 +120,8 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		int entityFaction = entity.getFactionId();
 		int playerFactionId = Objects.requireNonNull(getCurrentEntity()).getFactionId();
 		FactionRelation.RType relation = Objects.requireNonNull(GameCommon.getGameState()).getFactionManager().getRelation(entityFaction, playerFactionId);
-		if((entity.isJammingFor(getCurrentEntity()) || entity.isCloakedFor(getCurrentEntity())) && relation != FactionRelation.RType.FRIEND) return SpriteTypes.UNKNOWN.ordinal();
+		if((entity.isJammingFor(getCurrentEntity()) || entity.isCloakedFor(getCurrentEntity())) && relation != FactionRelation.RType.FRIEND)
+			return SpriteTypes.UNKNOWN.ordinal();
 		else {
 			try {
 				if(entity.getType() == SimpleTransformableSendableObject.EntityType.SHIP) {
@@ -158,10 +165,6 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		return TacticalMapGUIDrawer.getInstance();
 	}
 
-	private static Camera getCamera() {
-		return TacticalMapGUIDrawer.getInstance().camera;
-	}
-
 	public SegmentController getEntity() {
 		return entity;
 	}
@@ -177,7 +180,8 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		labelOverlay.setTextSimple(getEntityDisplay(getCurrentEntity()));
 		labelOverlay.updateTextSize();
 		entityTransform.set(entity.getWorldTransform());
-		if(!getSector().equals(Objects.requireNonNull(getCurrentEntity()).getSector(new Vector3i()))) SectorUtils.transformToSector(entityTransform, getCurrentEntity().getSector(new Vector3i()), getSector());
+		if(!getSector().equals(Objects.requireNonNull(getCurrentEntity()).getSector(new Vector3i())))
+			SectorUtils.transformToSector(entityTransform, getCurrentEntity().getSector(new Vector3i()), getSector());
 		labelOverlay.getTransform().set(entityTransform);
 		labelOverlay.getTransform().basis.set(transform.basis);
 		Vector3f upVector = GlUtil.getUpVector(new Vector3f(), labelOverlay.getTransform());
@@ -195,24 +199,38 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 
 	private String getEntityDisplay(SegmentController playerEntity) {
 		StringBuilder builder = new StringBuilder();
-		if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) builder.append(distortString(entity.getRealName()));
-		else builder.append(entity.getRealName());
+		if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
+			builder.append(distortString(entity.getRealName()));
+		} else {
+			builder.append(entity.getRealName());
+		}
 		builder.append("\n");
 		ArrayList<PlayerState> attachedPlayers = SegmentControllerUtils.getAttachedPlayers(entity);
 		if(!attachedPlayers.isEmpty() && !entity.isJammingFor(playerEntity) && !entity.isCloakedFor(playerEntity)) {
 			builder.append(" <").append(attachedPlayers.get(0).getName());
-			if(attachedPlayers.size() > 1) builder.append(" + ").append(attachedPlayers.size() - 1).append(" others");
+			if(attachedPlayers.size() > 1) {
+				builder.append(" + ").append(attachedPlayers.size() - 1).append(" others");
+			}
 			builder.append(">\n");
 		}
 		if(entity.getFaction() != null) {
-			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) builder.append("[").append(distortString(entity.getFaction().getName())).append("]\n");
-			else builder.append("[").append(entity.getFaction().getName()).append("]\n");
+			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
+				builder.append("[").append(distortString(entity.getFaction().getName())).append("]\n");
+			} else {
+				builder.append("[").append(entity.getFaction().getName()).append("]\n");
+			}
 		}
-		if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) builder.append("??? mass\n");
-		else builder.append(StringTools.massFormat(entity.getTotalPhysicalMass())).append(" mass\n");
+		if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
+			builder.append("??? mass\n");
+		} else {
+			builder.append(StringTools.massFormat(entity.getTotalPhysicalMass())).append(" mass\n");
+		}
 		if(!entity.equals(getCurrentEntity())) {
-			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) builder.append("???km\n");
-			else builder.append(StringTools.formatDistance(getDistance())).append("\n");
+			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
+				builder.append("???km\n");
+			} else {
+				builder.append(StringTools.formatDistance(getDistance())).append("\n");
+			}
 		}
 		if(targetData != null) builder.append("Engaging ").append(targetData.getName());
 		return builder.toString().trim();
@@ -236,8 +254,11 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 
 	private Transform getCurrentEntityTransform() {
 		SegmentController entity = getCurrentEntity();
-		if(entity != null) return entity.getWorldTransform();
-		else return new Transform();
+		if(entity != null) {
+			return entity.getWorldTransform();
+		} else {
+			return new Transform();
+		}
 	}
 
 	public SegmentController getCurrentTarget() {
@@ -258,7 +279,9 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 			Vector3f end = getCurrentTarget().getWorldTransform().origin;
 			try {
 				end.set(TacticalMapGUIDrawer.getInstance().drawMap.get(getCurrentTarget().getId()).sprite.getPos());
-			} catch(Exception ignored) {}
+			} catch(Exception ignored) {
+				//Dont log it'll just spam
+			}
 			if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
 				startDrawDottedLine(camera);
 				drawDottedLine(start, end, new Vector4f(Color.RED.getColorComponents(new float[4])));
@@ -332,16 +355,6 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 			GL11.glVertex3f(from.x + b.x, from.y + b.y, from.z + b.z);
 		}
 	}
-
-    /*
-    private Vector4f getPathColor() {
-		int targetFaction = GameClient.getClientPlayerState().getFactionId();
-		if(targetData != null && targetData.target != null) targetFaction = targetData.target.getFactionId();
-		int entityFaction = entity.getFactionId();
-		FactionRelation.RType relation = Objects.requireNonNull(GameCommon.getGameState()).getFactionManager().getRelation(entityFaction, targetFaction);
-		return new Vector4f(relation.defaultColor.x, relation.defaultColor.y, relation.defaultColor.z, 1.0f);
-	}
-     */
 
 	private void endDrawDottedLine() {
 		GlUtil.glEnd();
@@ -466,7 +479,9 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		selected = true;
 		if(Mouse.getEventButton() == 0 && Mouse.getEventButtonState() && getDrawer().selectedEntities.size() < 10) {
 			if(entity.getFactionId() == GameClient.getClientPlayerState().getFactionId()) {
-				if(!Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) getDrawer().selectedEntities.clear();
+				if(!Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) {
+					getDrawer().selectedEntities.clear();
+				}
 				getDrawer().addSelection(this);
 			} else if(Objects.requireNonNull(GameCommon.getGameState()).getFactionManager().isEnemy(entity.getFactionId(), GameClient.getClientPlayerState().getFactionId())) {
 				for(SegmentController segmentController : getDrawer().selectedEntities) {

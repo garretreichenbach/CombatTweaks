@@ -25,12 +25,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer
- */
 public class TacticalMapGUIDrawer extends ModWorldDrawer {
+
 	private static TacticalMapGUIDrawer instance;
 	public final int sectorSize;
 	public final float maxDrawDistance;
@@ -87,7 +83,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(!initialized) onInit();
 		if(!(GameClient.getClientState().getPlayerInputs().isEmpty() || GameClient.getClientState().getController().isChatActive() || GameClient.getClientState().isInAnyStructureBuildMode() || GameClient.getClientState().isInFlightMode()) || GameClient.getClientState().getWorldDrawer().getGameMapDrawer().isMapActive()) {
 			toggleDraw = false;
-		} else toggleDraw = !toggleDraw;
+		} else {
+			toggleDraw = !toggleDraw;
+		}
 		if(toggleDraw) {
 			if(camera != null) Controller.setCamera(camera);
 			controlManager.onSwitch(true);
@@ -96,17 +94,21 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				firstTime = false;
 			}
 		} else {
-			if(camera != null) Controller.setCamera(getDefaultCamera());
+			if(camera != null) {
+				Controller.setCamera(getDefaultCamera());
+			}
 			controlManager.onSwitch(false);
 		}
 	}
 
 	public Camera getDefaultCamera() {
-		if(GameClient.getClientState().isInAnyStructureBuildMode())
+		if(GameClient.getClientState().isInAnyStructureBuildMode()) {
 			return GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getPlayerGameControlManager().getPlayerIntercationManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().getShipBuildCamera();
-		else if(GameClient.getClientState().isInFlightMode())
+		} else if(GameClient.getClientState().isInFlightMode()) {
 			return GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getPlayerGameControlManager().getPlayerIntercationManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().shipCamera;
-		else return Controller.getCamera();
+		} else {
+			return Controller.getCamera();
+		}
 	}
 
 	public void recreateSelectionOverlay() {
@@ -147,9 +149,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			GUIElement.disableOrthogonal();
 			drawOutlines();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
 			//GlUtil.glDisable(GL11.GL_BLEND);
-		} else cleanUp();
+		} else {
+			cleanUp();
+		}
 	}
 
 	private void drawGrid(float start, float spacing) {
@@ -249,7 +252,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 					drawMap.remove(entry.getKey());
 				}
 			} catch(Exception exception) {
-				exception.printStackTrace();
+				CombatTweaks.getInstance().logException("Something went wrong while trying to draw entity indicators", exception);
 				drawMap.remove(entry.getKey());
 			}
 		}
@@ -258,218 +261,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	@Override
 	public void cleanUp() {
 	}
-
-	/*
-	public void recreateButtonPane(boolean clearOnly) {
-		if(selectedRange < 100) selectedRange = 100;
-		if(buttonPaneAnchor == null || buttonPane == null || !clearOnly) {
-			buttonPaneAnchor = new GUIAncor(GameClient.getClientState(), 150.0f, 300.0f);
-			(buttonPane = new GUIRightClickButtonPane(GameClient.getClientState(), 1, 1, buttonPaneAnchor)).onInit();
-			buttonPaneAnchor.attach(buttonPane);
-		} else buttonPane.clearButtons();
-
-		TacticalMapEntityIndicator target = null;
-		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(GameCommon.getGameObject(indicator.getEntityId()) instanceof SegmentController) {
-				if(indicator.selected) {
-					target = indicator;
-					break;
-				}
-			}
-		}
-		final TacticalMapEntityIndicator finalTarget = target;
-		buttonPane.addButton(0, 0, "STOP", GUIHorizontalArea.HButtonColor.BLUE, new GUICallback() {
-			@Override
-			public void callback(GUIElement guiElement, MouseEvent mouseEvent) {
-				if(mouseEvent.pressedLeftMouse()) {
-					commandSelected(CommandUpdateManager.NONE, null, 0);
-					buttonPane.cleanUp();
-				}
-			}
-
-			@Override
-			public boolean isOccluded() {
-				return false;
-			}
-		}, new GUIActivationCallback() {
-			@Override
-			public boolean isVisible(InputState inputState) {
-				return true;
-			}
-
-			@Override
-			public boolean isActive(InputState inputState) {
-				return true;
-			}
-		});
-
-		if(target != null) {
-			buttonPane.addRow();
-			buttonPane.addButton(0, 1, "MOVE TO", GUIHorizontalArea.HButtonColor.PINK, new GUICallback() {
-				@Override
-				public void callback(GUIElement guiElement, MouseEvent mouseEvent) {
-					if(mouseEvent.pressedLeftMouse()) {
-						commandSelected(CommandUpdateManager.MOVE, finalTarget, selectedRange);
-						buttonPane.cleanUp();
-					}
-				}
-
-				@Override
-				public boolean isOccluded() {
-					return false;
-				}
-			}, new GUIActivationCallback() {
-				@Override
-				public boolean isVisible(InputState inputState) {
-					return true;
-				}
-
-				@Override
-				public boolean isActive(InputState inputState) {
-					return true;
-				}
-			});
-
-			FactionRelation.RType relation = GameCommon.getGameState().getFactionManager().getRelation(target.getEntity().getFactionId(), getCurrentEntity().getFactionId());
-			switch(relation) {
-				case NEUTRAL:
-					buttonPane.addRow();
-					buttonPane.addButton(0, 2, "ATTACK" + getSelectedRange(), GUIHorizontalArea.HButtonColor.RED, new GUICallback() {
-						@Override
-						public void callback(GUIElement guiElement, MouseEvent mouseEvent) {
-							if(mouseEvent.pressedLeftMouse()) {
-								commandSelected(CommandUpdateManager.ATTACK, finalTarget, selectedRange);
-								buttonPane.cleanUp();
-							}
-						}
-
-						@Override
-						public boolean isOccluded() {
-							return false;
-						}
-					}, new GUIActivationCallback() {
-						@Override
-						public boolean isVisible(InputState inputState) {
-							return true;
-						}
-
-						@Override
-						public boolean isActive(InputState inputState) {
-							return true;
-						}
-					});
-					break;
-				case ENEMY:
-					buttonPane.addRow();
-					buttonPane.addButton(0, 2, "ATTACK" + getSelectedRange(), GUIHorizontalArea.HButtonColor.RED, new GUICallback() {
-						@Override
-						public void callback(GUIElement guiElement, MouseEvent mouseEvent) {
-							if(mouseEvent.pressedLeftMouse()) {
-								commandSelected(CommandUpdateManager.ATTACK, finalTarget, selectedRange);
-								buttonPane.cleanUp();
-							}
-						}
-
-						@Override
-						public boolean isOccluded() {
-							return false;
-						}
-					}, new GUIActivationCallback() {
-						@Override
-						public boolean isVisible(InputState inputState) {
-							return true;
-						}
-
-						@Override
-						public boolean isActive(InputState inputState) {
-							return true;
-						}
-					});
-					break;
-				case FRIEND:
-					if(target.getEntity().getType().equals(SimpleTransformableSendableObject.EntityType.SPACE_STATION)) {
-						buttonPane.addRow();
-						buttonPane.addButton(0, 2, "DEFEND" + getSelectedRange(), GUIHorizontalArea.HButtonColor.GREEN, new GUICallback() {
-							@Override
-							public void callback(GUIElement guiElement, MouseEvent mouseEvent) {
-								if(mouseEvent.pressedLeftMouse()) {
-									commandSelected(CommandUpdateManager.DEFEND, finalTarget, selectedRange);
-									buttonPane.cleanUp();
-								}
-							}
-
-							@Override
-							public boolean isOccluded() {
-								return false;
-							}
-						}, new GUIActivationCallback() {
-							@Override
-							public boolean isVisible(InputState inputState) {
-								return true;
-							}
-
-							@Override
-							public boolean isActive(InputState inputState) {
-								return true;
-							}
-						});
-					} else {
-						buttonPane.addRow();
-						buttonPane.addButton(0, 2, "ESCORT" + getSelectedRange(), GUIHorizontalArea.HButtonColor.GREEN, new GUICallback() {
-							@Override
-							public void callback(GUIElement guiElement, MouseEvent mouseEvent) {
-								if(mouseEvent.pressedLeftMouse()) {
-									commandSelected(CommandUpdateManager.ESCORT, finalTarget, selectedRange);
-									buttonPane.cleanUp();
-								}
-							}
-
-							@Override
-							public boolean isOccluded() {
-								return false;
-							}
-						}, new GUIActivationCallback() {
-							@Override
-							public boolean isVisible(InputState inputState) {
-								return true;
-							}
-
-							@Override
-							public boolean isActive(InputState inputState) {
-								return true;
-							}
-						});
-					}
-					break;
-			}
-		}
-		buttonPane.moveToMouse(target);
-	}
-	*/
-
-	/*
-	private void commandSelected(int mode, TacticalMapEntityIndicator target, float distance) {
-		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(selectedEntities.contains(indicator.getEntity()) && indicator.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId() && GameClient.getClientPlayerState().getFactionId() != 0) {
-				if(mode == CommandUpdateManager.NONE) {
-					indicator.setCurrentTarget(null);
-					CommandUpdateManager.addCommand(indicator.getEntity().getId(), 0, CommandUpdateManager.NONE, 0);
-				} else {
-					indicator.setCurrentTarget(new TargetData(target.getEntity(), mode, distance));
-					CommandUpdateManager.addCommand(indicator.getEntity().getId(), target.getEntity().getId(), mode, distance);
-				}
-                switch(mode) {
-                    case ATTACK:
-                        indicator.setCurrentTarget(target.getEntity());
-                        break;
-                    case DEFEND:
-                        CommandUpdateManager.addDefendCommand
-                        break;
-                }
-			}
-		}
-	}
-	*/
 
 	@Override
 	public boolean isInvisible() {
@@ -484,10 +275,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		camera.alwaysAllowWheelZoom = false;
 		recreateSelectionOverlay();
 		initialized = true;
-	}
-
-	private String getSelectedRange() {
-		return " [" + StringTools.formatDistance(selectedRange) + "]";
 	}
 
 	private void drawOutlines() {
@@ -527,6 +314,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private SegmentController getCurrentEntity() {
 		if(GameClient.getCurrentControl() != null && GameClient.getCurrentControl() instanceof SegmentController) {
 			return (SegmentController) GameClient.getCurrentControl();
-		} else return null;
+		} else {
+			return null;
+		}
 	}
 }

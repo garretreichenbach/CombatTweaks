@@ -18,10 +18,7 @@ public class ConfigManager {
 			"armor_hp_value_multiplier: 20.0",
 			"armor_hp_lost_per_damage_absorbed: 1.0",
 			"base_armor_hp_bleedthrough_start: 0.75",
-			"min_armor_hp_bleedthrough_start: 0.5",
-			"cannon_armor_multiplier: 0.85",
-			"beam_armor_multiplier: 0.35",
-			"missile_armor_multiplier: 0.75"
+			"min_armor_hp_bleedthrough_start: 0.5"
 	};
 	
 	//Main Config
