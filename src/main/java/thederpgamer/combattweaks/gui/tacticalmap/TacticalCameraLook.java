@@ -13,6 +13,7 @@ import javax.vecmath.Vector2f;
 import javax.vecmath.Vector3f;
 
 public class TacticalCameraLook implements MouseLookAlgorithm {
+
 	public final Transform following = new Transform();
 	private final Camera camera;
 	private final Vector3f vCross = new Vector3f();

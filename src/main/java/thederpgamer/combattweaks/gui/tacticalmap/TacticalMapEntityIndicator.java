@@ -38,10 +38,8 @@ import org.schema.schine.graphicsengine.forms.PositionableSubColorSprite;
 import org.schema.schine.graphicsengine.forms.PositionableSubSprite;
 import org.schema.schine.graphicsengine.forms.SelectableSprite;
 import org.schema.schine.graphicsengine.forms.Sprite;
-import org.schema.schine.graphicsengine.forms.font.FontLibrary;
 import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
 import thederpgamer.combattweaks.CombatTweaks;
-import thederpgamer.combattweaks.manager.ResourceManager;
 import thederpgamer.combattweaks.network.client.SendAttackPacket;
 import thederpgamer.combattweaks.utils.SectorUtils;
 
@@ -52,15 +50,27 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Random;
 
-/**
- * Sprite Indicator for entities in the Tactical Map GUI.
- *
- * @author TheDerpGamer
- * @since 08/24/2021
- */
 public class TacticalMapEntityIndicator implements PositionableSubColorSprite, SelectableSprite, SelectableMapEntry {
+	// Shared RNG to avoid per-call allocation
+	private static final Random RNG = new Random();
+	// Shared empty transform to avoid allocations when current entity is null
+	private static final Transform EMPTY_TRANSFORM = new Transform();
+	// Cached tint/color constants to avoid allocations
+	private static final Vector4f TINT_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f);
+	private static final Vector4f TINT_NORMAL = new Vector4f(1.0f, 1.0f, 1.0f, 1.0f);
+	private static final Vector4f PATH_RED = new Vector4f(Color.RED.getColorComponents(new float[4]));
+	private static final Vector4f PATH_CYAN = new Vector4f(Color.CYAN.getColorComponents(new float[4]));
 	public final Transform entityTransform = new Transform();
 	private final SegmentController entity;
+	// Reusable temporaries to reduce per-frame allocations
+	private final Vector3f tmpDir = new Vector3f();
+	private final Vector3f tmpDirN = new Vector3f();
+	private final Vector3f tmpA = new Vector3f();
+	private final Vector3f tmpB = new Vector3f();
+	private final Vector3f tmpVec = new Vector3f();
+	// Reusable sector temporaries
+	private final Vector3i tmpSector = new Vector3i();
+	private final Vector3i tmpSectorOther = new Vector3i();
 	public Sprite sprite;
 	public GUITextOverlay labelOverlay;
 	public boolean selected;
@@ -69,6 +79,8 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	private boolean drawIndication;
 	private float selectDepth;
 	private float timer;
+	// Cache last label text to avoid unnecessary GUI updates
+	private String lastLabelText;
 
 	public TacticalMapEntityIndicator(SegmentController entity) {
 		this.entity = entity;
@@ -81,27 +93,22 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	public void drawSprite() {
 		if(entity.isCloakedFor(getCurrentEntity())) return;
 		if(sprite == null) {
-			sprite = ResourceManager.getSprite("tactical-map-indicators");
-			sprite.setMultiSpriteMax(8, 2);
-			sprite.setWidth(sprite.getMaterial().getTexture().getWidth() / 8);
-			sprite.setHeight(sprite.getMaterial().getTexture().getHeight() / 2);
-			sprite.setPositionCenter(true);
-			sprite.setSelectionAreaLength(15.0f);
-			sprite.setBillboard(true);
-			sprite.setDepthTest(false);
-			sprite.setBlend(true);
-			sprite.setFlip(true);
-			sprite.onInit();
+			sprite = TacticalMapIndicatorPool.getInstance().acquireSprite();
 		}
 		entityTransform.set(entity.getWorldTransform());
-		if(!getSector().equals(Objects.requireNonNull(getCurrentEntity()).getSector(new Vector3i())))
-			SectorUtils.transformToSector(entityTransform, getCurrentEntity().getSector(new Vector3i()), getSector());
+		SegmentController current = getCurrentEntity();
+		if(current != null) {
+			Vector3i curSector = current.getSector(tmpSectorOther);
+			if(!getSector().equals(curSector)) SectorUtils.transformToSector(entityTransform, curSector, getSector());
+		}
 		if(sprite != null && !entity.isCoreOverheating()) {
 			sprite.setSelectedMultiSprite(getSpriteIndex());
 			sprite.setTransform(entityTransform);
-			if(selected || getDrawer().selectedEntities.contains(entity))
-				sprite.setTint(new Vector4f(1.0f, 1.0f, 0.0f, 1.0f));
-			else sprite.setTint(new Vector4f(1.0f, 1.0f, 1.0f, 1.0f));
+			if(selected || getDrawer().selectedEntities.contains(entity)) {
+				sprite.setTint(TINT_SELECTED);
+			} else {
+				sprite.setTint(TINT_NORMAL);
+			}
 			Sprite.draw3D(sprite, new PositionableSubSprite[]{this}, getCamera());
 		}
 	}
@@ -109,20 +116,22 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	private SegmentController getCurrentEntity() {
 		if(GameClient.getCurrentControl() != null && GameClient.getCurrentControl() instanceof SegmentController) {
 			return (SegmentController) GameClient.getCurrentControl();
-		} else return null;
+		} else {
+			return null;
+		}
 	}
 
 	public Vector3i getSector() {
-		return entity.getSector(new Vector3i());
+		return entity.getSector(tmpSector);
 	}
 
 	public int getSpriteIndex() {
 		int entityFaction = entity.getFactionId();
 		int playerFactionId = Objects.requireNonNull(getCurrentEntity()).getFactionId();
 		FactionRelation.RType relation = Objects.requireNonNull(GameCommon.getGameState()).getFactionManager().getRelation(entityFaction, playerFactionId);
-		if((entity.isJammingFor(getCurrentEntity()) || entity.isCloakedFor(getCurrentEntity())) && relation != FactionRelation.RType.FRIEND)
+		if((entity.isJammingFor(getCurrentEntity()) || entity.isCloakedFor(getCurrentEntity())) && relation != FactionRelation.RType.FRIEND) {
 			return SpriteTypes.UNKNOWN.ordinal();
-		else {
+		} else {
 			try {
 				if(entity.getType() == SimpleTransformableSendableObject.EntityType.SHIP) {
 					switch(relation) {
@@ -135,11 +144,17 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 					}
 				} else if(entity.getType() == SimpleTransformableSendableObject.EntityType.SPACE_STATION) {
 					if(entity.getFactionId() == FactionManager.PIRATES_ID) {
-						if(!selected) return SpriteTypes.STATION_PIRATE.ordinal();
-						else throw new IllegalStateException("Pirate stations should never be selectable!");
+						if(!selected) {
+							return SpriteTypes.STATION_PIRATE.ordinal();
+						} else {
+							throw new IllegalStateException("Pirate stations should never be selectable!");
+						}
 					} else if(entity.getFactionId() == FactionManager.TRAIDING_GUILD_ID) {
-						if(!selected) return SpriteTypes.STATION_TRADE.ordinal();
-						else throw new IllegalStateException("Trade stations should never be selectable!");
+						if(!selected) {
+							return SpriteTypes.STATION_TRADE.ordinal();
+						} else {
+							throw new IllegalStateException("Trade stations should never be selectable!");
+						}
 					} else {
 						switch(relation) {
 							case NEUTRAL:
@@ -171,23 +186,38 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 
 	public void drawLabel(Transform transform) {
 		if(labelOverlay == null) {
-			(labelOverlay = new GUITextOverlay(32, 32, FontLibrary.FontSize.MEDIUM.getFont(), getHudOverlay().getState())).onInit();
-			labelOverlay.getScale().y *= -1;
+			labelOverlay = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+			// ensure overlay state matches current HUD state if necessary
+			try {
+				labelOverlay.getScale().y *= -1;
+			} catch(Exception ignored) {
+			}
 		}
-		if(entity.isCloakedFor(getCurrentEntity())) return;
+		if(entity.isCloakedFor(getCurrentEntity())) {
+			return;
+		}
 		transform.basis.set(getCamera().lookAt(false).basis);
 		transform.basis.invert();
-		labelOverlay.setTextSimple(getEntityDisplay(getCurrentEntity()));
-		labelOverlay.updateTextSize();
+		String newText = getEntityDisplay(getCurrentEntity());
+		if(!newText.equals(lastLabelText)) {
+			labelOverlay.setTextSimple(newText);
+			labelOverlay.updateTextSize();
+			lastLabelText = newText;
+		}
 		entityTransform.set(entity.getWorldTransform());
-		if(!getSector().equals(Objects.requireNonNull(getCurrentEntity()).getSector(new Vector3i())))
-			SectorUtils.transformToSector(entityTransform, getCurrentEntity().getSector(new Vector3i()), getSector());
+		SegmentController current = getCurrentEntity();
+		if(current != null) {
+			Vector3i curSector = current.getSector(tmpSectorOther);
+			if(!getSector().equals(curSector)) {
+				SectorUtils.transformToSector(entityTransform, curSector, getSector());
+			}
+		}
 		labelOverlay.getTransform().set(entityTransform);
 		labelOverlay.getTransform().basis.set(transform.basis);
-		Vector3f upVector = GlUtil.getUpVector(new Vector3f(), labelOverlay.getTransform());
+		Vector3f upVector = GlUtil.getUpVector(tmpA, labelOverlay.getTransform());
 		upVector.scale((labelOverlay.getText().size() * 10) + 20.0f);
 		labelOverlay.getTransform().origin.add(upVector);
-		Vector3f rightVector = GlUtil.getRightVector(new Vector3f(), labelOverlay.getTransform());
+		Vector3f rightVector = GlUtil.getRightVector(tmpB, labelOverlay.getTransform());
 		rightVector.scale(25.0f);
 		labelOverlay.getTransform().origin.add(rightVector);
 		labelOverlay.draw();
@@ -238,10 +268,11 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 
 	public String distortString(String s) {
 		char[] chars = s.toCharArray();
-		Random random = new Random();
 		for(int i = 0; i < chars.length; i++) {
-			int r = random.nextInt(2);
-			if(r == 0) chars[i] = StringTools.randomString(1).charAt(0);
+			int r = RNG.nextInt(2);
+			if(r == 0) {
+				chars[i] = StringTools.randomString(1).charAt(0);
+			}
 		}
 		return new String(chars);
 	}
@@ -257,14 +288,16 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		if(entity != null) {
 			return entity.getWorldTransform();
 		} else {
-			return new Transform();
+			return EMPTY_TRANSFORM;
 		}
 	}
 
 	public SegmentController getCurrentTarget() {
 		if(targetData == null && getAIEntity() != null && getAIEntity().getCurrentProgram() instanceof TargetProgram<?> && ((TargetProgram<?>) getAIEntity().getCurrentProgram()).getTarget() != null) {
 			SimpleGameObject obj = ((TargetProgram<?>) getAIEntity().getCurrentProgram()).getTarget();
-			if(obj instanceof SegmentController) targetData = (SegmentController) obj;
+			if(obj instanceof SegmentController) {
+				targetData = (SegmentController) obj;
+			}
 		}
 		return targetData;
 	}
@@ -275,7 +308,8 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 
 	public void drawTargetingPath(Camera camera) {
 		if(getCurrentTarget() != null) {
-			Vector3f start = new Vector3f(entityTransform.origin);
+			Vector3f start = tmpVec;
+			start.set(entityTransform.origin);
 			Vector3f end = getCurrentTarget().getWorldTransform().origin;
 			try {
 				end.set(TacticalMapGUIDrawer.getInstance().drawMap.get(getCurrentTarget().getId()).sprite.getPos());
@@ -284,7 +318,7 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 			}
 			if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
 				startDrawDottedLine(camera);
-				drawDottedLine(start, end, new Vector4f(Color.RED.getColorComponents(new float[4])));
+				drawDottedLine(start, end, PATH_RED);
 				endDrawDottedLine();
 			}
 		}
@@ -327,30 +361,31 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	 * @param color The line's color
 	 */
 	public void drawDottedLine(Vector3f from, Vector3f to, Vector4f color) {
-		Vector3f dir = new Vector3f();
-		Vector3f dirN = new Vector3f();
-		dir.sub(to, from);
-		dirN.set(dir);
-		dirN.normalize();
-		float len = dir.length();
-		Vector3f a = new Vector3f();
-		Vector3f b = new Vector3f();
+		// Reuse temporaries to reduce allocations
+		tmpDir.sub(to, from);
+		tmpDirN.set(tmpDir);
+		tmpDirN.normalize();
+		float len = tmpDir.length();
+		Vector3f a = tmpA;
+		Vector3f b = tmpB;
 		float dottedSize = Math.min(Math.max(2, len * 0.1f), 40);
 		GlUtil.glColor4f(color);
 		boolean first = true;
 		float f = ((timer % 1.0f) * dottedSize * 2);
 		for(; f < len; f += (dottedSize * 2)) {
-			a.set(dirN);
+			a.set(tmpDirN);
 			a.scale(f);
 			if(first) {
 				a.set(0, 0, 0);
 				first = false;
 			}
-			b.set(dirN);
+			b.set(tmpDirN);
 			if((f + dottedSize) >= len) {
 				b.scale(len);
 				f = len;
-			} else b.scale(f + dottedSize);
+			} else {
+				b.scale(f + dottedSize);
+			}
 			GL11.glVertex3f(from.x + a.x, from.y + a.y, from.z + a.z);
 			GL11.glVertex3f(from.x + b.x, from.y + b.y, from.z + b.z);
 		}
@@ -366,28 +401,31 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	}
 
 	public void drawMovementPath(Camera camera) {
-		Vector3f start = new Vector3f(entityTransform.origin);
-		Vector3f end = GlUtil.getForwardVector(new Vector3f(), entity.getWorldTransform());
+		Vector3f start = tmpVec;
+		start.set(entityTransform.origin);
+		Vector3f end = GlUtil.getForwardVector(tmpA, entity.getWorldTransform());
 		end.scale(entity.getSpeedCurrent());
 		if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
 			startDrawDottedLine(camera);
-			Vector4f pathColor = new Vector4f(Color.CYAN.getColorComponents(new float[4]));
-			pathColor.w = 1.0f;
-			drawDottedLine(start, end, pathColor);
+			drawDottedLine(start, end, PATH_CYAN);
 			endDrawDottedLine();
 		}
 	}
 
 	private Transform randomizeTransform(Transform transform) {
 		Transform randomizedTransform = new Transform(transform);
-		Random random = new Random();
-		Vector3f randomVector = new Vector3f(random.nextInt(100), random.nextInt(100), random.nextInt(100));
-		randomizedTransform.origin.add(randomVector);
+		// Use shared RNG and avoid allocating a new Vector3f
+		int rx = RNG.nextInt(100);
+		int ry = RNG.nextInt(100);
+		int rz = RNG.nextInt(100);
+		randomizedTransform.origin.x += rx;
+		randomizedTransform.origin.y += ry;
+		randomizedTransform.origin.z += rz;
 		return randomizedTransform;
 	}
 
 	public Indication getIndication(Vector3i system) {
-		Vector3f indicatorPos = new Vector3f(entityTransform.origin);
+		tmpVec.set(entityTransform.origin);
 		if(indication == null) {
 			Transform transform = new Transform(entityTransform);
 			transform.basis.set(getCamera().lookAt(false).basis);
@@ -395,7 +433,7 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 			indication = new ConstantIndication(transform, getEntityDisplay((SegmentController) GameClient.getCurrentControl()));
 		}
 		indication.setText(getEntityDisplay((SegmentController) GameClient.getCurrentControl()));
-		indication.getCurrentTransform().origin.set(indicatorPos.x - GameMapDrawer.halfsize, indicatorPos.y - GameMapDrawer.halfsize, indicatorPos.z - GameMapDrawer.halfsize);
+		indication.getCurrentTransform().origin.set(tmpVec.x - GameMapDrawer.halfsize, tmpVec.y - GameMapDrawer.halfsize, tmpVec.z - GameMapDrawer.halfsize);
 		return indication;
 	}
 
@@ -409,12 +447,12 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	 * @param sectorSize The world's sector size
 	 */
 	public void drawDottedLine(Vector3f from, Vector3f to, Vector4f color, float sectorSize) {
-		Vector3f fromPx = new Vector3f();
-		Vector3f toPx = new Vector3f();
 		float sectorSizeHalf = sectorSize * 0.5f;
-		fromPx.set((from.x) * sectorSize + sectorSizeHalf, (from.y) * sectorSize + sectorSizeHalf, (from.z) * sectorSize + sectorSizeHalf);
-		toPx.set((to.x) * sectorSize + sectorSizeHalf, (to.y) * sectorSize + sectorSizeHalf, (to.z) * sectorSize + sectorSizeHalf);
-		if(!fromPx.equals(toPx)) drawDottedLine(fromPx, toPx, color);
+		tmpA.set((from.x) * sectorSize + sectorSizeHalf, (from.y) * sectorSize + sectorSizeHalf, (from.z) * sectorSize + sectorSizeHalf);
+		tmpB.set((to.x) * sectorSize + sectorSizeHalf, (to.y) * sectorSize + sectorSizeHalf, (to.z) * sectorSize + sectorSizeHalf);
+		if(!tmpA.equals(tmpB)) {
+			drawDottedLine(tmpA, tmpB, color);
+		}
 	}
 
 	public void update(Timer timer) {
@@ -446,17 +484,11 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		return entityTransform.origin;
 	}
 
-	/**
-	 * @return the drawIndication
-	 */
 	@Override
 	public boolean isDrawIndication() {
 		return drawIndication;
 	}
 
-	/**
-	 * @param drawIndication the drawIndication to set
-	 */
 	@Override
 	public void setDrawIndication(boolean drawIndication) {
 		this.drawIndication = drawIndication;
@@ -524,6 +556,21 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		}
 	}
 
+	/**
+	 * Release pooled resources for this indicator. After calling this the indicator's sprite/overlay
+	 * references are cleared and the resources are returned to the pool for reuse.
+	 */
+	public void releaseResources() {
+		if(sprite != null) {
+			TacticalMapIndicatorPool.getInstance().releaseSprite(sprite);
+			sprite = null;
+		}
+		if(labelOverlay != null) {
+			TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(labelOverlay);
+			labelOverlay = null;
+		}
+	}
+
 	@Override
 	public int hashCode() {
 		return getEntityId();
@@ -542,7 +589,7 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	}
 
 	public Vector3i getSystem() {
-		return VoidSystem.getContainingSystem(getSector(), new Vector3i());
+		return VoidSystem.getContainingSystem(getSector(), tmpSectorOther);
 	}
 
 	public enum SpriteTypes {

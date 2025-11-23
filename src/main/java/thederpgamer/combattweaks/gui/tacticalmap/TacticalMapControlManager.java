@@ -19,11 +19,6 @@ import thederpgamer.combattweaks.manager.ConfigManager;
 
 import javax.vecmath.Vector3f;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer
- */
 public class TacticalMapControlManager extends AbstractControlManager {
 	private final TacticalMapGUIDrawer guiDrawer;
 	public float viewDistance;
@@ -41,12 +36,16 @@ public class TacticalMapControlManager extends AbstractControlManager {
 
 	@Override
 	public void handleKeyEvent(KeyEventInterface keyEvent) {
-		if(isActive() && !isSuspended() && !isHinderedInteraction() && getState().getPlayerInputs().isEmpty()) super.handleKeyEvent(keyEvent);
+		if(isActive() && !isSuspended() && !isHinderedInteraction() && getState().getPlayerInputs().isEmpty()) {
+			super.handleKeyEvent(keyEvent);
+		}
 	}
 
 	@Override
 	public void handleMouseEvent(MouseEvent mouseEvent) {
-		if(isActive() && !isSuspended() && !isHinderedInteraction() && getState().getPlayerInputs().isEmpty()) super.handleMouseEvent(mouseEvent);
+		if(isActive() && !isSuspended() && !isHinderedInteraction() && getState().getPlayerInputs().isEmpty()) {
+			super.handleMouseEvent(mouseEvent);
+		}
 	}
 
 	@Override
@@ -56,10 +55,15 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		getInteractionManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().suspend(active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().suspend(active);
 		super.onSwitch(active);
-		if(active) { //Hide build hotbar
-			if(defaultHotbarPos == 0) defaultHotbarPos = ((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y;
+		if(active) {
+			if(defaultHotbarPos == 0) {
+				defaultHotbarPos = ((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y;
+			}
+			//Shitty hack to hide the build hotbar
 			((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y = -1000;
-		} else ((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y = defaultHotbarPos;
+		} else {
+			((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y = defaultHotbarPos;
+		}
 	}
 
 	@Override
@@ -81,19 +85,32 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) amount = 5000;
 				else amount = 1000;
 			}
-			if(Keyboard.getEventKey() == Keyboard.KEY_LMENU && Keyboard.getEventKeyState()) guiDrawer.drawMovementPaths = !TacticalMapGUIDrawer.getInstance().drawMovementPaths;
-			if(Keyboard.isKeyDown(Keyboard.KEY_X)) guiDrawer.camera.reset();
-			if(Keyboard.isKeyDown(KeyboardMappings.FORWARD.getMapping())) movement.add(new Vector3f(0, 0, amount));
-			if(Keyboard.isKeyDown(KeyboardMappings.BACKWARDS.getMapping())) movement.add(new Vector3f(0, 0, -amount));
-			if(Keyboard.isKeyDown(KeyboardMappings.STRAFE_LEFT.getMapping())) movement.add(new Vector3f(amount, 0, 0));
-			if(Keyboard.isKeyDown(KeyboardMappings.STRAFE_RIGHT.getMapping())) movement.add(new Vector3f(-amount, 0, 0));
-			if(Keyboard.isKeyDown(KeyboardMappings.UP.getMapping())) movement.add(new Vector3f(0, amount, 0));
-			if(Keyboard.isKeyDown(KeyboardMappings.DOWN.getMapping())) movement.add(new Vector3f(0, -amount, 0));
+			if(Keyboard.getEventKey() == Keyboard.KEY_LMENU && Keyboard.getEventKeyState()) {
+				guiDrawer.drawMovementPaths = !TacticalMapGUIDrawer.getInstance().drawMovementPaths;
+			}
+			if(Keyboard.isKeyDown(Keyboard.KEY_X)) {
+				guiDrawer.camera.reset();
+			}
+			if(Keyboard.isKeyDown(KeyboardMappings.FORWARD.getMapping())) {
+				movement.add(new Vector3f(0, 0, amount));
+			}
+			if(Keyboard.isKeyDown(KeyboardMappings.BACKWARDS.getMapping())) {
+				movement.add(new Vector3f(0, 0, -amount));
+			}
+			if(Keyboard.isKeyDown(KeyboardMappings.STRAFE_LEFT.getMapping())) {
+				movement.add(new Vector3f(amount, 0, 0));
+			}
+			if(Keyboard.isKeyDown(KeyboardMappings.STRAFE_RIGHT.getMapping())) {
+				movement.add(new Vector3f(-amount, 0, 0));
+			}
+			if(Keyboard.isKeyDown(KeyboardMappings.UP.getMapping())) {
+				movement.add(new Vector3f(0, amount, 0));
+			}
+			if(Keyboard.isKeyDown(KeyboardMappings.DOWN.getMapping())) {
+				movement.add(new Vector3f(0, -amount, 0));
+			}
 			movement.scale(timer.getDelta());
 			move(movement);
-//			if(Mouse.isButtonDown(1) && Mouse.getEventButtonState() && !Mouse.isGrabbed() && !guiDrawer.selectedEntities.isEmpty()) {
-//				guiDrawer.recreateButtonPane(false);
-//			}
 			if(Mouse.hasWheel() && Mouse.getEventDWheel() != 0) {
 				float wheelAmount = (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) ? 1000 : 100;
 				if(Mouse.getEventDWheel() == 0) wheelAmount = 0;
@@ -102,7 +119,6 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				if(newRange > 20000) newRange = 20000;
 				else if(newRange < 100) newRange = 100;
 				guiDrawer.selectedRange = newRange;
-//				guiDrawer.recreateButtonPane(true);
 			}
 		}
 	}

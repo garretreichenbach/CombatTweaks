@@ -9,23 +9,17 @@ import org.schema.schine.input.InputState;
 import javax.vecmath.Vector4f;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * [Description]
- *
- * @author TheDerpGamer
- */
 public class TacticalMapSelectionOverlay extends GUIAncor {
 
 	private GUIElementList entityList;
 	private ConcurrentHashMap<Integer, String> selectedEntities;
 
+	// Cached color constants to avoid allocations during draw
+	private static final Vector4f COLOR_WHITE = new Vector4f(Color.white.r, Color.white.g, Color.white.b, 1.0f);
+	private static final Vector4f COLOR_YELLOW = new Vector4f(Color.yellow.r, Color.yellow.g, Color.yellow.b, 1.0f);
+
 	public TacticalMapSelectionOverlay(InputState inputState) {
 		super(inputState);
-	}
-
-	@Override
-	public void draw() {
-		super.draw();
 	}
 
 	@Override
@@ -37,30 +31,25 @@ public class TacticalMapSelectionOverlay extends GUIAncor {
 
 	public void addEntity(SegmentController entity) {
 		for(GUIListElement element : entityList) {
-			if(element.getContent().getUserPointer().equals(entity.getId())) return;
+			if(element.getContent().getUserPointer().equals(entity.getId())) {
+				return;
+			}
 		}
 		GUITextOverlay entityOverlay = new GUITextOverlay(30, 20, getState());
 		entityOverlay.onInit();
 		entityOverlay.setFont(FontLibrary.FontSize.MEDIUM.getFont());
 		entityOverlay.setTextSimple(entity.getRealName());
 		entityOverlay.setUserPointer(entity.getId());
-		Vector4f color = new Vector4f(Color.white.r, Color.white.g, Color.white.b, 0.0f);
-		if(selectedEntities.containsKey(entity.getId())) color.w = 0.5f;
-		GUITextOverlay selectedOverlay = new GUITextOverlay(30, 20, getState());
-		selectedOverlay.onInit();
-		selectedOverlay.setFont(FontLibrary.FontSize.MEDIUM.getFont());
-		selectedOverlay.setTextSimple(entity.getRealName());
-		selectedOverlay.setUserPointer(entity.getId());
-		GUIListElement element = new GUIListElement(entityOverlay, getState()) {
+		GUIListElement listElement = new GUIListElement(entityOverlay, getState()) {
 			@Override
 			public void draw() {
 				super.draw();
-				if(selectedEntities.containsKey(getContent().getUserPointer())) ((GUITextOverlay) getContent()).setColor(new Vector4f(Color.yellow.r, Color.yellow.g, Color.yellow.b, 1.0f));
-				else ((GUITextOverlay) getContent()).setColor(new Vector4f(Color.white.r, Color.white.g, Color.white.b, 1.0f));
+				if(selectedEntities.containsKey(getContent().getUserPointer())) ((GUITextOverlay) getContent()).setColor(COLOR_YELLOW);
+				else ((GUITextOverlay) getContent()).setColor(COLOR_WHITE);
 			}
 		};
-		element.onInit();
-		entityList.add(element);
+		listElement.onInit();
+		entityList.add(listElement);
 	}
 
 	public void removeEntity(SegmentController entity) {

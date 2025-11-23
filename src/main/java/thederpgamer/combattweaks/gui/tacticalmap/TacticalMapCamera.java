@@ -14,6 +14,9 @@ public class TacticalMapCamera extends Camera {
 
 	public Transform transform;
 
+	// Reusable temporary vector to avoid allocations
+	private final Vector3f tmpBack = new Vector3f();
+
 	public TacticalMapCamera() {
 		super(GameClient.getClientState(), new PositionableViewer());
 	}
@@ -22,10 +25,11 @@ public class TacticalMapCamera extends Camera {
 	public void reset() {
 		super.reset();
 		if(GameClient.getCurrentControl() != null && GameClient.getCurrentControl() instanceof SegmentController) {
+			TacticalMapGUIDrawer drawer = TacticalMapGUIDrawer.getInstance();
 			Transform defaultTransform = new Transform();
 			if(transform == null) transform = (((SegmentController) GameClient.getCurrentControl()).getWorldTransform());
 			defaultTransform.set(transform);
-			defaultTransform.origin.add(new Vector3f(TacticalMapGUIDrawer.getInstance().sectorSize, TacticalMapGUIDrawer.getInstance().sectorSize, -TacticalMapGUIDrawer.getInstance().sectorSize));
+			defaultTransform.origin.add(new Vector3f(drawer.sectorSize, drawer.sectorSize, -drawer.sectorSize));
 			setLookAlgorithm(new TacticalCameraLook(this, transform));
 
 			Transform temp = new Transform(transform);
@@ -33,10 +37,10 @@ public class TacticalMapCamera extends Camera {
 			temp.basis.invert();
 			getWorldTransform().set(temp);
 
-			Vector3f backwards = new Vector3f(getForward());
-			backwards.scale(((SegmentController) GameClient.getCurrentControl()).getBoundingBox().maxSize() + 15);
-			backwards.negate();
-			getWorldTransform().origin.add(backwards);
+			tmpBack.set(getForward());
+			tmpBack.scale(((SegmentController) GameClient.getCurrentControl()).getBoundingBox().maxSize() + 15);
+			tmpBack.negate();
+			getWorldTransform().origin.add(tmpBack);
 		}
 	}
 

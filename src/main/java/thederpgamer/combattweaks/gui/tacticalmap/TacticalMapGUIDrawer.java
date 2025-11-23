@@ -32,13 +32,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public final Vector3f labelOffset;
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap;
 	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
-	private final FrameBufferObjects outlinesFBO;
 	public float selectedRange;
 	public TacticalMapControlManager controlManager;
 	public TacticalMapCamera camera;
 	public boolean toggleDraw;
 	public boolean drawMovementPaths;
-	private SegmentDrawer segmentDrawer;
+	private FrameBufferObjects outlinesFBO; // defer creation to onInit
 	private boolean initialized;
 	private boolean firstTime = true;
 	private TacticalMapSelectionOverlay selectionOverlay;
@@ -52,7 +51,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		maxDrawDistance = sectorSize * 4.0f;
 		labelOffset = new Vector3f(0.0f, -20.0f, 0.0f);
 		drawMap = new ConcurrentHashMap<>();
-		outlinesFBO = new FrameBufferObjects("SELECTED_ENTITY_DRAWER", GLFrame.getWidth(), GLFrame.getHeight());
+		// outlinesFBO creation deferred to onInit to avoid creating GL resources before GL context is ready
+		outlinesFBO = null;
+		// sensible default to reduce immediate heavy population on first frame
+		updateTimer = 150;
 	}
 
 	public static TacticalMapGUIDrawer getInstance() {
@@ -61,21 +63,24 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
 		selectedEntities.add(indicator.getEntity());
-		selectionOverlay.addSelected(indicator.getEntity());
+		if(selectionOverlay != null) selectionOverlay.addSelected(indicator.getEntity());
 	}
 
 	public void removeSelection(TacticalMapEntityIndicator indicator) {
 		selectedEntities.remove(indicator.getEntity());
-		selectionOverlay.removeSelected(indicator.getEntity());
+		if(selectionOverlay != null) selectionOverlay.removeSelected(indicator.getEntity());
 	}
 
 	public void removeAll() {
-		selectionOverlay.removeAll();
+		if(selectionOverlay != null) selectionOverlay.removeAll();
 	}
 
 	public void clearSelected() {
 		ArrayList<SegmentController> temp = new ArrayList<>(selectedEntities);
-		for(SegmentController i : temp) drawMap.get(i.getId()).onUnSelect();
+		for(SegmentController i : temp) {
+			TacticalMapEntityIndicator indicator = drawMap.get(i.getId());
+			if(indicator != null) indicator.onUnSelect();
+		}
 	}
 
 	public void toggleDraw() {
@@ -122,15 +127,21 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	@Override
 	public void update(Timer timer) {
-		if(!toggleDraw || !(Controller.getCamera() instanceof TacticalMapCamera)) return;
+		if(!toggleDraw || !(Controller.getCamera() instanceof TacticalMapCamera)) {
+			return;
+		}
 		controlManager.update(timer);
 		updateTimer--;
-		for(TacticalMapEntityIndicator indicator : drawMap.values()) indicator.update(timer);
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			indicator.update(timer);
+		}
 		if(updateTimer <= 0) {
 			for(SimpleTransformableSendableObject<?> object : GameClient.getClientState().getCurrentSectorEntities().values()) {
 				if(object instanceof SegmentController && !((SegmentController) object).isDocked() && !drawMap.containsKey(object.getId())) {
 					drawMap.put(object.getId(), new TacticalMapEntityIndicator((SegmentController) object));
-					selectionOverlay.addEntity((SegmentController) object);
+					if(selectionOverlay != null) {
+						selectionOverlay.addEntity((SegmentController) object);
+					}
 				}
 			}
 			updateTimer = 150;
@@ -141,8 +152,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public void draw() {
 		if(!initialized) onInit();
 		if(toggleDraw && Controller.getCamera() instanceof TacticalMapCamera) {
-			//GlUtil.glEnable(GL11.GL_BLEND);
-			//GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 			GlUtil.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
 			drawGrid(-sectorSize, sectorSize);
@@ -152,7 +161,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			GUIElement.disableOrthogonal();
 			drawOutlines();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-			//GlUtil.glDisable(GL11.GL_BLEND);
 		} else {
 			cleanUp();
 		}
@@ -241,6 +249,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	private void drawIndicators() {
+		ArrayList<Integer> toRemove = null;
 		for(Map.Entry<Integer, TacticalMapEntityIndicator> entry : drawMap.entrySet()) {
 			try {
 				TacticalMapEntityIndicator indicator = entry.getValue();
@@ -250,13 +259,29 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 					indicator.drawLabel(indication.getCurrentTransform());
 					indicator.drawTargetingPath(camera);
 				} else {
-					if(indicator.sprite != null) indicator.sprite.cleanUp();
-					if(indicator.labelOverlay != null) indicator.labelOverlay.cleanUp();
-					drawMap.remove(entry.getKey());
+					// schedule for removal after iteration
+					// release pooled UI resources held by the indicator
+					indicator.releaseResources();
+					if(toRemove == null) {
+						toRemove = new ArrayList<>();
+					}
+					toRemove.add(entry.getKey());
 				}
 			} catch(Exception exception) {
 				CombatTweaks.getInstance().logException("Something went wrong while trying to draw entity indicators", exception);
-				drawMap.remove(entry.getKey());
+				if(toRemove == null) {
+					toRemove = new ArrayList<>();
+				}
+				toRemove.add(entry.getKey());
+			}
+		}
+		if(toRemove != null) {
+			for(Integer id : toRemove) {
+				TacticalMapEntityIndicator removed = drawMap.remove(id);
+				// already attempted cleanup above, but be safe
+				if(removed != null) {
+					removed.releaseResources();
+				}
 			}
 		}
 	}
@@ -277,20 +302,25 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		camera.reset();
 		camera.alwaysAllowWheelZoom = false;
 		recreateSelectionOverlay();
+		// create FBO now that we're initialising within a (likely) GL context
+		if(outlinesFBO == null) {
+			outlinesFBO = new FrameBufferObjects("SELECTED_ENTITY_DRAWER", GLFrame.getWidth(), GLFrame.getHeight());
+		}
 		initialized = true;
 	}
 
 	private void drawOutlines() {
 		if(GameClient.getClientState() != null && (GameCommon.isClientConnectedToServer() || GameCommon.isOnSinglePlayer())) {
+			SegmentDrawer drawer = getSegmentDrawer();
 			for(Map.Entry<Integer, TacticalMapEntityIndicator> entry : drawMap.entrySet()) {
 				try {
 					if(entry.getValue().selected && GameCommon.getGameObject(entry.getValue().getEntityId()) instanceof SegmentController) {
-						getSegmentDrawer().drawElementCollectionsToFrameBuffer(outlinesFBO);
+						drawer.drawElementCollectionsToFrameBuffer(outlinesFBO);
 						outlinesFBO.enable();
 						ShaderLibrary.cubeShader13SimpleWhite.loadWithoutUpdate();
 						GlUtil.updateShaderVector4f(ShaderLibrary.cubeShader13SimpleWhite, "col", entry.getValue().getColor());
 						ShaderLibrary.cubeShader13SimpleWhite.unloadWithoutExit();
-						int drawn = getSegmentDrawer().drawSegmentController(entry.getValue().getEntity(), ShaderLibrary.cubeShader13SimpleWhite);
+						int drawn = drawer.drawSegmentController(entry.getValue().getEntity(), ShaderLibrary.cubeShader13SimpleWhite);
 						outlinesFBO.disable();
 						if(drawn > 0) {
 							outlinesFBO.enable();
@@ -298,7 +328,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 							GlUtil.glDisable(GL11.GL_DEPTH_TEST);
 							GlUtil.glEnable(GL11.GL_BLEND);
 							GlUtil.glBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
-							getSegmentDrawer().drawElementCollectionsFromFrameBuffer(outlinesFBO, 0.5f);
+							drawer.drawElementCollectionsFromFrameBuffer(outlinesFBO, 0.5f);
 							GlUtil.glDisable(GL11.GL_BLEND);
 							outlinesFBO.disable();
 						}

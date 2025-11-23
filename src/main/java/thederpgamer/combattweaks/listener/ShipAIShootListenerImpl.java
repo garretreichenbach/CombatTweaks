@@ -15,6 +15,7 @@ import org.schema.game.server.ai.AIControllerStateUnit;
 import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.schine.graphicsengine.core.Timer;
+import thederpgamer.combattweaks.CombatTweaks;
 
 public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListener {
 
@@ -23,18 +24,19 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 		try {
 			RepairElementManager elementManager = SegmentControllerUtils.getElementManager(shipAIEntity.getEntity(), RepairElementManager.class);
 			if(elementManager != null && elementManager.totalSize > 0) {
-				//if(!isValidTarget(shipAIEntity)) changeTarget(shipAIEntity);
-				//if(isValidTarget(shipAIEntity)) {
-				for(RepairBeamCollectionManager collectionManager : elementManager.getCollectionManagers()) {
-					for(RepairUnit unit : collectionManager.getElementCollections()) {
-						if(unit.size() > 0 && !unit.isReloading(timer.currentTime) && unit.canUse(timer.currentTime, false))
-							unit.fire(aiControllerStateUnit, timer);
+				if(!isValidTarget(shipAIEntity)) changeTarget(shipAIEntity);
+				if(isValidTarget(shipAIEntity)) {
+					for(RepairBeamCollectionManager collectionManager : elementManager.getCollectionManagers()) {
+						for(RepairUnit unit : collectionManager.getElementCollections()) {
+							if(unit.size() > 0 && !unit.isReloading(timer.currentTime) && unit.canUse(timer.currentTime, false)) {
+								unit.fire(aiControllerStateUnit, timer);
+							}
+						}
 					}
 				}
-				//}
 			}
 		} catch(Exception exception) {
-			exception.printStackTrace();
+			CombatTweaks.getInstance().logException("Error in ShipAIShootListenerImpl", exception);
 		}
 	}
 
@@ -52,11 +54,13 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 					}
 				}
 			}
-		} catch(Exception ignored) {
+		} catch(Exception exception) {
+			CombatTweaks.getInstance().logException("Error changing repair target", exception);
 		}
 		try {
 			((TargetProgram<?>) ((shipAIEntity.getEntity()).getAiConfiguration().getAiEntityState().getCurrentProgram())).setTarget(null);
-		} catch(Exception ignored) {
+		} catch(Exception exception) {
+			CombatTweaks.getInstance().logException("Error resetting repair target", exception);
 		}
 	}
 
@@ -71,7 +75,8 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 					}
 				}
 			}
-		} catch(Exception ignored) {
+		} catch(Exception exception) {
+			CombatTweaks.getInstance().logException("Error validating repair target", exception);
 		}
 		return false;
 	}
