@@ -55,7 +55,7 @@ public class EventManager {
 			public void onEvent(KeyPressEvent event) {
 				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
 					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
-						if(event.getKey() == org.lwjgl.input.Keyboard.KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().toggleDraw) {
+						if((event.getKey() == Keyboard.KEY_ESCAPE || event.getKey() == Keyboard.KEY_PERIOD) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
 							TacticalMapGUIDrawer.getInstance().toggleDraw();
 						} else {
 							try {

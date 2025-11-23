@@ -5,7 +5,6 @@ import api.common.GameCommon;
 import api.utils.draw.ModWorldDrawer;
 import org.lwjgl.opengl.GL11;
 import org.schema.common.util.ByteUtil;
-import org.schema.common.util.StringTools;
 import org.schema.common.util.linAlg.Vector3i;
 import org.schema.game.client.view.SegmentDrawer;
 import org.schema.game.client.view.effects.Indication;
@@ -80,14 +79,18 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	public void toggleDraw() {
-		if(!initialized) onInit();
+		if(!initialized) {
+			onInit();
+		}
 		if(!(GameClient.getClientState().getPlayerInputs().isEmpty() || GameClient.getClientState().getController().isChatActive() || GameClient.getClientState().isInAnyStructureBuildMode() || GameClient.getClientState().isInFlightMode()) || GameClient.getClientState().getWorldDrawer().getGameMapDrawer().isMapActive()) {
 			toggleDraw = false;
 		} else {
 			toggleDraw = !toggleDraw;
 		}
 		if(toggleDraw) {
-			if(camera != null) Controller.setCamera(camera);
+			if(camera != null) {
+				Controller.setCamera(camera);
+			}
 			controlManager.onSwitch(true);
 			if(firstTime) {
 				camera.reset();
