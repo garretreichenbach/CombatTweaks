@@ -8,6 +8,8 @@ import org.schema.common.util.ByteUtil;
 import org.schema.common.util.linAlg.Vector3i;
 import org.schema.game.client.view.SegmentDrawer;
 import org.schema.game.client.view.effects.Indication;
+import org.schema.game.client.view.gui.shiphud.HudIndicatorOverlay;
+import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelpManager;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.ServerConfig;
@@ -16,6 +18,7 @@ import org.schema.schine.graphicsengine.core.*;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.shader.ShaderLibrary;
+import org.schema.schine.input.InputType;
 import thederpgamer.combattweaks.CombatTweaks;
 
 import javax.vecmath.Vector3f;
@@ -123,6 +126,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		(selectionOverlay = new TacticalMapSelectionOverlay(controlManager.getState())).onInit();
 		selectionOverlay.orientate(GUIElement.ORIENTATION_LEFT | GUIElement.ORIENTATION_VERTICAL_MIDDLE);
 		selectionOverlay.getPos().x += 10.0f;
+	}
+
+	public HudContextHelpManager getHud() {
+		return GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
 	}
 
 	@Override
