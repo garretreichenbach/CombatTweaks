@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * Keeps a small concurrent pool and lazily creates instances on demand.
  */
 public class TacticalMapIndicatorPool {
+
 	private static final TacticalMapIndicatorPool INSTANCE = new TacticalMapIndicatorPool();
 	private final ConcurrentLinkedQueue<Sprite> spritePool = new ConcurrentLinkedQueue<>();
 	private final ConcurrentLinkedQueue<GUITextOverlay> labelPool = new ConcurrentLinkedQueue<>();
@@ -59,7 +60,6 @@ public class TacticalMapIndicatorPool {
 	public GUITextOverlay acquireLabelOverlay() {
 		GUITextOverlay o = labelPool.poll();
 		if(o == null) {
-			// Try to get a reasonable GUI state (HUD indicator state) to attach overlays
 			HudIndicatorOverlay hud = null;
 			try {
 				hud = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getIndicator();

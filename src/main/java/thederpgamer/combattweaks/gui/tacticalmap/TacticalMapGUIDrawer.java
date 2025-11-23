@@ -37,7 +37,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public TacticalMapCamera camera;
 	public boolean toggleDraw;
 	public boolean drawMovementPaths;
-	private FrameBufferObjects outlinesFBO; // defer creation to onInit
+	private FrameBufferObjects outlinesFBO;
 	private boolean initialized;
 	private boolean firstTime = true;
 	private TacticalMapSelectionOverlay selectionOverlay;
