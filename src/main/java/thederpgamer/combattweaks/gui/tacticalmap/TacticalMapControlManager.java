@@ -148,8 +148,9 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		}
 		Vector3f newPos = new Vector3f(guiDrawer.camera.getWorldTransform().origin);
 		newPos.add(move);
-		if(getDistanceFromControl(newPos) < (int) ServerConfig.SECTOR_SIZE.getCurrentState() * ConfigManager.getMainConfig().getDouble("tactical_map_view_distance"))
+		if(getDistanceFromControl(newPos) < (int) ServerConfig.SECTOR_SIZE.getCurrentState() * ConfigManager.getMainConfig().getDouble("tactical_map_view_distance")) {
 			guiDrawer.camera.getWorldTransform().origin.set(newPos);
+		}
 	}
 
 	private float getDistanceFromControl(Vector3f newPos) {

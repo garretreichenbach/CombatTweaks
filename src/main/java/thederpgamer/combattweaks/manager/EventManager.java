@@ -48,9 +48,7 @@ public class EventManager {
 		StarLoader.registerListener(MainWindowTabAddEvent.class, new Listener<MainWindowTabAddEvent>() {
 			@Override
 			public void onEvent(MainWindowTabAddEvent event) {
-				if(event.getTitleAsString().equals(Lng.str("Keyboard"))) { //Fix for the tab name being lowercase for some reason
-					event.getPane().getTabNameText().setTextSimple(Lng.str("KEYBOARD"));
-				} else if(event.getTitleAsString().equals(Lng.str("CONTROLS")) && event.getWindow().getTabs().size() == 2) { //Make sure we aren't adding a duplicate tab
+				if(event.getTitleAsString().equals(Lng.str("CONTROLS")) && event.getWindow().getTabs().size() == 2) { //Make sure we aren't adding a duplicate tab
 					GUIContentPane modControlsPane = event.getWindow().addTab(Lng.str("MOD CONTROLS"));
 					GUITabbedContent tabbedContent = new GUITabbedContent(modControlsPane.getState(), modControlsPane.getContent(0));
 					tabbedContent.activationInterface = event.getWindow().activeInterface;

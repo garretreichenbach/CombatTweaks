@@ -63,7 +63,7 @@ public class CombatTweaks extends StarMod {
 
 	public void registerBindings() {
 		ControlBindingData.load(this);
-		ControlBindingData.registerBinding(instance, "Tactical Map - Open", "Opens/Closes the Tactical Map UI.", Keyboard.KEY_COMMA);
+		ControlBindingData.registerBinding(instance, "Tactical Map - Open", "Opens/Closes the Tactical Map UI.", Keyboard.KEY_PERIOD);
 		ControlBindingData.registerBinding(instance, "Tactical Map - Toggle Movement Paths", "Toggles the display of movement paths on the Tactical Map.", Keyboard.KEY_LMENU);
 		logInfo("Registered Bindings");
 	}

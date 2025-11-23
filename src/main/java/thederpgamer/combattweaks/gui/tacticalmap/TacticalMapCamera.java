@@ -14,8 +14,6 @@ public class TacticalMapCamera extends Camera {
 
 	public Transform transform;
 
-	private Vector3f tmpBack = new Vector3f();
-
 	public TacticalMapCamera() {
 		super(GameClient.getClientState(), new PositionableViewer());
 	}
@@ -39,8 +37,9 @@ public class TacticalMapCamera extends Camera {
 				temp.basis.invert();
 				getWorldTransform().set(temp);
 
+				Vector3f tmpBack = new Vector3f();
 				tmpBack.set(getForward());
-				tmpBack.scale(((SegmentController) GameClient.getCurrentControl()).getBoundingBox().maxSize() + 15);
+				tmpBack.scale(((SegmentController) GameClient.getCurrentControl()).getBoundingBox().maxSize() + 30);
 				tmpBack.negate();
 				getWorldTransform().origin.add(tmpBack);
 			} catch(NullPointerException exception) {

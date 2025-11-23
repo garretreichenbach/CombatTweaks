@@ -181,7 +181,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawOutlines();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		} else {
-			cleanUp();
 			drawHudIndicators(false);
 		}
 	}
@@ -333,7 +332,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public void onInit() {
 		controlManager = new TacticalMapControlManager(this);
 		camera = new TacticalMapCamera();
-		camera.alwaysAllowWheelZoom = false;
+		camera.reset();
+		camera.alwaysAllowWheelZoom = true;
 		recreateSelectionOverlay();
 		// create FBO now that we're initialising within a (likely) GL context
 		if(outlinesFBO == null) {
