@@ -6,9 +6,7 @@ import api.network.PacketWriteBuffer;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
-import org.schema.game.server.ai.program.common.TargetProgram;
-import org.schema.game.server.ai.program.searchanddestroy.SimpleSearchAndDestroyProgram;
-import thederpgamer.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
+import thederpgamer.combattweaks.utils.AIUtils;
 
 import java.io.IOException;
 
@@ -42,11 +40,6 @@ public class SendAttackPacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-		entity.activateAI(true, true);
-		if(!(entity.getAiConfiguration().getAiEntityState().getCurrentProgram() instanceof SimpleSearchAndDestroyProgram)) {
-			entity.getAiConfiguration().getAiEntityState().setCurrentProgram(new SimpleSearchAndDestroyProgram(entity.getAiConfiguration().getAiEntityState(), false));
-		}
-		((TargetProgram<?>) entity.getAiConfiguration().getAiEntityState().getCurrentProgram()).setTarget(target);
-		TacticalMapGUIDrawer.getInstance().drawMap.get(entity.getId()).setCurrentTarget(target);
+		AIUtils.setTarget(entity, target);
 	}
 }

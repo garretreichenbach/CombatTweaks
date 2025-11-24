@@ -38,13 +38,13 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public final Vector3f labelOffset;
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap;
 	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
-	private final HudContextHelpManager hud;
+	private HudContextHelpManager hud;
 	public float selectedRange;
 	public TacticalMapControlManager controlManager;
 	public TacticalMapCamera camera;
 	public boolean toggleDraw;
 	public boolean drawMovementPaths;
-	private FrameBufferObjects outlinesFBO;
+	private final FrameBufferObjects outlinesFBO;
 	private boolean initialized;
 	private boolean firstTime = true;
 	private TacticalMapSelectionOverlay selectionOverlay;
@@ -58,11 +58,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		maxDrawDistance = sectorSize * 4.0f;
 		labelOffset = new Vector3f(0.0f, -20.0f, 0.0f);
 		drawMap = new ConcurrentHashMap<>();
-		hud = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
-		// outlinesFBO creation deferred to onInit to avoid creating GL resources before GL context is ready
-		outlinesFBO = null;
-		// sensible default to reduce immediate heavy population on first frame
 		updateTimer = 150;
+		outlinesFBO = new FrameBufferObjects("SELECTED_ENTITY_DRAWER", GLFrame.getWidth(), GLFrame.getHeight());
 	}
 
 	public static TacticalMapGUIDrawer getInstance() {
@@ -178,7 +175,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			GUIElement.enableOrthogonal();
 			selectionOverlay.draw();
 			GUIElement.disableOrthogonal();
-			drawOutlines();
+//			drawOutlines();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		} else {
 			drawHudIndicators(false);
@@ -291,6 +288,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 					indicator.drawSprite();
 					indicator.drawLabel(indication.getCurrentTransform());
 					indicator.drawTargetingPath(camera);
+					if(drawMovementPaths) {
+						indicator.drawMovementPath(camera);
+					}
 				} else {
 					// schedule for removal after iteration
 					// release pooled UI resources held by the indicator
@@ -336,9 +336,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		camera.alwaysAllowWheelZoom = true;
 		recreateSelectionOverlay();
 		// create FBO now that we're initialising within a (likely) GL context
-		if(outlinesFBO == null) {
-			outlinesFBO = new FrameBufferObjects("SELECTED_ENTITY_DRAWER", GLFrame.getWidth(), GLFrame.getHeight());
-		}
+		hud = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
 		initialized = true;
 	}
 

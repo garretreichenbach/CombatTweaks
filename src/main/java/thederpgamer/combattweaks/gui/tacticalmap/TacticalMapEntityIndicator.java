@@ -11,7 +11,6 @@ import org.lwjgl.opengl.GL11;
 import org.schema.common.util.StringTools;
 import org.schema.common.util.linAlg.Vector3fTools;
 import org.schema.common.util.linAlg.Vector3i;
-import org.schema.game.client.controller.PlayerOkCancelInput;
 import org.schema.game.client.data.gamemap.entry.SelectableMapEntry;
 import org.schema.game.client.view.effects.ConstantIndication;
 import org.schema.game.client.view.effects.Indication;
@@ -313,8 +312,8 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 			Vector3f end = getCurrentTarget().getWorldTransform().origin;
 			try {
 				end.set(TacticalMapGUIDrawer.getInstance().drawMap.get(getCurrentTarget().getId()).sprite.getPos());
-			} catch(Exception ignored) {
-				//Dont log it'll just spam
+			} catch(Exception exception) {
+				exception.printStackTrace();
 			}
 			if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
 				startDrawDottedLine(camera);
@@ -509,39 +508,24 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		drawIndication = true;
 		selectDepth = depth;
 		selected = true;
-		if(Mouse.getEventButton() == 0 && Mouse.getEventButtonState() && getDrawer().selectedEntities.size() < 10) {
-			if(entity.getFactionId() == GameClient.getClientPlayerState().getFactionId()) {
-				if(!Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) {
-					getDrawer().selectedEntities.clear();
-				}
-				getDrawer().addSelection(this);
-			} else if(Objects.requireNonNull(GameCommon.getGameState()).getFactionManager().isEnemy(entity.getFactionId(), GameClient.getClientPlayerState().getFactionId())) {
-				for(SegmentController segmentController : getDrawer().selectedEntities) {
-					if(segmentController instanceof Ship) {
-						Ship ship = (Ship) segmentController;
-						PacketUtil.sendPacketToServer(new SendAttackPacket(ship, entity));
+		if(Mouse.getEventButtonState()) {
+			if(Mouse.getEventButton() == 0) {
+				if(entity.getFactionId() == GameClient.getClientPlayerState().getFactionId()) {
+					if(!Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) {
+						getDrawer().removeAll();
 					}
-				}
-				getDrawer().selectedEntities.clear();
-			} else if(GameCommon.getGameState().getFactionManager().isNeutral(entity.getFactionId(), GameClient.getClientPlayerState().getFactionId()) && !getDrawer().selectedEntities.isEmpty() && !getDrawer().selectedEntities.contains(entity)) {
-				(new PlayerOkCancelInput("ATTACK_WARNING", GameClient.getClientState(), "ATTACK WARNING", "Doing this may put you at war with the target, are you sure you wish to proceed?") {
-					@Override
-					public void onDeactivate() {
-
-					}
-
-					@Override
-					public void pressedOK() {
-						for(SegmentController segmentController : getDrawer().selectedEntities) {
-							if(segmentController instanceof Ship) {
-								Ship ship = (Ship) segmentController;
-								PacketUtil.sendPacketToServer(new SendAttackPacket(ship, entity));
-							}
+					getDrawer().addSelection(this);
+				} else if(!getDrawer().selectedEntities.isEmpty()) {
+					for(SegmentController segmentController : getDrawer().selectedEntities) {
+						if(!entity.equals(segmentController) && segmentController instanceof Ship) {
+							Ship ship = (Ship) segmentController;
+							PacketUtil.sendPacketToServer(new SendAttackPacket(ship, entity));
 						}
-						getDrawer().selectedEntities.clear();
-						deactivate();
 					}
-				}).activate();
+					getDrawer().removeAll();
+				}
+			} else {
+
 			}
 		}
 	}
@@ -550,9 +534,8 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	public void onUnSelect() {
 		drawIndication = true;
 		selected = false;
-		if(Mouse.getEventButton() == 0 && Mouse.getEventButtonState() && !Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) {
-			getDrawer().selectedEntities.remove(entity);
-			getDrawer().removeSelection(this);
+		if(Mouse.getEventButtonState()) {
+
 		}
 	}
 

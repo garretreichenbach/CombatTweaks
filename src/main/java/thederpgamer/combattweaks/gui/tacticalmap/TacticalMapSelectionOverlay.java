@@ -3,7 +3,10 @@ package thederpgamer.combattweaks.gui.tacticalmap;
 import org.newdawn.slick.Color;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.schine.graphicsengine.forms.font.FontLibrary;
-import org.schema.schine.graphicsengine.forms.gui.*;
+import org.schema.schine.graphicsengine.forms.gui.GUIAncor;
+import org.schema.schine.graphicsengine.forms.gui.GUIElementList;
+import org.schema.schine.graphicsengine.forms.gui.GUIListElement;
+import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
 import org.schema.schine.input.InputState;
 
 import javax.vecmath.Vector4f;
@@ -11,12 +14,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class TacticalMapSelectionOverlay extends GUIAncor {
 
-	private GUIElementList entityList;
-	private ConcurrentHashMap<Integer, String> selectedEntities;
-
 	// Cached color constants to avoid allocations during draw
 	private static final Vector4f COLOR_WHITE = new Vector4f(Color.white.r, Color.white.g, Color.white.b, 1.0f);
 	private static final Vector4f COLOR_YELLOW = new Vector4f(Color.yellow.r, Color.yellow.g, Color.yellow.b, 1.0f);
+	private GUIElementList entityList;
+	private ConcurrentHashMap<Integer, String> selectedEntities;
 
 	public TacticalMapSelectionOverlay(InputState inputState) {
 		super(inputState);
@@ -44,8 +46,11 @@ public class TacticalMapSelectionOverlay extends GUIAncor {
 			@Override
 			public void draw() {
 				super.draw();
-				if(selectedEntities.containsKey(getContent().getUserPointer())) ((GUITextOverlay) getContent()).setColor(COLOR_YELLOW);
-				else ((GUITextOverlay) getContent()).setColor(COLOR_WHITE);
+				if(selectedEntities.containsKey(getContent().getUserPointer())) {
+					((GUITextOverlay) getContent()).setColor(COLOR_YELLOW);
+				} else {
+					((GUITextOverlay) getContent()).setColor(COLOR_WHITE);
+				}
 			}
 		};
 		listElement.onInit();
@@ -60,7 +65,9 @@ public class TacticalMapSelectionOverlay extends GUIAncor {
 				break;
 			}
 		}
-		if(toRemove != null) entityList.remove(toRemove);
+		if(toRemove != null) {
+			entityList.remove(toRemove);
+		}
 	}
 
 	public void addSelected(SegmentController entity) {
