@@ -9,7 +9,7 @@ import glossar.GlossarInit;
 import org.lwjgl.input.Keyboard;
 import org.schema.schine.resource.ResourceLoader;
 import thederpgamer.combattweaks.data.ControlBindingData;
-import thederpgamer.combattweaks.element.ElementManager;
+import thederpgamer.combattweaks.element.block.BlockRegistry;
 import thederpgamer.combattweaks.manager.ConfigManager;
 import thederpgamer.combattweaks.manager.EventManager;
 import thederpgamer.combattweaks.manager.ResourceManager;
@@ -47,8 +47,8 @@ public class CombatTweaks extends StarMod {
 	}
 
 	@Override
-	public void onBlockConfigLoad(BlockConfig blockConfig) {
-		ElementManager.initialize();
+	public void onBlockConfigLoad(BlockConfig config) {
+		BlockRegistry.registerBlocks();
 	}
 
 	private void registerPackets() {

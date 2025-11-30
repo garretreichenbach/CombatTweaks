@@ -11,10 +11,9 @@ public class ConfigManager {
 	};
 
 	public static final String[] defaultSystemConfig = {
-			"armor_hp_value_multiplier: 50.0",
+			"armor_hp_value_multiplier: 30.0",
 			"armor_hp_lost_per_damage_absorbed: 1.0",
-			"base_armor_hp_bleedthrough_start: 0.75",
-			"min_armor_hp_bleedthrough_start: 0.5"
+			"base_armor_hp_bleed_through_start: 0.75"
 	};
 	
 	//Main Config

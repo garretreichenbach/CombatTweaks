@@ -14,22 +14,22 @@ import api.listener.events.gui.MainWindowTabAddEvent;
 import api.listener.events.gui.TargetPanelCreateEvent;
 import api.listener.events.input.KeyPressEvent;
 import api.listener.events.register.ManagerContainerRegisterEvent;
+import api.listener.events.register.RegisterConfigGroupsEvent;
 import api.listener.fastevents.FastListenerCommon;
 import api.mod.StarLoader;
 import api.mod.StarMod;
 import api.utils.game.PlayerUtils;
 import org.lwjgl.input.Keyboard;
-import org.schema.common.util.linAlg.Vector3i;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
-import org.schema.game.common.data.element.ElementCollection;
 import org.schema.game.common.data.element.ElementKeyMap;
 import org.schema.schine.common.language.Lng;
 import org.schema.schine.graphicsengine.forms.gui.newgui.GUIContentPane;
 import org.schema.schine.graphicsengine.forms.gui.newgui.GUITabbedContent;
 import thederpgamer.combattweaks.CombatTweaks;
 import thederpgamer.combattweaks.data.ControlBindingData;
+import thederpgamer.combattweaks.effect.ConfigGroupRegistry;
 import thederpgamer.combattweaks.gui.controls.ControlBindingsScrollableList;
 import thederpgamer.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
 import thederpgamer.combattweaks.listener.DamageReductionByArmorCalcListenerImpl;
@@ -110,6 +110,14 @@ public class EventManager {
 			}
 		}, instance);
 
+
+		StarLoader.registerListener(RegisterConfigGroupsEvent.class, new Listener<RegisterConfigGroupsEvent>() {
+			@Override
+			public void onEvent(RegisterConfigGroupsEvent event) {
+				ConfigGroupRegistry.registerEffects(event.getModConfigGroups());
+			}
+		}, instance);
+
 		StarLoader.registerListener(RegisterWorldDrawersEvent.class, new Listener<RegisterWorldDrawersEvent>() {
 			@Override
 			public void onEvent(RegisterWorldDrawersEvent event) {
@@ -124,16 +132,16 @@ public class EventManager {
 			public void onEvent(ManagerContainerRegisterEvent event) {
 				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID));
 				if(event.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
-					ArmorHPCollection.enqueueRecalc(event.getSegmentController());
+					ArmorHPCollection.enqueueRecalc(event.getSegmentController(), true);
 				}
 			}
 		}, instance);
 
-		StarLoader.registerListener(SegmentControllerFullyLoadedEvent.class, new Listener<SegmentControllerFullyLoadedEvent>() {
+		/*StarLoader.registerListener(SegmentControllerFullyLoadedEvent.class, new Listener<SegmentControllerFullyLoadedEvent>() {
 			@Override
 			public void onEvent(SegmentControllerFullyLoadedEvent event) {
 				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
-					ArmorHPCollection.enqueueRecalc(event.getController());
+					ArmorHPCollection.enqueueRecalc(event.getController(), true);
 				}
 			}
 		}, instance);
@@ -142,7 +150,7 @@ public class EventManager {
 			@Override
 			public void onEvent(SegmentControllerInstantiateEvent event) {
 				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
-					ArmorHPCollection.enqueueRecalc(event.getController());
+					ArmorHPCollection.enqueueRecalc(event.getController(), true);
 				}
 			}
 		}, instance);
@@ -151,10 +159,10 @@ public class EventManager {
 			@Override
 			public void onEvent(SegmentControllerSpawnEvent event) {
 				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
-					ArmorHPCollection.enqueueRecalc(event.getController());
+					ArmorHPCollection.enqueueRecalc(event.getController(), true);
 				}
 			}
-		}, instance);
+		}, instance);*/
 
 		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<SegmentPieceAddByMetadataEvent>() {
 			@Override

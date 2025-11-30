@@ -18,12 +18,7 @@ import org.schema.schine.graphicsengine.core.Timer;
 import thederpgamer.combattweaks.CombatTweaks;
 import thederpgamer.combattweaks.manager.ConfigManager;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Map;
-import java.util.WeakHashMap;
-
-import static java.lang.Math.max;
+import java.util.*;
 
 /**
  * CollectionManager for ArmorHP.
@@ -35,26 +30,26 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	// Delay after the last enqueued change before processing the batch (ms)
 	private static final long PROCESS_DELAY_MS = 250; // arbitrary time since last update
 	// Pending recalculation requests keyed by SegmentController. WeakHashMap so controllers can be GC'd when gone.
-	private static final Map<SegmentController, PendingData> pending = Collections.synchronizedMap(new WeakHashMap<SegmentController, PendingData>());
-	// Track last change time per controller
+	// Use a synchronized LinkedList as a queue for pending requests and a Set to avoid duplicates.
+	// Note: queued controllers are held strongly while present in the queue.
+	private static final LinkedList<Pending> pending = new LinkedList<>();
+	private static final Set<SegmentController> pendingSet = Collections.synchronizedSet(new HashSet<SegmentController>());
+	// Track last change time per controller. Keep WeakHashMap so controllers can be GC'd when no longer referenced.
 	private static final Map<SegmentController, Long> lastChangeTimestamp = Collections.synchronizedMap(new WeakHashMap<SegmentController, Long>());
 	private final double armorHPValueMultiplier;
 	private final double armorHPLostPerDamageAbsorbed;
-	private final double baseArmorHPBleedthroughStart;
-	private final double minArmorHPBleedthroughStart;
+	private final double baseArmorHPBleedThroughStart;
 	private double currentHP;
 	private double maxHP;
 	private boolean flagCollectionChanged = true;
 	private boolean updateMaxOnly;
 	private long lastRegen;
 	private boolean regenEnabled;
-
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
 		armorHPValueMultiplier = ConfigManager.getSystemConfig().getDouble("armor_hp_value_multiplier");
 		armorHPLostPerDamageAbsorbed = ConfigManager.getSystemConfig().getDouble("armor_hp_lost_per_damage_absorbed");
-		baseArmorHPBleedthroughStart = ConfigManager.getSystemConfig().getDouble("base_armor_hp_bleedthrough_start");
-		minArmorHPBleedthroughStart = ConfigManager.getSystemConfig().getDouble("min_armor_hp_bleedthrough_start");
+		baseArmorHPBleedThroughStart = ConfigManager.getSystemConfig().getDouble("base_armor_hp_bleed_through_start");
 	}
 
 	public static ArmorHPCollection getCollection(SegmentController controller) {
@@ -77,15 +72,16 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	/**
 	 * Enqueue a full recalculation operation for the given controller.
 	 */
-	public static void enqueueRecalc(SegmentController controller) {
-		if(controller == null) return;
+	public static void enqueueRecalc(SegmentController controller, boolean fullRecalc) {
+		if(controller == null) {
+			return;
+		}
 		synchronized(pending) {
-			PendingData pd = pending.get(controller);
-			if(pd == null) {
-				pd = new PendingData();
-				pending.put(controller, pd);
+			// avoid duplicate entries
+			if(!pendingSet.contains(controller)) {
+				pending.add(new Pending(controller, false));
+				pendingSet.add(controller);
 			}
-			pd.recalcRequested = true;
 			lastChangeTimestamp.put(controller, System.currentTimeMillis());
 		}
 	}
@@ -154,17 +150,24 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			return; // debounce
 		}
 
-		PendingData pd;
+		Pending pd = null;
 		synchronized(pending) {
-			pd = pending.remove(sc);
-			lastChangeTimestamp.remove(sc);
+			Iterator<Pending> it = pending.iterator();
+			while(it.hasNext()) {
+				pd = it.next();
+				if(pd.controller == sc) {
+					it.remove();
+					pendingSet.remove(sc);
+					break;
+				}
+			}
 		}
 		if(pd == null) {
 			return;
 		}
 
 		// If a recalc was requested, just do it. We no longer apply per-index adds/removes here.
-		if(pd.recalcRequested) {
+		if(pd.fullRecalc) {
 			try {
 				if(currentHP < maxHP) {
 					updateMaxOnly = true;
@@ -206,7 +209,9 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		for(ElementInformation info : infos) {
 			if(info != null && info.isArmor()) {
 				short id = info.getId();
-				if(id != 0 && getCount(id) > 0) return true;
+				if(id != 0 && getCount(id) > 0) {
+					return true;
+				}
 			}
 		}
 		return false;
@@ -248,7 +253,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	public void setCurrentHP(double hp) {
 		double prev = currentHP;
-		currentHP = max(0, Math.min(maxHP, hp));
+		currentHP = Math.max(0, Math.min(maxHP, hp));
 		if(!isOnServer() && currentHP == 0 && prev > 0) {
 			if(getSegmentController().isClientOwnObject()) {
 				GameClient.getClientState().message(Lng.astr("Armor integrity is fully compromised!"), 2);
@@ -261,37 +266,46 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	public double getHPPercent() {
-		return (maxHP == 0 || currentHP == 0) ? 0 : max(currentHP / maxHP, 0);
+		return (maxHP == 0 || currentHP == 0) ? 0 : Math.max(currentHP / maxHP, 0);
 	}
 
 	public float processDamageToArmor(float dmgIn, float dmgAfterBaseArmorProtection) {
-		if(maxHP <= 0 || currentHP <= 0) return dmgAfterBaseArmorProtection;
-		if(Float.isNaN(dmgIn)) return dmgAfterBaseArmorProtection;
+		if(maxHP <= 0 || currentHP <= 0) {
+			return dmgAfterBaseArmorProtection;
+		}
+		if(Float.isNaN(dmgIn)) {
+			return dmgAfterBaseArmorProtection;
+		}
 		double hpPercent = getHPPercent();
-		double bleedThreshold = getBleedthroughThreshold();
+		double bleedThreshold = getBleedThroughThreshold();
 		if(hpPercent >= bleedThreshold) {
 			double hpLoss = dmgAfterBaseArmorProtection * armorHPLostPerDamageAbsorbed;
 			setCurrentHP(currentHP - hpLoss);
 			return 0.0f;
 		}
 		double bleedFrac = (bleedThreshold - hpPercent) / (bleedThreshold <= 0 ? 1.0 : bleedThreshold);
-		bleedFrac = max(0.0, Math.min(1.0, bleedFrac));
+		bleedFrac = Math.max(0.0, Math.min(1.0, bleedFrac));
 		double desiredAbsorbed = dmgAfterBaseArmorProtection * (1.0 - bleedFrac);
 		double absorbCapacity = currentHP / armorHPLostPerDamageAbsorbed;
 		double actualAbsorbed = Math.min(desiredAbsorbed, absorbCapacity);
 		double hpLoss = actualAbsorbed * armorHPLostPerDamageAbsorbed;
 		setCurrentHP(currentHP - hpLoss);
 		double finalDamage = dmgAfterBaseArmorProtection - actualAbsorbed;
-		return (float) max(0.0, finalDamage);
+		return (float) Math.max(0.0, finalDamage);
 	}
 
-	private double getBleedthroughThreshold() {
-		return max(minArmorHPBleedthroughStart, getConfigManager().apply(StatusEffectType.ARMOR_HP_ABSORPTION, baseArmorHPBleedthroughStart));
+	private double getBleedThroughThreshold() {
+		return Math.max(Math.min(getConfigManager().apply(StatusEffectType.ARMOR_HP_ABSORPTION, 1.0f), baseArmorHPBleedThroughStart), 0.0f);
 	}
 
-	// PendingData now only indicates whether a recalc is requested
-	private static class PendingData {
-		boolean recalcRequested;
-	}
+	// Small helper class representing a queued pending request and whether it requested a full recalculation.
+	private static class Pending {
+		final SegmentController controller;
+		boolean fullRecalc;
 
+		Pending(SegmentController controller, boolean fullRecalc) {
+			this.controller = controller;
+			this.fullRecalc = fullRecalc;
+		}
+	}
 }
