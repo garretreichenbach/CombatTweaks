@@ -11,11 +11,7 @@ public class ConfigManager {
 	};
 
 	public static final String[] defaultSystemConfig = {
-			"repair_paste_capacity_per_block: 10",
-			"repair_paste_regen_per_block: 5",
-			"repair_paste_power_consumed_per_block_resting: 5",
-			"repair_paste_power_consumed_per_block_charging: 15",
-			"armor_hp_value_multiplier: 20.0",
+			"armor_hp_value_multiplier: 50.0",
 			"armor_hp_lost_per_damage_absorbed: 1.0",
 			"base_armor_hp_bleedthrough_start: 0.75",
 			"min_armor_hp_bleedthrough_start: 0.5"
@@ -23,10 +19,9 @@ public class ConfigManager {
 	
 	//Main Config
 	private static FileConfiguration mainConfig;
+
 	//System Config
 	private static FileConfiguration systemConfig;
-	//Keyboard Config
-	private static FileConfiguration keyboardConfig;
 
 	public static void initialize(CombatTweaks instance) {
 		mainConfig = instance.getConfig("config");

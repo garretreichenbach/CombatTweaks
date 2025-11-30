@@ -51,7 +51,7 @@ public class EventManager {
 		StarLoader.registerListener(MainWindowTabAddEvent.class, new Listener<MainWindowTabAddEvent>() {
 			@Override
 			public void onEvent(MainWindowTabAddEvent event) {
-				if(event.getTitleAsString().equals(Lng.str("CONTROLS")) && event.getWindow().getTabs().size() == 2) { //Make sure we aren't adding a duplicate tab
+				if(event.getTitleAsString().equals(Lng.str("KEYBOARD")) && event.getWindow().getTabs().size() == 2) { //Make sure we aren't adding a duplicate tab
 					GUIContentPane modControlsPane = event.getWindow().addTab(Lng.str("MOD CONTROLS"));
 					GUITabbedContent tabbedContent = new GUITabbedContent(modControlsPane.getState(), modControlsPane.getContent(0));
 					tabbedContent.activationInterface = event.getWindow().activeInterface;
@@ -123,12 +123,33 @@ public class EventManager {
 			@Override
 			public void onEvent(ManagerContainerRegisterEvent event) {
 				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID));
+				if(event.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
+					ArmorHPCollection.enqueueRecalc(event.getSegmentController());
+				}
 			}
 		}, instance);
 
 		StarLoader.registerListener(SegmentControllerFullyLoadedEvent.class, new Listener<SegmentControllerFullyLoadedEvent>() {
 			@Override
 			public void onEvent(SegmentControllerFullyLoadedEvent event) {
+				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
+					ArmorHPCollection.enqueueRecalc(event.getController());
+				}
+			}
+		}, instance);
+
+		StarLoader.registerListener(SegmentControllerInstantiateEvent.class, new Listener<SegmentControllerInstantiateEvent>() {
+			@Override
+			public void onEvent(SegmentControllerInstantiateEvent event) {
+				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
+					ArmorHPCollection.enqueueRecalc(event.getController());
+				}
+			}
+		}, instance);
+
+		StarLoader.registerListener(SegmentControllerSpawnEvent.class, new Listener<SegmentControllerSpawnEvent>() {
+			@Override
+			public void onEvent(SegmentControllerSpawnEvent event) {
 				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
 					ArmorHPCollection.enqueueRecalc(event.getController());
 				}
@@ -145,9 +166,9 @@ public class EventManager {
 					return;
 				}
 				if(event.getSegment().getSegmentController().railController.isDocked()) {
-					ArmorHPCollection.enqueueAdd(event.getSegment().getSegmentController().railController.getRoot(), event.getAbsIndex(), event.getType());
+					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController().railController.getRoot());
 				} else {
-					ArmorHPCollection.enqueueAdd(event.getSegment().getSegmentController(), event.getAbsIndex(), event.getType());
+					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController());
 				}
 			}
 		}, instance);
@@ -162,9 +183,9 @@ public class EventManager {
 					return;
 				}
 				if(event.getSegment().getSegmentController().railController.isDocked()) {
-					ArmorHPCollection.enqueueAdd(event.getSegment().getSegmentController().railController.getRoot(), event.getAbsIndex(), event.getNewType());
+					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController().railController.getRoot());
 				} else {
-					ArmorHPCollection.enqueueAdd(event.getSegment().getSegmentController(), event.getAbsIndex(), event.getNewType());
+					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController());
 				}
 			}
 		}, instance);
@@ -179,9 +200,9 @@ public class EventManager {
 					return;
 				}
 				if(event.getSegment().getSegmentController().railController.isDocked()) {
-					ArmorHPCollection.enqueueRemove(event.getSegment().getSegmentController().railController.getRoot(), ElementCollection.getIndex(new Vector3i(event.getX(), event.getY(), event.getZ())), event.getType());
+					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController().railController.getRoot());
 				} else {
-					ArmorHPCollection.enqueueRemove(event.getSegment().getSegmentController(), ElementCollection.getIndex(new Vector3i(event.getX(), event.getY(), event.getZ())), event.getType());
+					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController());
 				}
 			}
 		}, instance);
