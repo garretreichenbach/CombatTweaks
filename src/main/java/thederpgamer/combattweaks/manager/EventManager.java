@@ -6,9 +6,6 @@ import api.listener.events.block.SegmentPieceAddByMetadataEvent;
 import api.listener.events.block.SegmentPieceAddEvent;
 import api.listener.events.block.SegmentPieceRemoveEvent;
 import api.listener.events.draw.RegisterWorldDrawersEvent;
-import api.listener.events.entity.SegmentControllerFullyLoadedEvent;
-import api.listener.events.entity.SegmentControllerInstantiateEvent;
-import api.listener.events.entity.SegmentControllerSpawnEvent;
 import api.listener.events.gui.HudCreateEvent;
 import api.listener.events.gui.MainWindowTabAddEvent;
 import api.listener.events.gui.TargetPanelCreateEvent;
@@ -132,7 +129,7 @@ public class EventManager {
 			public void onEvent(ManagerContainerRegisterEvent event) {
 				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID));
 				if(event.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
-					ArmorHPCollection.enqueueRecalc(event.getSegmentController(), true);
+					ArmorHPCollection.enqueueRecalc(event.getSegmentController());
 				}
 			}
 		}, instance);

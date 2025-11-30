@@ -1,7 +1,6 @@
 package thederpgamer.combattweaks.system.armor;
 
 import api.common.GameClient;
-import api.utils.game.SegmentControllerUtils;
 import org.schema.common.util.StringTools;
 import org.schema.game.client.data.GameClientState;
 import org.schema.game.client.view.gui.structurecontrol.GUIKeyValueEntry;
@@ -9,6 +8,8 @@ import org.schema.game.client.view.gui.structurecontrol.ModuleValueEntry;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.elements.ElementCollectionManager;
+import org.schema.game.common.controller.elements.ManagerModule;
+import org.schema.game.common.controller.elements.ManagerModuleCollection;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.element.ElementInformation;
@@ -26,15 +27,12 @@ import java.util.*;
  */
 public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, ArmorHPCollection, VoidElementManager<ArmorHPUnit, ArmorHPCollection>> {
 
+	private static final long UPDATE_FREQUENCY = 1000;
 	private static final long REGEN_FREQUENCY = 1000;
 	// Delay after the last enqueued change before processing the batch (ms)
-	private static final long PROCESS_DELAY_MS = 250; // arbitrary time since last update
-	// Pending recalculation requests keyed by SegmentController. WeakHashMap so controllers can be GC'd when gone.
-	// Use a synchronized LinkedList as a queue for pending requests and a Set to avoid duplicates.
-	// Note: queued controllers are held strongly while present in the queue.
-	private static final LinkedList<Pending> pending = new LinkedList<>();
-	private static final Set<SegmentController> pendingSet = Collections.synchronizedSet(new HashSet<SegmentController>());
-	// Track last change time per controller. Keep WeakHashMap so controllers can be GC'd when no longer referenced.
+	private static final long PROCESS_DELAY_MS = 500; // arbitrary time since last update
+	private static final Set<SegmentController> pending = Collections.synchronizedSet(new HashSet<SegmentController>());
+	// Track last change time per controller. Using WeakHashMap so controllers can be GC'd when no longer referenced.
 	private static final Map<SegmentController, Long> lastChangeTimestamp = Collections.synchronizedMap(new WeakHashMap<SegmentController, Long>());
 	private final double armorHPValueMultiplier;
 	private final double armorHPLostPerDamageAbsorbed;
@@ -45,6 +43,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private boolean updateMaxOnly;
 	private long lastRegen;
 	private boolean regenEnabled;
+
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
 		armorHPValueMultiplier = ConfigManager.getSystemConfig().getDouble("armor_hp_value_multiplier");
@@ -56,10 +55,13 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		if(controller instanceof ManagedUsableSegmentController<?>) {
 			try {
 				ManagedUsableSegmentController<?> managed = (ManagedUsableSegmentController<?>) controller;
-				ArrayList<ElementCollectionManager<?, ?, ?>> cms = SegmentControllerUtils.getCollectionManagers(managed, ArmorHPCollection.class);
-				for(ElementCollectionManager<?, ?, ?> cm : cms) {
-					if(cm instanceof ArmorHPCollection) {
-						return (ArmorHPCollection) cm;
+				for(ManagerModule<?, ?, ?> module : managed.getManagerContainer().getModules()) {
+					if(module instanceof ManagerModuleCollection) {
+						for(Object cm : ((ManagerModuleCollection<?,?,?>) module).getCollectionManagers()) {
+							if(cm instanceof ArmorHPCollection) {
+								return (ArmorHPCollection) cm;
+							}
+						}
 					}
 				}
 			} catch(Exception exception) {
@@ -72,18 +74,15 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	/**
 	 * Enqueue a full recalculation operation for the given controller.
 	 */
-	public static void enqueueRecalc(SegmentController controller, boolean fullRecalc) {
+	public static void enqueueRecalc(SegmentController controller) {
 		if(controller == null) {
 			return;
 		}
 		synchronized(pending) {
-			// avoid duplicate entries
-			if(!pendingSet.contains(controller)) {
-				pending.add(new Pending(controller, false));
-				pendingSet.add(controller);
-			}
+			pending.add(controller);
 			lastChangeTimestamp.put(controller, System.currentTimeMillis());
 		}
+		CombatTweaks.getInstance().logInfo("Enqueued armor HP recalculation for entity " + controller.getName() + " (" + controller.getUniqueIdentifier() + ")");
 	}
 
 	@Override
@@ -127,13 +126,12 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			return;
 		}
 
-		regenEnabled = getSegmentController().getConfigManager().apply(StatusEffectType.ARMOR_HP_REGENERATION, 1.0f) > 1.0f;
-
-		if(maxHP <= 0 && hasAnyArmorBlocks() && getSegmentController().isFullyLoadedWithDock() && flagCollectionChanged) {
+		if(System.currentTimeMillis() - lastUpdate > UPDATE_FREQUENCY && maxHP <= 0 && hasAnyArmorBlocks() && getSegmentController().isFullyLoadedWithDock() && flagCollectionChanged) {
 			lastUpdate = System.currentTimeMillis();
 			enqueueRecalc(getSegmentController());
 		}
 
+		regenEnabled = getSegmentController().getConfigManager().apply(StatusEffectType.ARMOR_HP_REGENERATION, 1.0f) > 1.0f;
 		if(System.currentTimeMillis() - lastRegen >= REGEN_FREQUENCY && regenEnabled && currentHP < maxHP) {
 			lastRegen = System.currentTimeMillis();
 			doRegen();
@@ -149,33 +147,13 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		if(System.currentTimeMillis() - last < PROCESS_DELAY_MS) {
 			return; // debounce
 		}
-
-		Pending pd = null;
-		synchronized(pending) {
-			Iterator<Pending> it = pending.iterator();
-			while(it.hasNext()) {
-				pd = it.next();
-				if(pd.controller == sc) {
-					it.remove();
-					pendingSet.remove(sc);
-					break;
-				}
+		try {
+			if(currentHP < maxHP) {
+				updateMaxOnly = true;
 			}
-		}
-		if(pd == null) {
-			return;
-		}
-
-		// If a recalc was requested, just do it. We no longer apply per-index adds/removes here.
-		if(pd.fullRecalc) {
-			try {
-				if(currentHP < maxHP) {
-					updateMaxOnly = true;
-				}
-				recalcHP();
-			} catch(Exception e) {
-				CombatTweaks.getInstance().logException("Failed to recalc armor HP for entity " + getSegmentController().getName() + " (" + getSegmentController().getUniqueIdentifier() + ")", e);
-			}
+			recalcHP();
+		} catch(Exception e) {
+			CombatTweaks.getInstance().logException("Failed to recalc armor HP for entity " + getSegmentController().getName() + " (" + getSegmentController().getUniqueIdentifier() + ")", e);
 		}
 	}
 
@@ -199,7 +177,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private int getCount(short type) {
 		try {
 			return getSegmentController().getElementClassCountMap().get(type);
-		} catch(Throwable t) {
+		} catch(Exception exception) {
 			return 0;
 		}
 	}
@@ -218,18 +196,19 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	private void recalcHP() {
+		long start = System.currentTimeMillis();
 		currentHP = 0;
 		maxHP = 0;
 		ElementInformation[] infos = ElementKeyMap.getInfoArray();
 		for(ElementInformation info : infos) {
-			if(info != null && info.isArmor()) {
+			if(info != null && !info.isDeprecated() && info.isArmor()) {
 				short type = info.getId();
 				int count = getCount(type);
 				if(count > 0) {
 					if(!updateMaxOnly) {
-						currentHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorHPValueMultiplier) * count;
+						currentHP += (info.getArmorValue() * armorHPValueMultiplier) * count;
 					}
-					maxHP += (ElementKeyMap.getInfo(type).getArmorValue() * armorHPValueMultiplier) * count;
+					maxHP += (info.getArmorValue() * armorHPValueMultiplier) * count;
 				}
 			}
 		}
@@ -242,9 +221,14 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		if(currentHP > maxHP) {
 			currentHP = maxHP;
 		}
+
 		flagCollectionChanged = false;
 		updateMaxOnly = false;
 		lastUpdate = System.currentTimeMillis();
+
+		if(getSegmentController().railController.isRoot()) { //We only log for the root controller to avoid log spam
+			CombatTweaks.getInstance().logInfo("Recalculated armor HP for entity " + getSegmentController().getName() + " (" + getSegmentController().getUniqueIdentifier() + ") in " + (System.currentTimeMillis() - start) + " ms. Current HP: " + currentHP + ", Max HP: " + maxHP);
+		}
 	}
 
 	public double getCurrentHP() {
@@ -296,16 +280,5 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	private double getBleedThroughThreshold() {
 		return Math.max(Math.min(getConfigManager().apply(StatusEffectType.ARMOR_HP_ABSORPTION, 1.0f), baseArmorHPBleedThroughStart), 0.0f);
-	}
-
-	// Small helper class representing a queued pending request and whether it requested a full recalculation.
-	private static class Pending {
-		final SegmentController controller;
-		boolean fullRecalc;
-
-		Pending(SegmentController controller, boolean fullRecalc) {
-			this.controller = controller;
-			this.fullRecalc = fullRecalc;
-		}
 	}
 }
