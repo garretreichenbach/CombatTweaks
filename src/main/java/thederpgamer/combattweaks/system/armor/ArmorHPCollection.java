@@ -1,6 +1,7 @@
 package thederpgamer.combattweaks.system.armor;
 
 import api.common.GameClient;
+import it.unimi.dsi.fastutil.shorts.Short2IntArrayMap;
 import org.schema.common.util.StringTools;
 import org.schema.game.client.data.GameClientState;
 import org.schema.game.client.view.gui.structurecontrol.GUIKeyValueEntry;
@@ -11,6 +12,7 @@ import org.schema.game.common.controller.elements.ElementCollectionManager;
 import org.schema.game.common.controller.elements.ManagerModule;
 import org.schema.game.common.controller.elements.ManagerModuleCollection;
 import org.schema.game.common.controller.elements.VoidElementManager;
+import org.schema.game.common.controller.rails.RailRelation;
 import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.element.ElementInformation;
 import org.schema.game.common.data.element.ElementKeyMap;
@@ -34,6 +36,8 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private static final Set<SegmentController> pending = Collections.synchronizedSet(new HashSet<SegmentController>());
 	// Track last change time per controller. Using WeakHashMap so controllers can be GC'd when no longer referenced.
 	private static final Map<SegmentController, Long> lastChangeTimestamp = Collections.synchronizedMap(new WeakHashMap<SegmentController, Long>());
+	private final Short2IntArrayMap armorCountCacheMap = new Short2IntArrayMap();
+
 	private final double armorHPValueMultiplier;
 	private final double armorHPLostPerDamageAbsorbed;
 	private final double baseArmorHPBleedThroughStart;
@@ -52,9 +56,9 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	public static ArmorHPCollection getCollection(SegmentController controller) {
-		if(controller instanceof ManagedUsableSegmentController<?>) {
+		if(controller.railController.getRoot() instanceof ManagedUsableSegmentController<?>) {
 			try {
-				ManagedUsableSegmentController<?> managed = (ManagedUsableSegmentController<?>) controller;
+				ManagedUsableSegmentController<?> managed = (ManagedUsableSegmentController<?>) controller.railController.getRoot();
 				for(ManagerModule<?, ?, ?> module : managed.getManagerContainer().getModules()) {
 					if(module instanceof ManagerModuleCollection) {
 						for(Object cm : ((ManagerModuleCollection<?,?,?>) module).getCollectionManagers()) {
@@ -82,7 +86,6 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			pending.add(controller);
 			lastChangeTimestamp.put(controller, System.currentTimeMillis());
 		}
-		CombatTweaks.getInstance().logInfo("Enqueued armor HP recalculation for entity " + controller.getName() + " (" + controller.getUniqueIdentifier() + ")");
 	}
 
 	@Override
@@ -175,11 +178,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	private int getCount(short type) {
-		try {
-			return getSegmentController().getElementClassCountMap().get(type);
-		} catch(Exception exception) {
-			return 0;
-		}
+		return armorCountCacheMap.get(type);
 	}
 
 	private boolean hasAnyArmorBlocks() {
@@ -199,12 +198,22 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		long start = System.currentTimeMillis();
 		currentHP = 0;
 		maxHP = 0;
+
+		armorCountCacheMap.clear();
 		ElementInformation[] infos = ElementKeyMap.getInfoArray();
 		for(ElementInformation info : infos) {
 			if(info != null && !info.isDeprecated() && info.isArmor()) {
 				short type = info.getId();
-				int count = getCount(type);
-				if(count > 0) {
+				armorCountCacheMap.put(type, 0);
+			}
+		}
+		getArmorCounts(getSegmentController(), armorCountCacheMap);
+
+		for(short type : armorCountCacheMap.keySet()) {
+			int count = armorCountCacheMap.get(type);
+			if(count > 0) {
+				ElementInformation info = ElementKeyMap.getInfo(type);
+				if(info != null) {
 					if(!updateMaxOnly) {
 						currentHP += (info.getArmorValue() * armorHPValueMultiplier) * count;
 					}
@@ -212,6 +221,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 				}
 			}
 		}
+
 		if(currentHP < 0) {
 			currentHP = 0;
 		}
@@ -228,6 +238,32 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 		if(getSegmentController().railController.isRoot()) { //We only log for the root controller to avoid log spam
 			CombatTweaks.getInstance().logInfo("Recalculated armor HP for entity " + getSegmentController().getName() + " (" + getSegmentController().getUniqueIdentifier() + ") in " + (System.currentTimeMillis() - start) + " ms. Current HP: " + currentHP + ", Max HP: " + maxHP);
+		}
+	}
+
+	private static void getArmorCounts(SegmentController segmentController, Map<Short, Integer> armorCounts) {
+		ElementInformation[] infos = ElementKeyMap.getInfoArray();
+		for(ElementInformation info : infos) {
+			if(info != null && !info.isDeprecated() && info.isArmor()) {
+				short type = info.getId();
+				int count = 0;
+				try {
+					count = segmentController.getElementClassCountMap().get(type);
+				} catch(Exception exception) {
+					//ignore
+				}
+				if(count > 0) {
+					armorCounts.put(type, armorCounts.get(type) + count);
+				}
+			}
+		}
+		// Recurse into docked entities
+		List<RailRelation> docked = segmentController.railController.next;
+		if(docked != null) {
+			for(RailRelation relation : docked) {
+				SegmentController dockedController = relation.docked.getSegmentController();
+				getArmorCounts(dockedController, armorCounts);
+			}
 		}
 	}
 

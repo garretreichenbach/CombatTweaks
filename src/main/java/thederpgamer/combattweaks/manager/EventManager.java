@@ -134,33 +134,6 @@ public class EventManager {
 			}
 		}, instance);
 
-		/*StarLoader.registerListener(SegmentControllerFullyLoadedEvent.class, new Listener<SegmentControllerFullyLoadedEvent>() {
-			@Override
-			public void onEvent(SegmentControllerFullyLoadedEvent event) {
-				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
-					ArmorHPCollection.enqueueRecalc(event.getController(), true);
-				}
-			}
-		}, instance);
-
-		StarLoader.registerListener(SegmentControllerInstantiateEvent.class, new Listener<SegmentControllerInstantiateEvent>() {
-			@Override
-			public void onEvent(SegmentControllerInstantiateEvent event) {
-				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
-					ArmorHPCollection.enqueueRecalc(event.getController(), true);
-				}
-			}
-		}, instance);
-
-		StarLoader.registerListener(SegmentControllerSpawnEvent.class, new Listener<SegmentControllerSpawnEvent>() {
-			@Override
-			public void onEvent(SegmentControllerSpawnEvent event) {
-				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
-					ArmorHPCollection.enqueueRecalc(event.getController(), true);
-				}
-			}
-		}, instance);*/
-
 		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<SegmentPieceAddByMetadataEvent>() {
 			@Override
 			public void onEvent(SegmentPieceAddByMetadataEvent event) {
