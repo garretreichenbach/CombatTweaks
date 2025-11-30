@@ -19,7 +19,8 @@ import org.schema.schine.graphicsengine.core.Timer;
 import thederpgamer.combattweaks.CombatTweaks;
 import thederpgamer.combattweaks.manager.ConfigManager;
 
-import java.util.ArrayList;
+import java.lang.reflect.Field;
+import java.util.*;
 
 import static java.lang.Math.max;
 
@@ -31,13 +32,18 @@ import static java.lang.Math.max;
  */
 public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, ArmorHPCollection, VoidElementManager<ArmorHPUnit, ArmorHPCollection>> {
 
+	private static final long UPDATE_FREQUENCY = 5000;
+	private static final long REGEN_FREQUENCY = 1000;
+	// Delay after the last enqueued change before processing the batch (ms)
+	private static final long PROCESS_DELAY_MS = 250; // arbitrary time since last update
+	// Pending changes keyed by SegmentController. WeakHashMap so controllers can be GC'd when gone.
+	private static final Map<SegmentController, PendingData> pending = Collections.synchronizedMap(new WeakHashMap<SegmentController, PendingData>());
+	// Track last change time per controller
+	private static final Map<SegmentController, Long> lastChangeTimestamp = Collections.synchronizedMap(new WeakHashMap<SegmentController, Long>());
 	private final double armorHPValueMultiplier;
 	private final double armorHPLostPerDamageAbsorbed;
 	private final double baseArmorHPBleedthroughStart;
 	private final double minArmorHPBleedthroughStart;
-
-	private static final long UPDATE_FREQUENCY = 5000;
-	private static final long REGEN_FREQUENCY = 1000;
 	private final Short2IntArrayMap armorMap = new Short2IntArrayMap();
 	private double currentHP;
 	private double maxHP;
@@ -75,6 +81,118 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		return null;
 	}
 
+	/**
+	 * Enqueue an add operation for the given controller. This avoids doing expensive collection lookups
+	 * and allows batch processing once no more changes occur for a short time.
+	 */
+	public static void enqueueAdd(SegmentController controller, long index, short type) {
+		if(controller == null) {
+			return;
+		}
+		ArmorHPCollection collection = getCollection(controller);
+		synchronized(pending) {
+			PendingData pd = pending.get(controller);
+			if(pd == null) {
+				pd = new PendingData();
+				pending.put(controller, pd);
+			}
+			// If a full recalc is scheduled, don't record individual changes - recalc will rebuild from the raw collection
+			if(pd.recalcRequested) {
+				lastChangeTimestamp.put(controller, System.currentTimeMillis());
+				return;
+			}
+			// aggregate per-type delta
+			int prev = pd.typeDeltas.get(type);
+			pd.typeDeltas.put(type, prev + 1);
+			// Only record per-index changes if the live collection requires it (rawCollection == null)
+			if(collection != null) {
+				try {
+					Field rawField = ArmorHPCollection.class.getSuperclass().getDeclaredField("rawCollection");
+					rawField.setAccessible(true);
+					Object raw = rawField.get(collection);
+					if(raw == null && type != 0) {
+						pd.indexChanges.add(new Change(Change.Op.ADD, index, type));
+					}
+				} catch(Throwable t) {
+					// reflection fallback: if we can't access rawCollection, conservatively record the index change
+					if(type != 0) {
+						pd.indexChanges.add(new Change(Change.Op.ADD, index, type));
+					}
+				}
+			}
+			lastChangeTimestamp.put(controller, System.currentTimeMillis());
+		}
+	}
+
+	/**
+	 * Enqueue a remove operation for the given controller.
+	 */
+	public static void enqueueRemove(SegmentController controller, long index, short type) {
+		if(controller == null) {
+			return;
+		}
+		ArmorHPCollection collection = getCollection(controller);
+		synchronized(pending) {
+			PendingData pd = pending.get(controller);
+			if(pd == null) {
+				pd = new PendingData();
+				pending.put(controller, pd);
+			}
+			// If a full recalc is scheduled, don't record individual changes - recalc will rebuild from the raw collection
+			if(pd.recalcRequested) {
+				lastChangeTimestamp.put(controller, System.currentTimeMillis());
+				return;
+			}
+			// aggregate per-type delta
+			int prev = pd.typeDeltas.get(type);
+			pd.typeDeltas.put(type, prev - 1);
+			// Only record per-index changes if the live collection requires it (rawCollection == null)
+			if(collection != null) {
+				try {
+					Field rawField = ArmorHPCollection.class.getSuperclass().getDeclaredField("rawCollection");
+					rawField.setAccessible(true);
+					Object raw = rawField.get(collection);
+					if(raw == null && type != 0) {
+						pd.indexChanges.add(new Change(Change.Op.REMOVE, index, type));
+					}
+				} catch(Throwable t) {
+					// reflection fallback: if we can't access rawCollection, conservatively record the index change
+					if(type != 0) {
+						pd.indexChanges.add(new Change(Change.Op.REMOVE, index, type));
+					}
+				}
+			}
+			lastChangeTimestamp.put(controller, System.currentTimeMillis());
+		}
+	}
+
+	/**
+	 * Enqueue a full recalculation operation for the given controller.
+	 * This allows recalculation to be deferred and batched with other pending changes.
+	 */
+	public static void enqueueRecalc(SegmentController controller) {
+		if(controller == null) {
+			return;
+		}
+		synchronized(pending) {
+			PendingData pd = pending.get(controller);
+			if(pd == null) {
+				pd = new PendingData();
+				pending.put(controller, pd);
+			}
+			// If already requested, move on but update timestamp (debounce)
+			if(pd.recalcRequested) {
+				lastChangeTimestamp.put(controller, System.currentTimeMillis());
+				return;
+			}
+			// Mark recalc requested and prune any stored per-index changes (they are redundant)
+			pd.recalcRequested = true;
+			pd.indexChanges.clear();
+			pd.typeDeltas.clear(); // optional: since recalc will rebuild from raw, drop type deltas to save work
+			lastChangeTimestamp.put(controller, System.currentTimeMillis());
+		}
+	}
+
 	@Override
 	public int getMargin() {
 		return 0;
@@ -105,6 +223,13 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	@Override
 	public void update(Timer timer) {
+		// First, process any pending queued changes for this collection (if enough idle time passed)
+		try {
+			processPendingIfReady();
+		} catch(Exception e) {
+			CombatTweaks.getInstance().logException("Error processing pending armor changes", e);
+		}
+
 		if(currentHP < maxHP && maxHP > 0) {
 			flagCollectionChanged = false; //This should prevent people from just placing blocks to get their HP back
 			return;
@@ -112,7 +237,8 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 		if(System.currentTimeMillis() - lastUpdate >= UPDATE_FREQUENCY || flagCollectionChanged) {
 			if(maxHP <= 0 && hasAnyArmorBlocks() && getSegmentController().isFullyLoadedWithDock()) {
-				recalcHP();
+				// enqueue a recalculation instead of performing it immediately so multiple triggers are batched
+				enqueueRecalc(getSegmentController());
 			}
 			lastUpdate = System.currentTimeMillis();
 			regenEnabled = getSegmentController().getConfigManager().apply(StatusEffectType.ARMOR_HP_REGENERATION, 1.0f) > 1.0f;
@@ -120,6 +246,67 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		if(System.currentTimeMillis() - lastRegen >= REGEN_FREQUENCY && regenEnabled && currentHP < maxHP) {
 			lastRegen = System.currentTimeMillis();
 			doRegen();
+		}
+	}
+
+	private void processPendingIfReady() {
+		SegmentController sc = getSegmentController();
+		Long last = lastChangeTimestamp.get(sc);
+		if(last == null) {
+			return;
+		}
+		if(System.currentTimeMillis() - last < PROCESS_DELAY_MS) {
+			return; // still waiting for more changes
+		}
+
+		PendingData pd;
+		synchronized(pending) {
+			pd = pending.remove(sc);
+			lastChangeTimestamp.remove(sc);
+		}
+		if(pd == null) {
+			return;
+		}
+		ArmorHPCollection collection = getCollection(sc);
+
+		// Apply aggregated per-type deltas first
+		for(short type : pd.typeDeltas.keySet()) {
+			int delta = pd.typeDeltas.get(type);
+			if(delta == 0) {
+				continue;
+			}
+			setCount(type, getCount(type) + delta);
+			if(currentHP < maxHP) {
+				updateMaxOnly = true;
+			}
+			flagCollectionChanged = true;
+			flagDirty();
+		}
+
+		// If we have any index-level changes, apply them (only for cases where rawCollection == null)
+		if(!pd.indexChanges.isEmpty() && collection != null) {
+			for(Change c : pd.indexChanges) {
+				try {
+					if(collection.rawCollection == null && c.type != 0) {
+						if(c.op == Change.Op.ADD) {
+							collection.doAdd(c.index, c.type);
+						} else if(c.op == Change.Op.REMOVE) {
+							collection.doRemove(c.index);
+						}
+					}
+				} catch(Exception exception) {
+					CombatTweaks.getInstance().logException("Failed to apply index-level change to entity " + collection.getSegmentController().getName() + " (" + collection.getSegmentController().getUniqueIdentifier() + ")", exception);
+				}
+			}
+		}
+
+		// If a recalc was requested for this batch, do it now (after add/remove)
+		if(pd.recalcRequested) {
+			try {
+				recalcHP();
+			} catch(Exception exception) {
+				CombatTweaks.getInstance().logException("Failed to recalc armor HP for entity " + getSegmentController().getName() + " (" + getSegmentController().getUniqueIdentifier() + ")", exception);
+			}
 		}
 	}
 
@@ -139,10 +326,11 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	private int getCount(short type) {
-		if(!armorMap.containsKey(type)) {
+		return getSegmentController().getElementClassCountMap().get(type);
+		/*if(!armorMap.containsKey(type)) {
 			armorMap.put(type, 0);
 		}
-		return armorMap.get(type);
+		return armorMap.get(type);*/
 	}
 
 	private void setCount(short type, int count) {
@@ -174,7 +362,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	 * the current HP does not exceed the maximum HP and that neither value is negative.
 	 * </p>
 	 */
-	public void recalcHP() {
+	private void recalcHP() {
 		// Reset current and maximum HP to zero
 		currentHP = 0;
 		maxHP = 0;
@@ -211,9 +399,10 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		}
 
 		// Reset flags and update the last update time
-		flagCollectionChanged = false;
+		flagCollectionChanged = true;
 		updateMaxOnly = false;
 		lastUpdate = System.currentTimeMillis();
+		flagDirty();
 	}
 
 	public double getCurrentHP() {
@@ -239,33 +428,6 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			return 0;
 		} else {
 			return max(currentHP / maxHP, 0);
-		}
-	}
-
-	public void addBlock(long index, short type) {
-		setCount(type, getCount(type) + 1);
-		if(currentHP < maxHP) {
-			updateMaxOnly = true;
-		}
-		flagCollectionChanged = true;
-		try {
-			if(rawCollection == null && type != 0) {
-				doAdd(index, type);
-			}
-		} catch(Exception exception) { //I know this is terrible exception handling, but this whole process is shit and can randomly break, so it's better than crashing the game
-			CombatTweaks.getInstance().logException("Failed to add block of type " + type + " to entity " + getSegmentController().getName() + " (" + getSegmentController().getUniqueIdentifier() + ")", exception);
-		}
-	}
-
-	public void removeBlock(long index, short type) {
-		setCount(type, getCount(type) - 1);
-		flagCollectionChanged = true;
-		try {
-			if(rawCollection == null && type != 0) {
-				doRemove(index);
-			}
-		} catch(Exception exception) { //I know this is terrible exception handling, but this whole process is shit and can randomly break, so it's better than crashing the game
-			CombatTweaks.getInstance().logException("Failed to remove block of type " + type + " to entity " + getSegmentController().getName() + " (" + getSegmentController().getUniqueIdentifier() + ")", exception);
 		}
 	}
 
@@ -308,6 +470,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 		// How much damage the current AHP can actually absorb
 		double absorbCapacity = currentHP / armorHPLostPerDamageAbsorbed; // damage-per-AHP conversion
+
 		double actualAbsorbed = Math.min(desiredAbsorbed, absorbCapacity);
 
 		// Deduct HP based on actual absorbed damage
@@ -321,5 +484,31 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	private double getBleedthroughThreshold() {
 		return max(minArmorHPBleedthroughStart, getConfigManager().apply(StatusEffectType.ARMOR_HP_ABSORPTION, baseArmorHPBleedthroughStart));
+	}
+
+	// struct to hold aggregated pending changes per controller
+	private static class PendingData {
+		final Short2IntArrayMap typeDeltas = new Short2IntArrayMap(); // aggregated per-type net change
+		final List<Change> indexChanges = new ArrayList<>(); // only used when we need per-index doAdd/doRemove calls
+		boolean recalcRequested; // whether a full recalculation was requested
+	}
+
+	private static class Change {
+
+		final Op op;
+		final long index;
+		final short type;
+
+		Change(Op op, long index, short type) {
+			this.op = op;
+			this.index = index;
+			this.type = type;
+		}
+
+		enum Op {
+			ADD,
+			REMOVE,
+			RECALC
+		}
 	}
 }

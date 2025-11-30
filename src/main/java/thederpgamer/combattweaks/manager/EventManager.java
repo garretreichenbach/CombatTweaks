@@ -6,6 +6,9 @@ import api.listener.events.block.SegmentPieceAddByMetadataEvent;
 import api.listener.events.block.SegmentPieceAddEvent;
 import api.listener.events.block.SegmentPieceRemoveEvent;
 import api.listener.events.draw.RegisterWorldDrawersEvent;
+import api.listener.events.entity.SegmentControllerFullyLoadedEvent;
+import api.listener.events.entity.SegmentControllerInstantiateEvent;
+import api.listener.events.entity.SegmentControllerSpawnEvent;
 import api.listener.events.gui.HudCreateEvent;
 import api.listener.events.gui.MainWindowTabAddEvent;
 import api.listener.events.gui.TargetPanelCreateEvent;
@@ -89,15 +92,16 @@ public class EventManager {
 			public void onEvent(KeyPressEvent event) {
 				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
 					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
-						if((event.getKey() == Keyboard.KEY_ESCAPE || event.getKey() == ControlBindingData.getBinding("Tactical Map - Open").getBinding()) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
+						ControlBindingData tacticalBinding = ControlBindingData.getBinding("Tactical Map - Open");
+						int tacticalKey = tacticalBinding == null ? -99999 : tacticalBinding.getBinding();
+						if((event.getKey() == Keyboard.KEY_ESCAPE || event.getKey() == tacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
 							TacticalMapGUIDrawer.getInstance().toggleDraw();
 						} else {
 							try {
-								if(event.getKey() == ControlBindingData.getBinding("Tactical Map - Open").getBinding() && event.isKeyDown() && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
+								if(event.getKey() == tacticalKey && event.isKeyDown() && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
 									TacticalMapGUIDrawer.getInstance().toggleDraw();
 								}
 							} catch(Exception exception) {
-								exception.printStackTrace();
 								CombatTweaks.getInstance().logException("Error processing tactical map key press", exception);
 							}
 						}
@@ -122,6 +126,15 @@ public class EventManager {
 			}
 		}, instance);
 
+		StarLoader.registerListener(SegmentControllerFullyLoadedEvent.class, new Listener<SegmentControllerFullyLoadedEvent>() {
+			@Override
+			public void onEvent(SegmentControllerFullyLoadedEvent event) {
+				if(event.getController() instanceof ManagedUsableSegmentController<?>) {
+					ArmorHPCollection.enqueueRecalc(event.getController());
+				}
+			}
+		}, instance);
+
 		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<SegmentPieceAddByMetadataEvent>() {
 			@Override
 			public void onEvent(SegmentPieceAddByMetadataEvent event) {
@@ -131,12 +144,10 @@ public class EventManager {
 				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) {
 					return;
 				}
-				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController());
 				if(event.getSegment().getSegmentController().railController.isDocked()) {
-					manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController().railController.getRoot());
-				}
-				if(manager != null) {
-					manager.addBlock(event.getAbsIndex(), event.getType());
+					ArmorHPCollection.enqueueAdd(event.getSegment().getSegmentController().railController.getRoot(), event.getAbsIndex(), event.getType());
+				} else {
+					ArmorHPCollection.enqueueAdd(event.getSegment().getSegmentController(), event.getAbsIndex(), event.getType());
 				}
 			}
 		}, instance);
@@ -150,12 +161,10 @@ public class EventManager {
 				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) {
 					return;
 				}
-				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController());
 				if(event.getSegment().getSegmentController().railController.isDocked()) {
-					manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController().railController.getRoot());
-				}
-				if(manager != null) {
-					manager.addBlock(event.getAbsIndex(), event.getNewType());
+					ArmorHPCollection.enqueueAdd(event.getSegment().getSegmentController().railController.getRoot(), event.getAbsIndex(), event.getNewType());
+				} else {
+					ArmorHPCollection.enqueueAdd(event.getSegment().getSegmentController(), event.getAbsIndex(), event.getNewType());
 				}
 			}
 		}, instance);
@@ -166,12 +175,13 @@ public class EventManager {
 				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) {
 					return;
 				}
-				ArmorHPCollection manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController());
-				if(event.getSegment().getSegmentController().railController.isDocked()) {
-					manager = ArmorHPCollection.getCollection(event.getSegment().getSegmentController().railController.getRoot());
+				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) {
+					return;
 				}
-				if(manager != null) {
-					manager.removeBlock(ElementCollection.getIndex(new Vector3i(event.getX(), event.getY(), event.getZ())), event.getType());
+				if(event.getSegment().getSegmentController().railController.isDocked()) {
+					ArmorHPCollection.enqueueRemove(event.getSegment().getSegmentController().railController.getRoot(), ElementCollection.getIndex(new Vector3i(event.getX(), event.getY(), event.getZ())), event.getType());
+				} else {
+					ArmorHPCollection.enqueueRemove(event.getSegment().getSegmentController(), ElementCollection.getIndex(new Vector3i(event.getX(), event.getY(), event.getZ())), event.getType());
 				}
 			}
 		}, instance);
