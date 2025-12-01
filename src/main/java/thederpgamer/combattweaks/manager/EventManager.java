@@ -134,6 +134,23 @@ public class EventManager {
 			}
 		}, instance);
 
+		/*StarLoader.registerListener(StructureStatsCreateEvent.class, new Listener<GUIElementInstansiateEvent>() {
+			@Override
+			public void onEvent(GUIElementInstansiateEvent event) {
+				if(event.getGUIElement() instanceof AdvanceGUIGroup) {
+					try {
+						AdvancedBuldModeLeftContainer container = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getPlayerPanel().advancedBuildModeContainer;
+						Field field = container.advancedStrctureStats.getClass().getField("group");
+						field.setAccessible(true);
+						List<AdvancedGUIGroup> groups = (List<AdvancedGUIGroup>) field.get(container.advancedStrctureStats);
+						groups.add(new AdvancedStructureStatsArmor(container.advancedStrctureStats));
+					} catch(Exception exception) {
+						CombatTweaks.getInstance().logException("Error creating Advanced Structure Stats Armor group", exception);
+					}
+				}
+			}
+		}, instance);*/
+
 		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<SegmentPieceAddByMetadataEvent>() {
 			@Override
 			public void onEvent(SegmentPieceAddByMetadataEvent event) {

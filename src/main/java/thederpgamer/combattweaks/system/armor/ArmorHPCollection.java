@@ -1,6 +1,7 @@
 package thederpgamer.combattweaks.system.armor;
 
 import api.common.GameClient;
+import api.utils.game.SegmentControllerUtils;
 import it.unimi.dsi.fastutil.shorts.Short2IntArrayMap;
 import org.schema.common.util.StringTools;
 import org.schema.game.client.data.GameClientState;
@@ -8,10 +9,7 @@ import org.schema.game.client.view.gui.structurecontrol.GUIKeyValueEntry;
 import org.schema.game.client.view.gui.structurecontrol.ModuleValueEntry;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
-import org.schema.game.common.controller.elements.ElementCollectionManager;
-import org.schema.game.common.controller.elements.ManagerModule;
-import org.schema.game.common.controller.elements.ManagerModuleCollection;
-import org.schema.game.common.controller.elements.VoidElementManager;
+import org.schema.game.common.controller.elements.*;
 import org.schema.game.common.controller.rails.RailRelation;
 import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.element.ElementInformation;
@@ -60,11 +58,10 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			try {
 				ManagedUsableSegmentController<?> managed = (ManagedUsableSegmentController<?>) controller.railController.getRoot();
 				for(ManagerModule<?, ?, ?> module : managed.getManagerContainer().getModules()) {
-					if(module instanceof ManagerModuleCollection) {
-						for(Object cm : ((ManagerModuleCollection<?,?,?>) module).getCollectionManagers()) {
-							if(cm instanceof ArmorHPCollection) {
-								return (ArmorHPCollection) cm;
-							}
+					if(module instanceof ManagerModuleSingle) {
+						Object sm = ((ManagerModuleSingle<?,?,?>) module).getCollectionManager();
+						if(sm instanceof ArmorHPCollection) {
+							return (ArmorHPCollection) sm;
 						}
 					}
 				}
@@ -72,6 +69,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 				CombatTweaks.getInstance().logException("Error getting ArmorHPCollection for entity " + controller.getName() + " (" + controller.getUniqueIdentifier() + ")", exception);
 			}
 		}
+		System.out.println("ArmorHPCollection not found for entity " + controller);
 		return null;
 	}
 
@@ -207,7 +205,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 				armorCountCacheMap.put(type, 0);
 			}
 		}
-		getArmorCounts(getSegmentController(), armorCountCacheMap);
+		getArmorCounts(getSegmentController(), armorCountCacheMap, true);
 
 		for(short type : armorCountCacheMap.keySet()) {
 			int count = armorCountCacheMap.get(type);
@@ -241,14 +239,14 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		}
 	}
 
-	private static void getArmorCounts(SegmentController segmentController, Map<Short, Integer> armorCounts) {
+	private static void getArmorCounts(SegmentController controller, Map<Short, Integer> armorCounts, boolean includingDocked) {
 		ElementInformation[] infos = ElementKeyMap.getInfoArray();
 		for(ElementInformation info : infos) {
 			if(info != null && !info.isDeprecated() && info.isArmor()) {
 				short type = info.getId();
 				int count = 0;
 				try {
-					count = segmentController.getElementClassCountMap().get(type);
+					count = controller.getElementClassCountMap().get(type);
 				} catch(Exception exception) {
 					//ignore
 				}
@@ -257,12 +255,15 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 				}
 			}
 		}
+		if(!includingDocked) {
+			return;
+		}
 		// Recurse into docked entities
-		List<RailRelation> docked = segmentController.railController.next;
+		List<RailRelation> docked = controller.railController.next;
 		if(docked != null) {
 			for(RailRelation relation : docked) {
 				SegmentController dockedController = relation.docked.getSegmentController();
-				getArmorCounts(dockedController, armorCounts);
+				getArmorCounts(dockedController, armorCounts, true);
 			}
 		}
 	}
@@ -314,7 +315,11 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		return (float) Math.max(0.0, finalDamage);
 	}
 
-	private double getBleedThroughThreshold() {
+	public double getBleedThroughThreshold() {
 		return Math.max(Math.min(getConfigManager().apply(StatusEffectType.ARMOR_HP_ABSORPTION, 1.0f), baseArmorHPBleedThroughStart), 0.0f);
+	}
+
+	public boolean canBleedThrough() {
+		return getHPPercent() < getBleedThroughThreshold();
 	}
 }

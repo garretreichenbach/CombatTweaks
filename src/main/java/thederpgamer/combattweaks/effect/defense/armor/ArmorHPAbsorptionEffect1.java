@@ -5,7 +5,6 @@ import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.blockeffects.config.elements.ModifierStackType;
 import org.schema.game.common.data.blockeffects.config.parameter.StatusEffectFloatValue;
 import thederpgamer.combattweaks.effect.ConfigEffectGroup;
-import thederpgamer.combattweaks.manager.ConfigManager;
 
 public class ArmorHPAbsorptionEffect1 extends ConfigEffectGroup {
 
@@ -22,7 +21,7 @@ public class ArmorHPAbsorptionEffect1 extends ConfigEffectGroup {
 			configElement.stackType = ModifierStackType.ADD;
 			configElement.priority = 1;
 			StatusEffectFloatValue value = new StatusEffectFloatValue();
-			value.value.set((float) ConfigManager.getSystemConfig().getDouble("armor_hp_absorption_effect_1_sub"));
+//			value.value.set((float) ConfigManager.getSystemConfig().getDouble("armor_hp_absorption_effect_1_sub"));
 			configElement.value = value;
 			elements.add(configElement);
 		}
