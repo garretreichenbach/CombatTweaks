@@ -8,6 +8,7 @@ import api.listener.events.block.SegmentPieceRemoveEvent;
 import api.listener.events.draw.RegisterWorldDrawersEvent;
 import api.listener.events.gui.HudCreateEvent;
 import api.listener.events.gui.MainWindowTabAddEvent;
+import api.listener.events.gui.StructureStatsGroupsAddEvent;
 import api.listener.events.gui.TargetPanelCreateEvent;
 import api.listener.events.input.KeyPressEvent;
 import api.listener.events.register.ManagerContainerRegisterEvent;
@@ -28,6 +29,7 @@ import thederpgamer.combattweaks.CombatTweaks;
 import thederpgamer.combattweaks.data.ControlBindingData;
 import thederpgamer.combattweaks.effect.ConfigGroupRegistry;
 import thederpgamer.combattweaks.gui.controls.ControlBindingsScrollableList;
+import thederpgamer.combattweaks.gui.elements.AdvancedStructureStatsArmor;
 import thederpgamer.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
 import thederpgamer.combattweaks.listener.DamageReductionByArmorCalcListenerImpl;
 import thederpgamer.combattweaks.listener.ShipAIShootListenerImpl;
@@ -134,22 +136,12 @@ public class EventManager {
 			}
 		}, instance);
 
-		/*StarLoader.registerListener(StructureStatsCreateEvent.class, new Listener<GUIElementInstansiateEvent>() {
+		StarLoader.registerListener(StructureStatsGroupsAddEvent.class, new Listener<StructureStatsGroupsAddEvent>() {
 			@Override
-			public void onEvent(GUIElementInstansiateEvent event) {
-				if(event.getGUIElement() instanceof AdvanceGUIGroup) {
-					try {
-						AdvancedBuldModeLeftContainer container = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getPlayerPanel().advancedBuildModeContainer;
-						Field field = container.advancedStrctureStats.getClass().getField("group");
-						field.setAccessible(true);
-						List<AdvancedGUIGroup> groups = (List<AdvancedGUIGroup>) field.get(container.advancedStrctureStats);
-						groups.add(new AdvancedStructureStatsArmor(container.advancedStrctureStats));
-					} catch(Exception exception) {
-						CombatTweaks.getInstance().logException("Error creating Advanced Structure Stats Armor group", exception);
-					}
-				}
+			public void onEvent(StructureStatsGroupsAddEvent event) {
+				event.addGroup(new AdvancedStructureStatsArmor(event.getAdvancedStructureStats()));
 			}
-		}, instance);*/
+		}, instance);
 
 		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<SegmentPieceAddByMetadataEvent>() {
 			@Override
