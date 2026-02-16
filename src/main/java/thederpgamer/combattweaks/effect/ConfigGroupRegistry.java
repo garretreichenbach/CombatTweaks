@@ -3,9 +3,11 @@ package thederpgamer.combattweaks.effect;
 import it.unimi.dsi.fastutil.objects.ObjectArrayFIFOQueue;
 import org.schema.game.common.data.blockeffects.config.ConfigGroup;
 import thederpgamer.combattweaks.effect.defense.armor.ArmorHPAbsorptionEffect1;
+import thederpgamer.combattweaks.effect.defense.armor.ArmorHPAbsorptionEffect2;
 
 public enum ConfigGroupRegistry {
-	ARMOR_HP_ABSORPTION_1(new ArmorHPAbsorptionEffect1()),;
+	ARMOR_HP_ABSORPTION_1(new ArmorHPAbsorptionEffect1()),
+	ARMOR_HP_ABSORPTION_2(new ArmorHPAbsorptionEffect2());
 
 	public final ConfigEffectGroup configEffectGroup;
 

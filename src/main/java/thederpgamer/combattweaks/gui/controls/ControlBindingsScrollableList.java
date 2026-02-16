@@ -3,7 +3,6 @@ package thederpgamer.combattweaks.gui.controls;
 import api.mod.ModSkeleton;
 import api.mod.StarLoader;
 import api.mod.StarMod;
-import org.schema.game.common.controller.elements.power.reactor.chamber.ReactorChamberUnit;
 import org.schema.schine.common.language.Lng;
 import org.schema.schine.graphicsengine.core.MouseEvent;
 import org.schema.schine.graphicsengine.forms.font.FontLibrary;
@@ -14,7 +13,6 @@ import org.schema.schine.graphicsengine.forms.gui.GUIElementList;
 import org.schema.schine.graphicsengine.forms.gui.newgui.*;
 import org.schema.schine.input.InputState;
 import org.schema.schine.input.Keyboard;
-import org.schema.schine.input.KeyboardMappings;
 import thederpgamer.combattweaks.data.ControlBindingData;
 
 import java.util.Collection;

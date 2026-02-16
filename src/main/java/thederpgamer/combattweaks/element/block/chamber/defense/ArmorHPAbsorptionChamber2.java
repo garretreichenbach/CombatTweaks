@@ -2,13 +2,12 @@ package thederpgamer.combattweaks.element.block.chamber.defense;
 
 import api.utils.element.Blocks;
 import thederpgamer.combattweaks.effect.ConfigGroupRegistry;
-import thederpgamer.combattweaks.element.block.BlockRegistry;
 import thederpgamer.combattweaks.element.block.chamber.ChamberBlock;
 
-public class ArmorHPAbsorptionChamber1 extends ChamberBlock {
+public class ArmorHPAbsorptionChamber2 extends ChamberBlock {
 
-	public ArmorHPAbsorptionChamber1() {
-		super("Armor HP Absorption 1");
+	public ArmorHPAbsorptionChamber2() {
+		super("Armor HP Absorption 2");
 	}
 
 	@Override
@@ -19,16 +18,13 @@ public class ArmorHPAbsorptionChamber1 extends ChamberBlock {
 		blockInfo.setInRecipe(false);
 		blockInfo.reactorHp = 20;
 		blockInfo.shoppable = false;
-		blockInfo.chamberConfigGroupsLowerCase.add(ConfigGroupRegistry.ARMOR_HP_ABSORPTION_1.toString());
+		blockInfo.chamberConfigGroupsLowerCase.add(ConfigGroupRegistry.ARMOR_HP_ABSORPTION_2.toString());
 		blockInfo.chamberCapacity = 0.06f;
 	}
 
 	@Override
 	public void postInitData() {
 		blockInfo.chamberRoot = Blocks.DEFENCE_CHAMBER.getId();
-		blockInfo.chamberParent = Blocks.BASE_ARMOR_ENHANCEMENT.getId();
-		Blocks.BASE_ARMOR_ENHANCEMENT.getInfo().chamberChildren.add(getId());
-		setUpgrade((ChamberBlock) BlockRegistry.ARMOR_HP_ABSORPTION_CHAMBER_2.elementInterface);
 	}
 
 	@Override
