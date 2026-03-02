@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "videogoose.combattweaks.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "KeyboardMappingsMixin"
+  ],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

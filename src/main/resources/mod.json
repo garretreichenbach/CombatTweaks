@@ -3,7 +3,7 @@
   "author": "TheDerpGamer",
   "description": "Useful combat-related game additions.",
   "version": "2.1.0",
-  "starmade_version": "0.204.703",
+  "starmade_version": "0.205.1",
   "client_mod": false,
   "server_mod": false,
   "main_class": "thederpgamer.combattweaks.CombatTweaks",
@@ -13,5 +13,8 @@
   ],
   "core_mod": false,
   "requires_class_resize": false,
-  "hard_load_all_classes": false
+  "hard_load_all_classes": false,
+  "mixin_configs": [
+    "combattweaks.mixins.json"
+  ]
 }

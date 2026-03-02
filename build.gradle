@@ -3,9 +3,6 @@ plugins {
     id 'application'
 }
 
-sourceCompatibility = 1.7
-targetCompatibility = 1.7
-
 def starmadeDirectory = project.property("starmade_root")
 def modName = project.property("mod_name")
 group = project.property('mod_org_id')
@@ -15,12 +12,16 @@ mainClassName = group + modName
 repositories {
     mavenCentral()
     maven { url 'https://jitpack.io' }
+    maven { url 'https://repo.spongepowered.org/maven' }
 }
 
 dependencies {
     implementation(files(starmadeDirectory + "StarMade.jar"))
     implementation(fileTree(dir: (starmadeDirectory + "lib"), include: "*.jar"))
     implementation(fileTree(dir: 'lib', include: '*.jar'))
+
+    compileOnly 'org.spongepowered:mixin:0.8.5'
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 compileJava.options.encoding = 'UTF-8'
