@@ -16,8 +16,8 @@ repositories {
 }
 
 dependencies {
-    implementation(files(starmadeDirectory + "StarMade.jar"))
-    implementation(fileTree(dir: (starmadeDirectory + "lib"), include: "*.jar"))
+    compileOnly(files(starmadeDirectory + "StarMade.jar"))
+    compileOnly(fileTree(dir: (starmadeDirectory + "lib"), include: "*.jar"))
     implementation(fileTree(dir: 'lib', include: '*.jar'))
 
     compileOnly 'org.spongepowered:mixin:0.8.5'

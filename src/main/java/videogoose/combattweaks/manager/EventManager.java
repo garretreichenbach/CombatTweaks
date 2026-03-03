@@ -7,7 +7,6 @@ import api.listener.events.block.SegmentPieceAddEvent;
 import api.listener.events.block.SegmentPieceRemoveEvent;
 import api.listener.events.draw.RegisterWorldDrawersEvent;
 import api.listener.events.gui.HudCreateEvent;
-import api.listener.events.gui.MainWindowTabAddEvent;
 import api.listener.events.gui.StructureStatsGroupsAddEvent;
 import api.listener.events.gui.TargetPanelCreateEvent;
 import api.listener.events.input.KeyPressEvent;
@@ -15,28 +14,20 @@ import api.listener.events.register.ManagerContainerRegisterEvent;
 import api.listener.events.register.RegisterConfigGroupsEvent;
 import api.listener.fastevents.FastListenerCommon;
 import api.mod.StarLoader;
-import api.mod.StarMod;
 import api.utils.game.PlayerUtils;
 import org.lwjgl.input.Keyboard;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.element.ElementKeyMap;
-import org.schema.schine.common.language.Lng;
-import org.schema.schine.graphicsengine.forms.gui.newgui.GUIContentPane;
-import org.schema.schine.graphicsengine.forms.gui.newgui.GUITabbedContent;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.data.ControlBindingData;
 import videogoose.combattweaks.effect.ConfigGroupRegistry;
-import videogoose.combattweaks.gui.controls.ControlBindingsScrollableList;
 import videogoose.combattweaks.gui.elements.AdvancedStructureStatsArmor;
 import videogoose.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
 import videogoose.combattweaks.listener.DamageReductionByArmorCalcListenerImpl;
 import videogoose.combattweaks.listener.ShipAIShootListenerImpl;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
-
-import java.util.ArrayList;
-import java.util.Locale;
 
 public class EventManager {
 
@@ -47,32 +38,7 @@ public class EventManager {
 		FastListenerCommon.shipAIEntityAttemptToShootListeners.add(shipAIShootListener = new ShipAIShootListenerImpl());
 		FastListenerCommon.damageReductionByArmorCalcListeners.add(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl());
 
-		StarLoader.registerListener(MainWindowTabAddEvent.class, new Listener<MainWindowTabAddEvent>() {
-			@Override
-			public void onEvent(MainWindowTabAddEvent event) {
-				if(event.getTitleAsString().equals(Lng.str("KEYBOARD"))) { //Make sure we aren't adding a duplicate tab
-					GUIContentPane modControlsPane = event.getWindow().addTab(Lng.str("MOD CONTROLS"));
-					GUITabbedContent tabbedContent = new GUITabbedContent(modControlsPane.getState(), modControlsPane.getContent(0));
-					tabbedContent.activationInterface = event.getWindow().activeInterface;
-					tabbedContent.onInit();
-					tabbedContent.setPos(0, 2, 0);
-					modControlsPane.getContent(0).attach(tabbedContent);
-
-					for(StarMod mod : ControlBindingData.getBindings().keySet()) {
-						ArrayList<ControlBindingData> modBindings = ControlBindingData.getBindings().get(mod);
-						if(!modBindings.isEmpty()) {
-							GUIContentPane modTab = tabbedContent.addTab(mod.getName().toUpperCase(Locale.ENGLISH));
-							ControlBindingsScrollableList scrollableList = new ControlBindingsScrollableList(modTab.getState(), modTab.getContent(0), mod);
-							scrollableList.onInit();
-							modTab.getContent(0).attach(scrollableList);
-						}
-					}
-				}
-			}
-		}, instance);
-
 		StarLoader.registerListener(HudCreateEvent.class, new Listener<HudCreateEvent>() {
-
 			@Override
 			public void onEvent(HudCreateEvent event) {
 				HudManager.initializeHud(event);
@@ -93,11 +59,26 @@ public class EventManager {
 					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
 						ControlBindingData tacticalBinding = ControlBindingData.getBinding("Tactical Map - Open");
 						int tacticalKey = tacticalBinding == null ? -99999 : tacticalBinding.getBinding();
-						if((event.getKey() == Keyboard.KEY_ESCAPE || event.getKey() == tacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
+						// Determine if the event corresponds to the tactical key. Some layouts deliver character events with key==0 (NONE),
+						// so we accept the backslash character as a fallback.
+						boolean isTacticalKey = false;
+						try {
+							if(event.getKey() == tacticalKey) {
+								isTacticalKey = true;
+							} else if(event.getKey() == 0) {
+								char c = Keyboard.getEventCharacter();
+								if(c == '\\') {
+									isTacticalKey = true;
+								}
+							}
+						} catch(Throwable t) {
+							// Ignore, but do not block processing
+						}
+						if((event.getKey() == Keyboard.KEY_ESCAPE || isTacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
 							TacticalMapGUIDrawer.getInstance().toggleDraw();
 						} else {
 							try {
-								if(event.getKey() == tacticalKey && event.isKeyDown() && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
+								if(isTacticalKey && event.isKeyDown() && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
 									TacticalMapGUIDrawer.getInstance().toggleDraw();
 								}
 							} catch(Exception exception) {

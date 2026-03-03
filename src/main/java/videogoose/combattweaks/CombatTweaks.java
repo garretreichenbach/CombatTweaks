@@ -31,6 +31,7 @@ public class CombatTweaks extends StarMod {
 		instance = this;
 		ConfigManager.initialize(this);
 		EventManager.initialize(this);
+		registerBindings();
 		registerPackets();
 	}
 
@@ -38,7 +39,6 @@ public class CombatTweaks extends StarMod {
 	public void onClientCreated(ClientInitializeEvent clientInitializeEvent) {
 		super.onClientCreated(clientInitializeEvent);
 		initializeGlossary();
-		registerBindings();
 	}
 
 	@Override
@@ -63,8 +63,8 @@ public class CombatTweaks extends StarMod {
 
 	public void registerBindings() {
 		ControlBindingData.load(this);
-		ControlBindingData.registerBinding(instance, "Tactical Map - Open", "Opens/Closes the Tactical Map UI.", Keyboard.KEY_PERIOD);
-		ControlBindingData.registerBinding(instance, "Tactical Map - Toggle Movement Paths", "Toggles the display of movement paths on the Tactical Map.", Keyboard.KEY_LMENU);
+		ControlBindingData.registerBinding(instance, "Tactical Map - Open", "Opens/Closes the Tactical Map UI.", Keyboard.KEY_BACKSLASH);
+		ControlBindingData.registerBinding(instance, "Tactical Map - Toggle Movement Paths", "Toggles the display of movement paths on the Tactical Map.", Keyboard.KEY_GRAVE);
 		logInfo("Registered Bindings");
 	}
 }
