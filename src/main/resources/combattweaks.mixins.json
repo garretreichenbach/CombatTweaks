@@ -1,11 +1,11 @@
 {
   "required": true,
-  "minVersion": "0.8",
+  "minVersion": "0.8.7",
   "package": "videogoose.combattweaks.mixins",
   "compatibilityLevel": "JAVA_8",
+  "target": "@env(DEFAULT)",
   "mixins": [
-    "OptionsPanelMixin",
-    "HudMixin"
+    "KeyboardMappingsMixin"
   ],
   "client": [],
   "server": [],

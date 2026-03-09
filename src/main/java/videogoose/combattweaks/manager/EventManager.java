@@ -20,8 +20,8 @@ import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.element.ElementKeyMap;
+import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
-import videogoose.combattweaks.data.ControlBindingData;
 import videogoose.combattweaks.effect.ConfigGroupRegistry;
 import videogoose.combattweaks.gui.elements.AdvancedStructureStatsArmor;
 import videogoose.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
@@ -34,7 +34,20 @@ public class EventManager {
 	public static ShipAIShootListenerImpl shipAIShootListener;
 	public static DamageReductionByArmorCalcListenerImpl damageReductionByArmorCalcListener;
 
+	private static KeyboardMappings tacticalMapMapping;
+
+	private static KeyboardMappings getMappingFromName(String name) {
+		for(KeyboardMappings mapping : KeyboardMappings.values()) {
+			if(mapping.name().equals(name)) {
+				return mapping;
+			}
+		}
+		return null;
+	}
+
 	public static void initialize(CombatTweaks instance) {
+		tacticalMapMapping = getMappingFromName("OPEN_TACTICAL_MAP");
+
 		FastListenerCommon.shipAIEntityAttemptToShootListeners.add(shipAIShootListener = new ShipAIShootListenerImpl());
 		FastListenerCommon.damageReductionByArmorCalcListeners.add(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl());
 
@@ -57,8 +70,7 @@ public class EventManager {
 			public void onEvent(KeyPressEvent event) {
 				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
 					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
-						ControlBindingData tacticalBinding = ControlBindingData.getBinding("Tactical Map - Open");
-						int tacticalKey = tacticalBinding == null ? -99999 : tacticalBinding.getBinding();
+						int tacticalKey = tacticalMapMapping.get();
 						// Determine if the event corresponds to the tactical key. Some layouts deliver character events with key==0 (NONE),
 						// so we accept the backslash character as a fallback.
 						boolean isTacticalKey = false;

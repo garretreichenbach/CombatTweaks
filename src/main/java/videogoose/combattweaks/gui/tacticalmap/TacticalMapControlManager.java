@@ -15,7 +15,6 @@ import org.schema.schine.graphicsengine.core.MouseEvent;
 import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.input.KeyEventInterface;
 import org.schema.schine.input.KeyboardMappings;
-import videogoose.combattweaks.data.ControlBindingData;
 import videogoose.combattweaks.manager.ConfigManager;
 
 import javax.vecmath.Vector3f;
@@ -24,11 +23,22 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	private final TacticalMapGUIDrawer guiDrawer;
 	public float viewDistance;
 	private float defaultHotbarPos;
+	private final KeyboardMappings tacticalMapMapping;
 
 	public TacticalMapControlManager(TacticalMapGUIDrawer guiDrawer) {
 		super(GameClient.getClientState());
 		this.guiDrawer = guiDrawer;
 		viewDistance = (float) ConfigManager.getMainConfig().getDouble("tactical_map_view_distance");
+		tacticalMapMapping = getMappingFromName("OPEN_TACTICAL_MAP");
+	}
+
+	private KeyboardMappings getMappingFromName(String name) {
+		for(KeyboardMappings mapping : KeyboardMappings.values()) {
+			if(mapping.name().equals(name)) {
+				return mapping;
+			}
+		}
+		return null;
 	}
 
 	public static boolean isOpen() {
@@ -85,9 +95,9 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			if(Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) {
 				amount = 1000;
 			}
-			if(Keyboard.getEventKey() == ControlBindingData.getBinding("Tactical Map - Toggle Movement Paths").getBinding() && Keyboard.getEventKeyState()) {
+			/*if(Keyboard.getEventKey() == ControlBindingData.getBinding("Tactical Map - Toggle Movement Paths").getBinding() && Keyboard.getEventKeyState()) {
 				guiDrawer.drawMovementPaths = !TacticalMapGUIDrawer.getInstance().drawMovementPaths;
-			}
+			}*/
 			if(Keyboard.isKeyDown(Keyboard.KEY_X)) {
 				guiDrawer.camera.reset();
 			}

@@ -6,9 +6,7 @@ import api.mod.StarMod;
 import api.network.packets.PacketUtil;
 import glossar.GlossarCategory;
 import glossar.GlossarInit;
-import org.lwjgl.input.Keyboard;
 import org.schema.schine.resource.ResourceLoader;
-import videogoose.combattweaks.data.ControlBindingData;
 import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.manager.ConfigManager;
 import videogoose.combattweaks.manager.EventManager;
@@ -31,7 +29,6 @@ public class CombatTweaks extends StarMod {
 		instance = this;
 		ConfigManager.initialize(this);
 		EventManager.initialize(this);
-		registerBindings();
 		registerPackets();
 	}
 
@@ -59,12 +56,5 @@ public class CombatTweaks extends StarMod {
 		GlossarInit.initGlossar(this);
 		GlossarCategory combatTweaks = new GlossarCategory("Combat Tweaks");
 		GlossarInit.addCategory(combatTweaks);
-	}
-
-	public void registerBindings() {
-		ControlBindingData.load(this);
-		ControlBindingData.registerBinding(instance, "Tactical Map - Open", "Opens/Closes the Tactical Map UI.", Keyboard.KEY_BACKSLASH);
-		ControlBindingData.registerBinding(instance, "Tactical Map - Toggle Movement Paths", "Toggles the display of movement paths on the Tactical Map.", Keyboard.KEY_GRAVE);
-		logInfo("Registered Bindings");
 	}
 }

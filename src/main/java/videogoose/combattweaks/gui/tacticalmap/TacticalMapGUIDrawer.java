@@ -3,7 +3,6 @@ package videogoose.combattweaks.gui.tacticalmap;
 import api.common.GameClient;
 import api.common.GameCommon;
 import api.utils.draw.ModWorldDrawer;
-import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 import org.schema.common.util.ByteUtil;
 import org.schema.common.util.linAlg.Vector3i;
@@ -20,9 +19,8 @@ import org.schema.schine.graphicsengine.core.settings.ContextFilter;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.shader.ShaderLibrary;
-import org.schema.schine.input.InputType;
+import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
-import videogoose.combattweaks.data.ControlBindingData;
 
 import javax.vecmath.Vector3f;
 import java.util.ArrayList;
@@ -49,6 +47,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private boolean firstTime = true;
 	private TacticalMapSelectionOverlay selectionOverlay;
 	private long updateTimer;
+	private final KeyboardMappings tacticalMapMapping;
 
 	public TacticalMapGUIDrawer() {
 		instance = this;
@@ -60,6 +59,16 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		drawMap = new ConcurrentHashMap<>();
 		updateTimer = 150;
 		outlinesFBO = new FrameBufferObjects("SELECTED_ENTITY_DRAWER", GLFrame.getWidth(), GLFrame.getHeight());
+		tacticalMapMapping = getMappingFromName("OPEN_TACTICAL_MAP");
+	}
+
+	private KeyboardMappings getMappingFromName(String name) {
+		for(KeyboardMappings mapping : KeyboardMappings.values()) {
+			if(mapping.name().equals(name)) {
+				return mapping;
+			}
+		}
+		return null;
 	}
 
 	public static TacticalMapGUIDrawer getInstance() {
@@ -100,7 +109,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(!initialized) {
 			onInit();
 		}
-		if(!(GameClient.getClientState().getPlayerInputs().isEmpty() || GameClient.getClientState().getController().isChatActive() || GameClient.getClientState().isInAnyStructureBuildMode() || GameClient.getClientState().isInFlightMode()) || GameClient.getClientState().getWorldDrawer().getGameMapDrawer().isMapActive()) {
+		if(!shouldDraw()) {
 			toggleDraw = false;
 		} else {
 			toggleDraw = !toggleDraw;
@@ -166,8 +175,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(!initialized) {
 			onInit();
 		}
+
 		if(toggleDraw && Controller.getCamera() instanceof TacticalMapCamera) {
-			drawHudIndicators(true);
 			GlUtil.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
 			drawGrid(-sectorSize, sectorSize);
@@ -175,24 +184,18 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			GUIElement.enableOrthogonal();
 			selectionOverlay.draw();
 			GUIElement.disableOrthogonal();
-//			drawOutlines();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		} else {
-			drawHudIndicators(false);
 		}
+		drawHudIndicators();
 	}
 
-	private void drawHudIndicators(boolean active) {
-		if(active) {
-			hud.addHelper(InputType.KEYBOARD, ControlBindingData.getBinding("Tactical Map - Open").getBinding(), "Close Tactical Map UI", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, ControlBindingData.getBinding("Tactical Map - Toggle Movement Paths").getBinding(), "Toggle Path Drawing", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.MOUSE, 1, "Rotate camera (Hold)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.MOUSE, 0, "Select/Deselect entity (Friendly Entities)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_LSHIFT, "Multi-Select (Friendly Entities)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.MOUSE, 0, "Send Attack Order (Hostile or Neutral Entities)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-		} else {
-			hud.addHelper(InputType.KEYBOARD, ControlBindingData.getBinding("Tactical Map - Open").getBinding(), "Open Tactical Map UI", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+	public boolean shouldDraw() {
+		return (GameClient.getClientState().getPlayerInputs().isEmpty() || GameClient.getClientState().getController().isChatActive() || GameClient.getClientState().isInAnyStructureBuildMode() || GameClient.getClientState().isInFlightMode()) && !GameClient.getClientState().getWorldDrawer().getGameMapDrawer().isMapActive();
+	}
+
+	private void drawHudIndicators() {
+		if(shouldDraw()) {
+			hud.addHelper(tacticalMapMapping, "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
 	}
 
