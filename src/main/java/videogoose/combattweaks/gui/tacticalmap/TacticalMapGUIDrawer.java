@@ -292,10 +292,16 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 					indicator.updateEntityTransform();
 					Indication indication = indicator.getIndication(indicator.getSystem());
 					indicator.drawLabel(indication.getCurrentTransform());
-					indicator.drawTargetingPath(camera);
-					indicator.drawDefendPath(camera);
-					if(drawMovementPaths) {
-						indicator.drawMovementPath(camera);
+
+					// Only draw paths for selected or hovered entities
+					boolean isSelected = indicator.selected || selectedEntities.contains(indicator.getEntity());
+					boolean isHovered = indicator == hoveredIndicator;
+					if(isSelected || isHovered) {
+						indicator.drawTargetingPath(camera);
+						indicator.drawDefendPath(camera);
+						if(drawMovementPaths) {
+							indicator.drawMovementPath(camera);
+						}
 					}
 				} else {
 					// schedule for removal after iteration
@@ -307,6 +313,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 					toRemove.add(entry.getKey());
 				}
 			} catch(Exception exception) {
+				exception.printStackTrace();
 				CombatTweaks.getInstance().logException("Something went wrong while trying to draw entity indicators", exception);
 				if(toRemove == null) {
 					toRemove = new ArrayList<>();

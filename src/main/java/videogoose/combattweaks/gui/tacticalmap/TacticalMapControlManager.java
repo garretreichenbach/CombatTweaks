@@ -27,7 +27,12 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	private final KeyboardMappings tacticalMapMapping;
 
 	static final float ENTITY_CLICK_THRESHOLD_PX = 40.0f;
+	private static final long DOUBLE_CLICK_TIME_MS = 300;
+	private static final int DOUBLE_CLICK_DISTANCE_PX = 10;
 	private boolean wasLeftMouseDown;
+	private long lastClickTime = 0;
+	private int lastClickX = 0;
+	private int lastClickY = 0;
 
 	public TacticalMapControlManager(TacticalMapGUIDrawer guiDrawer) {
 		super(GameClient.getClientState());
@@ -150,9 +155,27 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				int mouseY = GLFrame.getHeight() - Mouse.getY();
 				TacticalMapEntityIndicator hit = guiDrawer.findIndicatorAtScreen(mouseX, mouseY, ENTITY_CLICK_THRESHOLD_PX);
 				if(hit != null) {
-					// A new TacticalMapRadial is created per-click so createMenu() always
-					// reflects the current target and selection state.
-					(new TacticalMapRadial(guiDrawer, hit)).activate();
+					// Check for double-click
+					long currentTime = System.currentTimeMillis();
+					int deltaX = mouseX - lastClickX;
+					int deltaY = mouseY - lastClickY;
+					int distanceSq = deltaX * deltaX + deltaY * deltaY;
+					boolean isDoubleClick = (currentTime - lastClickTime) < DOUBLE_CLICK_TIME_MS &&
+											distanceSq < (DOUBLE_CLICK_DISTANCE_PX * DOUBLE_CLICK_DISTANCE_PX);
+
+					if(isDoubleClick) {
+						// Focus camera on double-clicked entity
+						focusCameraOnEntity(hit.getEntity());
+						lastClickTime = 0; // Reset to prevent triple-click issues
+					} else {
+						// Single click: open radial menu
+						// A new TacticalMapRadial is created per-click so createMenu() always
+						// reflects the current target and selection state.
+						(new TacticalMapRadial(guiDrawer, hit)).activate();
+						lastClickTime = currentTime;
+						lastClickX = mouseX;
+						lastClickY = mouseY;
+					}
 				} else if(!hasModifierKeyPressed()) {
 					// Clear selection only if clicking empty space without control keys
 					guiDrawer.clearSelected();
@@ -206,5 +229,26 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) ||
 			   Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) ||
 			   Keyboard.isKeyDown(Keyboard.KEY_LMENU);
+	}
+
+	/**
+	 * Focus the tactical map camera on a specific entity.
+	 */
+	private void focusCameraOnEntity(SegmentController entity) {
+		if(entity != null && guiDrawer.camera != null) {
+			Vector3f entityPos = entity.getWorldTransform().origin;
+			Vector3f cameraPos = new Vector3f(guiDrawer.camera.getWorldTransform().origin);
+
+			// Move camera to look at the entity from a reasonable distance
+			// Keep the current camera distance and just change the target position
+			Vector3f forward = new Vector3f(guiDrawer.camera.getForward());
+			float distance = guiDrawer.selectedRange;
+
+			// Position camera behind entity (relative to current camera direction)
+			Vector3f newPos = new Vector3f(entityPos);
+			newPos.sub(new Vector3f(forward.x * distance, forward.y * distance, forward.z * distance));
+
+			guiDrawer.camera.getWorldTransform().origin.set(newPos);
+		}
 	}
 }
