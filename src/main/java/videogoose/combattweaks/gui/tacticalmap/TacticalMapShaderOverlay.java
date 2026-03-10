@@ -18,6 +18,7 @@ public class TacticalMapShaderOverlay {
 	private static final float OUTLINE_SCALE = 1.5f; // Scale factor for outline extrusion
 
 	private final ConcurrentHashMap<Integer, SegmentController> selectedShips = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, Object> selectedTurrets = new ConcurrentHashMap<>();
 	private Shader outlineShader;
 	private Shader tintShader;
 	private boolean initialized = false;
@@ -167,10 +168,43 @@ public class TacticalMapShaderOverlay {
 	}
 
 	/**
+	 * Add a turret to the selection overlay.
+	 */
+	public void addSelectedTurret(String turretId) {
+		if(turretId != null) {
+			selectedTurrets.put(turretId, true);
+		}
+	}
+
+	/**
+	 * Remove a turret from the selection overlay.
+	 */
+	public void removeSelectedTurret(String turretId) {
+		if(turretId != null) {
+			selectedTurrets.remove(turretId);
+		}
+	}
+
+	/**
+	 * Clear all selected turrets.
+	 */
+	public void clearSelectedTurrets() {
+		selectedTurrets.clear();
+	}
+
+	/**
+	 * Check if a turret is selected.
+	 */
+	public boolean isTurretSelected(String turretId) {
+		return turretId != null && selectedTurrets.containsKey(turretId);
+	}
+
+	/**
 	 * Clean up shader resources.
 	 */
 	public void cleanUp() {
 		selectedShips.clear();
+		selectedTurrets.clear();
 		// Shaders are managed by ResourceManager
 	}
 }

@@ -181,6 +181,15 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	}
 
 	public void drawLabel(Transform transform) {
+		drawLabel(transform, false);
+	}
+
+	public void drawLabel(Transform transform, boolean isTurretLabel) {
+		// Skip turret labels unless Ctrl is held
+		if(isTurretLabel && !org.lwjgl.input.Keyboard.isKeyDown(org.lwjgl.input.Keyboard.KEY_LCONTROL)) {
+			return;
+		}
+
 		if(labelOverlay == null) {
 			labelOverlay = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
 			// ensure overlay state matches current HUD state if necessary
@@ -255,7 +264,7 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
 				builder.append("???km\n");
 			} else {
-				builder.append(StringTools.formatDistance(getDistance())).append("\n");
+				builder.append(StringTools.formatDistance(getDistanceFromFocusedShip())).append("\n");
 			}
 		}
 		if(targetData != null) builder.append("Engaging ").append(targetData.getName());
@@ -277,6 +286,23 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		Vector3f currentPos = getCurrentEntityTransform().origin;
 		Vector3f entityPos = entity.getWorldTransform().origin;
 		return Math.abs(Vector3fTools.distance(currentPos.x, currentPos.y, currentPos.z, entityPos.x, entityPos.y, entityPos.z));
+	}
+
+	/**
+	 * Get distance from the focused/controlled ship to this entity.
+	 * If no ship is focused by the camera, falls back to player distance.
+	 * Used for displaying distance in labels on the tactical map.
+	 */
+	public float getDistanceFromFocusedShip() {
+		SegmentController focusedShip = getCurrentEntity();
+		if(focusedShip == null) {
+			// No focused ship - fall back to distance from player
+			return getDistance();
+		}
+
+		Vector3f focusedPos = focusedShip.getWorldTransform().origin;
+		Vector3f entityPos = entity.getWorldTransform().origin;
+		return Math.abs(Vector3fTools.distance(focusedPos.x, focusedPos.y, focusedPos.z, entityPos.x, entityPos.y, entityPos.z));
 	}
 
 	private Transform getCurrentEntityTransform() {

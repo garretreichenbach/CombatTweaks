@@ -110,23 +110,30 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			if(Keyboard.isKeyDown(Keyboard.KEY_X)) {
 				guiDrawer.camera.reset();
 			}
-			if(Keyboard.isKeyDown(KeyboardMappings.FORWARD.getMapping())) {
-				movement.add(new Vector3f(0, 0, amount));
+			if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) && Keyboard.getEventKey() == Keyboard.KEY_A && Keyboard.getEventKeyState()) {
+				guiDrawer.toggleSelectAllFriendly();
 			}
-			if(Keyboard.isKeyDown(KeyboardMappings.BACKWARDS.getMapping())) {
-				movement.add(new Vector3f(0, 0, -amount));
-			}
-			if(Keyboard.isKeyDown(KeyboardMappings.STRAFE_LEFT.getMapping())) {
-				movement.add(new Vector3f(amount, 0, 0));
-			}
-			if(Keyboard.isKeyDown(KeyboardMappings.STRAFE_RIGHT.getMapping())) {
-				movement.add(new Vector3f(-amount, 0, 0));
-			}
-			if(Keyboard.isKeyDown(KeyboardMappings.UP.getMapping())) {
-				movement.add(new Vector3f(0, amount, 0));
-			}
-			if(Keyboard.isKeyDown(KeyboardMappings.DOWN.getMapping())) {
-				movement.add(new Vector3f(0, -amount, 0));
+
+			// Skip camera movement when Ctrl is held to avoid conflicts with selection commands
+			if(!Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
+				if(Keyboard.isKeyDown(KeyboardMappings.FORWARD.getMapping())) {
+					movement.add(new Vector3f(0, 0, amount));
+				}
+				if(Keyboard.isKeyDown(KeyboardMappings.BACKWARDS.getMapping())) {
+					movement.add(new Vector3f(0, 0, -amount));
+				}
+				if(Keyboard.isKeyDown(KeyboardMappings.STRAFE_LEFT.getMapping())) {
+					movement.add(new Vector3f(amount, 0, 0));
+				}
+				if(Keyboard.isKeyDown(KeyboardMappings.STRAFE_RIGHT.getMapping())) {
+					movement.add(new Vector3f(-amount, 0, 0));
+				}
+				if(Keyboard.isKeyDown(KeyboardMappings.UP.getMapping())) {
+					movement.add(new Vector3f(0, amount, 0));
+				}
+				if(Keyboard.isKeyDown(KeyboardMappings.DOWN.getMapping())) {
+					movement.add(new Vector3f(0, -amount, 0));
+				}
 			}
 			movement.scale(timer.getDelta());
 			move(movement);
@@ -155,26 +162,32 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				int mouseY = GLFrame.getHeight() - Mouse.getY();
 				TacticalMapEntityIndicator hit = guiDrawer.findIndicatorAtScreen(mouseX, mouseY, ENTITY_CLICK_THRESHOLD_PX);
 				if(hit != null) {
-					// Check for double-click
-					long currentTime = System.currentTimeMillis();
-					int deltaX = mouseX - lastClickX;
-					int deltaY = mouseY - lastClickY;
-					int distanceSq = deltaX * deltaX + deltaY * deltaY;
-					boolean isDoubleClick = (currentTime - lastClickTime) < DOUBLE_CLICK_TIME_MS &&
-											distanceSq < (DOUBLE_CLICK_DISTANCE_PX * DOUBLE_CLICK_DISTANCE_PX);
-
-					if(isDoubleClick) {
-						// Focus camera on double-clicked entity
-						focusCameraOnEntity(hit.getEntity());
-						lastClickTime = 0; // Reset to prevent triple-click issues
+					// Check if Ctrl is held for turret targeting
+					if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
+						// Turret targeting mode
+						handleTurretTargeting(hit.getEntity());
 					} else {
-						// Single click: open radial menu
-						// A new TacticalMapRadial is created per-click so createMenu() always
-						// reflects the current target and selection state.
-						(new TacticalMapRadial(guiDrawer, hit)).activate();
-						lastClickTime = currentTime;
-						lastClickX = mouseX;
-						lastClickY = mouseY;
+						// Check for double-click
+						long currentTime = System.currentTimeMillis();
+						int deltaX = mouseX - lastClickX;
+						int deltaY = mouseY - lastClickY;
+						int distanceSq = deltaX * deltaX + deltaY * deltaY;
+						boolean isDoubleClick = (currentTime - lastClickTime) < DOUBLE_CLICK_TIME_MS &&
+												distanceSq < (DOUBLE_CLICK_DISTANCE_PX * DOUBLE_CLICK_DISTANCE_PX);
+
+						if(isDoubleClick) {
+							// Focus camera on double-clicked entity
+							focusCameraOnEntity(hit.getEntity());
+							lastClickTime = 0; // Reset to prevent triple-click issues
+						} else {
+							// Single click: open radial menu
+							// A new TacticalMapRadial is created per-click so createMenu() always
+							// reflects the current target and selection state.
+							(new TacticalMapRadial(guiDrawer, hit)).activate();
+							lastClickTime = currentTime;
+							lastClickX = mouseX;
+							lastClickY = mouseY;
+						}
 					}
 				} else if(!hasModifierKeyPressed()) {
 					// Clear selection only if clicking empty space without control keys
@@ -250,5 +263,20 @@ public class TacticalMapControlManager extends AbstractControlManager {
 
 			guiDrawer.camera.getWorldTransform().origin.set(newPos);
 		}
+	}
+
+	/**
+	 * Handle turret targeting mode when Ctrl+Click is used.
+	 * Creates a turret selection menu for targeting individual turrets.
+	 */
+	private void handleTurretTargeting(SegmentController entity) {
+		if(entity == null) {
+			return;
+		}
+
+		// For now, create a simple turret selector
+		// This will list available turrets/rails on the entity for targeting
+		TacticalMapTurretSelector turretSelector = new TacticalMapTurretSelector(guiDrawer, entity);
+		turretSelector.activate();
 	}
 }

@@ -3,6 +3,7 @@ package videogoose.combattweaks.gui.tacticalmap;
 import api.common.GameClient;
 import api.utils.draw.ModWorldDrawer;
 import org.lwjgl.BufferUtils;
+import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.util.glu.Project;
@@ -21,10 +22,15 @@ import org.schema.schine.graphicsengine.core.GlUtil;
 import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.graphicsengine.core.settings.ContextFilter;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
+import org.schema.schine.graphicsengine.forms.gui.GUIElement;
+import org.schema.schine.graphicsengine.shader.Shader;
+import org.schema.schine.input.InputType;
 import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
+import videogoose.combattweaks.manager.ResourceManager;
 
 import javax.vecmath.Vector3f;
+import javax.vecmath.Vector4f;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
@@ -34,28 +40,29 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
-	private static TacticalMapGUIDrawer instance;
 	private static final FloatBuffer GL_MODELVIEW = BufferUtils.createFloatBuffer(16);
 	private static final FloatBuffer GL_PROJECTION = BufferUtils.createFloatBuffer(16);
 	private static final IntBuffer GL_VIEWPORT = BufferUtils.createIntBuffer(16);
 	private static final FloatBuffer GL_WIN_COORDS = BufferUtils.createFloatBuffer(3);
+	private static TacticalMapGUIDrawer instance;
 	public final int sectorSize;
 	public final float maxDrawDistance;
 	public final Vector3f labelOffset;
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap;
 	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
-	private HudContextHelpManager hud;
+	public final ConcurrentHashMap<String, Object> selectedTurrets = new ConcurrentHashMap<>(); // Stores selected turrets by ID
+	private final KeyboardMappings tacticalMapMapping;
 	public float selectedRange;
 	public TacticalMapControlManager controlManager;
 	public TacticalMapCamera camera;
 	public boolean toggleDraw;
 	public boolean drawMovementPaths = true;
+	/** The indicator currently under the mouse cursor, updated each frame. May be null. */
+	public TacticalMapEntityIndicator hoveredIndicator;
+	private HudContextHelpManager hud;
 	private boolean initialized;
 	private boolean firstTime = true;
 	private long updateTimer;
-	private final KeyboardMappings tacticalMapMapping;
-	/** The indicator currently under the mouse cursor, updated each frame. May be null. */
-	public TacticalMapEntityIndicator hoveredIndicator;
 	private TacticalMapShaderOverlay shaderOverlay;
 
 	public TacticalMapGUIDrawer() {
@@ -70,6 +77,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		tacticalMapMapping = getMappingFromName("OPEN_TACTICAL_MAP");
 	}
 
+	public static TacticalMapGUIDrawer getInstance() {
+		return instance;
+	}
+
 	private KeyboardMappings getMappingFromName(String name) {
 		for(KeyboardMappings mapping : KeyboardMappings.values()) {
 			if(mapping.name().equals(name)) {
@@ -77,10 +88,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 		}
 		return null;
-	}
-
-	public static TacticalMapGUIDrawer getInstance() {
-		return instance;
 	}
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
@@ -112,6 +119,48 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	public void removeAll() {
 		clearSelected();
+	}
+
+	public void toggleSelectAllFriendly() {
+		clearSelected();
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(indicator.getEntity() != null && indicator.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId() && GameClient.getClientPlayerState().getFactionId() != 0 && !indicator.getEntity().isDocked()) {
+				if(isSelected(indicator.getEntity())) {
+					removeSelection(indicator);
+				} else {
+					addSelection(indicator);
+				}
+			}
+		}
+	}
+
+	public boolean isSelected(SegmentController entity) {
+		return selectedEntities.contains(entity);
+	}
+
+	public void addTurretSelection(String turretId) {
+		selectedTurrets.put(turretId, true);
+		if(shaderOverlay != null) {
+			shaderOverlay.addSelectedTurret(turretId);
+		}
+	}
+
+	public void removeTurretSelection(String turretId) {
+		selectedTurrets.remove(turretId);
+		if(shaderOverlay != null) {
+			shaderOverlay.removeSelectedTurret(turretId);
+		}
+	}
+
+	public void clearSelectedTurrets() {
+		selectedTurrets.clear();
+		if(shaderOverlay != null) {
+			shaderOverlay.clearSelectedTurrets();
+		}
+	}
+
+	public boolean isTurretSelected(String turretId) {
+		return selectedTurrets.containsKey(turretId);
 	}
 
 	public void toggleDraw() {
@@ -185,7 +234,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			computeScreenPositions();
 			updateHovered();
 			drawIndicators();
-			shaderOverlay.draw();
+			drawRingIndicators();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		}
 		drawHudIndicators();
@@ -197,7 +246,14 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	private void drawHudIndicators() {
 		if(shouldDraw()) {
-			hud.addHelper(tacticalMapMapping, "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(tacticalMapMapping, "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.IMPORTANT);
+		}
+		if(toggleDraw) {
+			hud.addHelper(InputType.MOUSE, 0, "Select | Double-click: Focus | Shift+Click: Multi-select", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_LCONTROL, "(Hold) Show Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Holding Left Control) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
 	}
 
@@ -417,5 +473,48 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		} else {
 			return null;
 		}
+	}
+
+	// Ring indicator constants
+	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f); // yellow
+	private static final Vector4f OUTLINE_HOVERED = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f); // white, slightly transparent
+	private static final float RING_RADIUS = 25.0f;
+
+	/**
+	 * Draws anti-aliased rings at the screen-projected position of each hovered or selected entity.
+	 * Uses a custom fragment shader to produce a smooth ring shape from a screen-space quad.
+	 */
+	private void drawRingIndicators() {
+		Shader shader = ResourceManager.loadShader("tactical_ring");
+		if(shader == null) return;
+
+		GUIElement.enableOrthogonal();
+		GlUtil.glEnable(GL11.GL_BLEND);
+		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		shader.loadWithoutUpdate();
+
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(!indicator.screenPosValid) continue;
+			boolean isSelected = indicator.selected || selectedEntities.contains(indicator.getEntity());
+			boolean isHovered = indicator == hoveredIndicator && !isSelected;
+			if(!isSelected && !isHovered) continue;
+
+			Vector4f color = isSelected ? OUTLINE_SELECTED : OUTLINE_HOVERED;
+			GlUtil.updateShaderVector4f(shader, "color", color);
+
+			float sx = indicator.screenX;
+			float sy = indicator.screenY;
+			GL11.glBegin(GL11.GL_QUADS);
+			GL11.glTexCoord2f(0, 0); GL11.glVertex2f(sx - RING_RADIUS, sy - RING_RADIUS);
+			GL11.glTexCoord2f(1, 0); GL11.glVertex2f(sx + RING_RADIUS, sy - RING_RADIUS);
+			GL11.glTexCoord2f(1, 1); GL11.glVertex2f(sx + RING_RADIUS, sy + RING_RADIUS);
+			GL11.glTexCoord2f(0, 1); GL11.glVertex2f(sx - RING_RADIUS, sy + RING_RADIUS);
+			GL11.glEnd();
+		}
+
+		shader.unloadWithoutExit();
+		GlUtil.glDisable(GL11.GL_BLEND);
+		GUIElement.disableOrthogonal();
 	}
 }

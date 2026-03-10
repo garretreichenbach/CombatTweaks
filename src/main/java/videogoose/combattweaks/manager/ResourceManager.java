@@ -24,7 +24,9 @@ public class ResourceManager {
 					instance.logException("Failed to load sprite: " + spriteName, exception);
 				}
 			}
+
 			// Load selection shaders
+			loadShader(instance, "tactical_ring");
 			loadShader(instance, "selection_outline");
 			loadShader(instance, "selection_tint");
 		});
@@ -32,9 +34,7 @@ public class ResourceManager {
 
 	private static void loadShader(CombatTweaks instance, String shaderName) {
 		try {
-			Shader shader = Shader.newModShader(instance.getSkeleton(), shaderName,
-				instance.getClass().getResourceAsStream("/shaders/" + shaderName + ".vert"),
-				instance.getClass().getResourceAsStream("/shaders/" + shaderName + ".frag"));
+			Shader shader = Shader.newModShader(instance.getSkeleton(), shaderName, instance.getClass().getResourceAsStream("/shaders/" + shaderName + ".vert"), instance.getClass().getResourceAsStream("/shaders/" + shaderName + ".frag"));
 			shaderMap.put(shaderName, shader);
 		} catch(Exception exception) {
 			instance.logException("Failed to load shader: " + shaderName, exception);

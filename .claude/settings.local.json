@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./gradlew build:*)"
+      "Bash(./gradlew build:*)",
+      "Bash(ls -la src/main/resources/shaders/tactical_ring* 2>&1)"
     ]
   }
 }
