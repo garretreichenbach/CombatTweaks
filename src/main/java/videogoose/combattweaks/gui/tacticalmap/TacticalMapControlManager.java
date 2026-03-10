@@ -153,7 +153,8 @@ public class TacticalMapControlManager extends AbstractControlManager {
 					// A new TacticalMapRadial is created per-click so createMenu() always
 					// reflects the current target and selection state.
 					(new TacticalMapRadial(guiDrawer, hit)).activate();
-				} else {
+				} else if(!hasModifierKeyPressed()) {
+					// Clear selection only if clicking empty space without control keys
 					guiDrawer.clearSelected();
 				}
 			}
@@ -199,5 +200,11 @@ public class TacticalMapControlManager extends AbstractControlManager {
 
 	private PlayerPanel getPlayerPanel() {
 		return GameClient.getClientState().getWorldDrawer().getGuiDrawer().getPlayerPanel();
+	}
+
+	private boolean hasModifierKeyPressed() {
+		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) ||
+			   Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) ||
+			   Keyboard.isKeyDown(Keyboard.KEY_LMENU);
 	}
 }

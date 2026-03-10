@@ -555,9 +555,6 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	public void onUnSelect() {
 		drawIndication = true;
 		selected = false;
-		if(Mouse.getEventButtonState()) {
-
-		}
 	}
 
 	/**

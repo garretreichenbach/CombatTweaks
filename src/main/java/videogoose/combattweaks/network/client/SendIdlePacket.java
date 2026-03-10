@@ -11,30 +11,37 @@ import videogoose.combattweaks.utils.AIUtils;
 import java.io.IOException;
 
 public class SendIdlePacket extends Packet {
-	private Ship ship;
 
-	public SendIdlePacket() {}
+	private int shipId;
+
+	public SendIdlePacket() {
+	}
 
 	public SendIdlePacket(Ship ship) {
-		this.ship = ship;
+		shipId = ship.getId();
+	}
+
+	public SendIdlePacket(int shipId) {
+		this.shipId = shipId;
 	}
 
 	@Override
 	public void readPacketData(PacketReadBuffer buf) throws IOException {
-		ship = (Ship) buf.readSendable();
+		shipId = buf.readInt();
 	}
 
 	@Override
 	public void writePacketData(PacketWriteBuffer buf) throws IOException {
-		buf.writeSendable(ship);
+		buf.writeInt(shipId);
 	}
 
 	@Override
-	public void processPacketOnClient() {}
+	public void processPacketOnClient() {
+	}
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-		DefenseManager.getInstance().removeDefense(ship.getId());
-		AIUtils.clearTarget(ship);
+		DefenseManager.getInstance().removeDefense(shipId);
+		AIUtils.clearTarget(shipId);
 	}
 }

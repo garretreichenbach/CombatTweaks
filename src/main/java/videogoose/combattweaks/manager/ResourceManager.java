@@ -13,7 +13,7 @@ public class ResourceManager {
 
 	private static final String[] spriteNames = {"tactical-map-indicators"};
 	private static final HashMap<String, Sprite> spriteMap = new HashMap<>();
-	private static Shader tacRingShader;
+	private static final HashMap<String, Shader> shaderMap = new HashMap<>();
 
 	public static void loadResources(CombatTweaks instance) {
 		StarLoaderTexture.runOnGraphicsThread(() -> {
@@ -24,19 +24,28 @@ public class ResourceManager {
 					instance.logException("Failed to load sprite: " + spriteName, exception);
 				}
 			}
-			try {
-				tacRingShader = Shader.newModShader(instance.getSkeleton(), "TacticalRingShader", instance.getClass().getResourceAsStream("/shaders/tactical_ring.vert"), instance.getClass().getResourceAsStream("/shaders/tactical_ring.frag"));
-			} catch(Exception exception) {
-				instance.logException("Failed to load tactical ring shader", exception);
-			}
+			// Load selection shaders
+			loadShader(instance, "selection_outline");
+			loadShader(instance, "selection_tint");
 		});
+	}
+
+	private static void loadShader(CombatTweaks instance, String shaderName) {
+		try {
+			Shader shader = Shader.newModShader(instance.getSkeleton(), shaderName,
+				instance.getClass().getResourceAsStream("/shaders/" + shaderName + ".vert"),
+				instance.getClass().getResourceAsStream("/shaders/" + shaderName + ".frag"));
+			shaderMap.put(shaderName, shader);
+		} catch(Exception exception) {
+			instance.logException("Failed to load shader: " + shaderName, exception);
+		}
 	}
 
 	public static Sprite getSprite(String name) {
 		return spriteMap.get(name);
 	}
 
-	public static Shader getTacRingShader() {
-		return tacRingShader;
+	public static Shader loadShader(String shaderName) {
+		return shaderMap.get(shaderName);
 	}
 }

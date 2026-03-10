@@ -11,27 +11,32 @@ import videogoose.combattweaks.utils.AIUtils;
 import java.io.IOException;
 
 public class SendAttackPacket extends Packet {
-	private Ship entity;
-	private SegmentController target;
+	private int entityId;
+	private int targetId;
 
 	public SendAttackPacket() {
 	}
 
 	public SendAttackPacket(Ship entity, SegmentController target) {
-		this.entity = entity;
-		this.target = target;
+		entityId = entity.getId();
+		targetId = target.getId();
+	}
+
+	public SendAttackPacket(int entityId, int targetId) {
+		this.entityId = entityId;
+		this.targetId = targetId;
 	}
 
 	@Override
 	public void readPacketData(PacketReadBuffer packetReadBuffer) throws IOException {
-		entity = (Ship) packetReadBuffer.readSendable();
-		target = (SegmentController) packetReadBuffer.readSendable();
+		entityId = packetReadBuffer.readInt();
+		targetId = packetReadBuffer.readInt();
 	}
 
 	@Override
 	public void writePacketData(PacketWriteBuffer packetWriteBuffer) throws IOException {
-		packetWriteBuffer.writeSendable(entity);
-		packetWriteBuffer.writeSendable(target);
+		packetWriteBuffer.writeInt(entityId);
+		packetWriteBuffer.writeInt(targetId);
 	}
 
 	@Override
@@ -40,6 +45,6 @@ public class SendAttackPacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-		AIUtils.setAttackTarget(entity, target);
+		AIUtils.setAttackTarget(entityId, targetId);
 	}
 }

@@ -32,7 +32,7 @@ public class TacticalMapRadial extends RadialMenuDialog {
 	public RadialMenu createMenu(RadialMenuDialog radialMenuDialog) {
 		RadialMenu menu = new RadialMenu(getState(), "TacticalMapRadial", radialMenuDialog, 800, 600, 130, FontLibrary.getBOLDBlender20());
 
-		boolean isOwnFaction = target.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId();
+		boolean isOwnFaction = target.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId() && GameClient.getClientPlayerState().getFactionId() != 0;
 		boolean isAlly = GameCommon.getGameState().getFactionManager().isFriend(target.getEntity().getFactionId(), GameClient.getClientPlayerState().getFactionId());
 
 		if(isOwnFaction) {

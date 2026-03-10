@@ -15,15 +15,16 @@ import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.Camera;
-import org.schema.schine.graphicsengine.core.*;
+import org.schema.schine.graphicsengine.core.Controller;
+import org.schema.schine.graphicsengine.core.GLFrame;
+import org.schema.schine.graphicsengine.core.GlUtil;
+import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.graphicsengine.core.settings.ContextFilter;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
-import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
 
 import javax.vecmath.Vector3f;
-import javax.vecmath.Vector4f;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
@@ -51,11 +52,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public boolean drawMovementPaths = true;
 	private boolean initialized;
 	private boolean firstTime = true;
-	private TacticalMapSelectionOverlay selectionOverlay;
 	private long updateTimer;
 	private final KeyboardMappings tacticalMapMapping;
 	/** The indicator currently under the mouse cursor, updated each frame. May be null. */
 	public TacticalMapEntityIndicator hoveredIndicator;
+	private TacticalMapShaderOverlay shaderOverlay;
 
 	public TacticalMapGUIDrawer() {
 		instance = this;
@@ -84,21 +85,15 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
 		selectedEntities.add(indicator.getEntity());
-		if(selectionOverlay != null) {
-			selectionOverlay.addSelected(indicator.getEntity());
+		if(shaderOverlay != null) {
+			shaderOverlay.addSelected(indicator.getEntity());
 		}
 	}
 
 	public void removeSelection(TacticalMapEntityIndicator indicator) {
 		selectedEntities.remove(indicator.getEntity());
-		if(selectionOverlay != null) {
-			selectionOverlay.removeSelected(indicator.getEntity());
-		}
-	}
-
-	public void removeAll() {
-		if(selectionOverlay != null) {
-			selectionOverlay.removeAll();
+		if(shaderOverlay != null) {
+			shaderOverlay.removeSelected(indicator.getEntity());
 		}
 	}
 
@@ -110,6 +105,13 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				indicator.onUnSelect();
 			}
 		}
+		if(shaderOverlay != null) {
+			shaderOverlay.clearSelected();
+		}
+	}
+
+	public void removeAll() {
+		clearSelected();
 	}
 
 	public void toggleDraw() {
@@ -148,12 +150,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 	}
 
-	public void recreateSelectionOverlay() {
-		(selectionOverlay = new TacticalMapSelectionOverlay(controlManager.getState())).onInit();
-		selectionOverlay.orientate(GUIElement.ORIENTATION_LEFT | GUIElement.ORIENTATION_VERTICAL_MIDDLE);
-		selectionOverlay.getPos().x += 10.0f;
-	}
-
 	@Override
 	public void update(Timer timer) {
 		if(!toggleDraw || !(Controller.getCamera() instanceof TacticalMapCamera)) {
@@ -168,9 +164,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			for(SimpleTransformableSendableObject<?> object : GameClient.getClientState().getCurrentSectorEntities().values()) {
 				if(object instanceof SegmentController && !((SegmentController) object).isDocked() && !drawMap.containsKey(object.getId())) {
 					drawMap.put(object.getId(), new TacticalMapEntityIndicator((SegmentController) object));
-					if(selectionOverlay != null) {
-						selectionOverlay.addEntity((SegmentController) object);
-					}
 				}
 			}
 			updateTimer = 150;
@@ -192,10 +185,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			computeScreenPositions();
 			updateHovered();
 			drawIndicators();
-			drawRingIndicators();
-			GUIElement.enableOrthogonal();
-			selectionOverlay.draw();
-			GUIElement.disableOrthogonal();
+			shaderOverlay.draw();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		}
 		drawHudIndicators();
@@ -350,7 +340,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		camera = new TacticalMapCamera();
 		camera.reset();
 		camera.alwaysAllowWheelZoom = true;
-		recreateSelectionOverlay();
+		shaderOverlay = new TacticalMapShaderOverlay();
+		shaderOverlay.onInit();
 		// create FBO now that we're initialising within a (likely) GL context
 		hud = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
 		initialized = true;
@@ -412,49 +403,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		hoveredIndicator = findIndicatorAtScreen(mouseX, mouseY, TacticalMapControlManager.ENTITY_CLICK_THRESHOLD_PX);
 	}
 
-	// Ring indicator constants
-	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f); // yellow
-	private static final Vector4f OUTLINE_HOVERED  = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f); // white, slightly transparent
-	private static final float RING_RADIUS = 25.0f;
-
-	/**
-	 * Draws anti-aliased rings at the screen-projected position of each hovered or selected entity.
-	 * Uses a custom fragment shader to produce a smooth ring shape from a screen-space quad.
-	 * This replaces the FBO-based outline approach which required a depth texture.
-	 */
-	private void drawRingIndicators() {
-		org.schema.schine.graphicsengine.shader.Shader shader = videogoose.combattweaks.manager.ResourceManager.getTacRingShader();
-		if(shader == null) return;
-
-		GUIElement.enableOrthogonal();
-		GlUtil.glEnable(GL11.GL_BLEND);
-		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
-		shader.loadWithoutUpdate();
-
-		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(!indicator.screenPosValid) continue;
-			boolean isSelected = indicator.selected;
-			boolean isHovered = indicator == hoveredIndicator && !isSelected;
-			if(!isSelected && !isHovered) continue;
-
-			Vector4f color = isSelected ? OUTLINE_SELECTED : OUTLINE_HOVERED;
-			GlUtil.updateShaderVector4f(shader, "color", color);
-
-			float sx = indicator.screenX;
-			float sy = indicator.screenY;
-			GL11.glBegin(GL11.GL_QUADS);
-			GL11.glTexCoord2f(0, 0); GL11.glVertex2f(sx - RING_RADIUS, sy - RING_RADIUS);
-			GL11.glTexCoord2f(1, 0); GL11.glVertex2f(sx + RING_RADIUS, sy - RING_RADIUS);
-			GL11.glTexCoord2f(1, 1); GL11.glVertex2f(sx + RING_RADIUS, sy + RING_RADIUS);
-			GL11.glTexCoord2f(0, 1); GL11.glVertex2f(sx - RING_RADIUS, sy + RING_RADIUS);
-			GL11.glEnd();
-		}
-
-		shader.unloadWithoutExit();
-		GlUtil.glDisable(GL11.GL_BLEND);
-		GUIElement.disableOrthogonal();
-	}
 
 	private SegmentController getCurrentEntity() {
 		if(GameClient.getCurrentControl() != null && GameClient.getCurrentControl() instanceof SegmentController) {

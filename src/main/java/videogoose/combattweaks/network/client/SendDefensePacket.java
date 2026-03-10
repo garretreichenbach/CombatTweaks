@@ -12,27 +12,34 @@ import videogoose.combattweaks.utils.AIUtils;
 import java.io.IOException;
 
 public class SendDefensePacket extends Packet {
-	private Ship defender;
-	private SegmentController defendTarget;
+
+	private int defenderId;
+	private int targetId;
 
 	public SendDefensePacket() {
 	}
 
-	public SendDefensePacket(Ship defender, SegmentController defendTarget) {
-		this.defender = defender;
-		this.defendTarget = defendTarget;
+	public SendDefensePacket(Ship defender, SegmentController target) {
+		defenderId = defender.getId();
+		targetId = target.getId();
 	}
+
+	public SendDefensePacket(int defenderId, int targetId) {
+		this.defenderId = defenderId;
+		this.targetId = targetId;
+	}
+
 
 	@Override
 	public void readPacketData(PacketReadBuffer packetReadBuffer) throws IOException {
-		defender = (Ship) packetReadBuffer.readSendable();
-		defendTarget = (SegmentController) packetReadBuffer.readSendable();
+		defenderId = packetReadBuffer.readInt();
+		targetId = packetReadBuffer.readInt();
 	}
 
 	@Override
 	public void writePacketData(PacketWriteBuffer packetWriteBuffer) throws IOException {
-		packetWriteBuffer.writeSendable(defender);
-		packetWriteBuffer.writeSendable(defendTarget);
+		packetWriteBuffer.writeInt(defenderId);
+		packetWriteBuffer.writeInt(targetId);
 	}
 
 	@Override
@@ -41,7 +48,7 @@ public class SendDefensePacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-		AIUtils.clearTarget(defender);
-		DefenseManager.getInstance().addDefense(defender.getId(), defendTarget.getId());
+		AIUtils.clearTarget(defenderId);
+		DefenseManager.getInstance().addDefense(defenderId, targetId);
 	}
 }
