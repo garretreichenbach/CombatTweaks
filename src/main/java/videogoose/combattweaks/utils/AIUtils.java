@@ -15,9 +15,20 @@ public class AIUtils {
 
 	private static final Vector3f targetVelocityTmp = new Vector3f();
 
-	public static void setTarget(ManagedUsableSegmentController<?> from, SegmentController to) {
+	public static void clearTarget(ManagedUsableSegmentController<?> ship) {
+		try {
+			((TargetProgram<?>) ship.getAiConfiguration().getAiEntityState().getCurrentProgram()).setTarget(null);
+		} catch(Exception ignored) {}
+		if(ship.getNetworkObject() instanceof NetworkShip) {
+			((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
+			((NetworkShip) ship.getNetworkObject()).targetPosition.set(ship.getWorldTransform().origin);
+		}
+	}
+
+	public static void setAttackTarget(ManagedUsableSegmentController<?> from, SegmentController to) {
 		((AIConfiguationElements<Boolean>) from.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
 		((TargetProgram<?>) from.getAiConfiguration().getAiEntityState().getCurrentProgram()).setTarget(to);
+		from.getAiConfiguration().getAiEntityState().getCurrentProgram().suspend(false);
 
 		if(from.getNetworkObject() instanceof NetworkShip) {
 			to.getPhysicsObject().getLinearVelocity(targetVelocityTmp);
@@ -31,7 +42,7 @@ public class AIUtils {
 
 		for(RailRelation child : from.railController.next) {
 			if(child.docked.getSegmentController() instanceof ManagedUsableSegmentController) {
-				setTarget((ManagedUsableSegmentController<?>) child.docked.getSegmentController(), to);
+				setAttackTarget((ManagedUsableSegmentController<?>) child.docked.getSegmentController(), to);
 			}
 		}
 	}

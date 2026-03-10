@@ -11,6 +11,7 @@ import org.schema.game.client.view.gui.shiphud.newhud.BottomBarBuild;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.CameraMouseState;
+import org.schema.schine.graphicsengine.core.GLFrame;
 import org.schema.schine.graphicsengine.core.MouseEvent;
 import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.input.KeyEventInterface;
@@ -24,6 +25,9 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	public float viewDistance;
 	private float defaultHotbarPos;
 	private final KeyboardMappings tacticalMapMapping;
+
+	static final float ENTITY_CLICK_THRESHOLD_PX = 40.0f;
+	private boolean wasLeftMouseDown;
 
 	public TacticalMapControlManager(TacticalMapGUIDrawer guiDrawer) {
 		super(GameClient.getClientState());
@@ -71,7 +75,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				defaultHotbarPos = ((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y;
 			}
 			//Shitty hack to hide the build hotbar
-			((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y = -1000;
+			((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y = -10000;
 		} else {
 			((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y = defaultHotbarPos;
 		}
@@ -136,6 +140,24 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				}
 				guiDrawer.selectedRange = newRange;
 			}
+
+			// Entity click detection — only fires on the left-mouse falling edge,
+			// and only when the camera-rotate button (RMB) isn't held.
+			boolean isLeftDown = Mouse.isButtonDown(0);
+			if(isLeftDown && !wasLeftMouseDown && !Mouse.isButtonDown(1) && getState().getPlayerInputs().isEmpty()) {
+				// LWJGL gives Y from the bottom; flip to match screen-top convention
+				int mouseX = Mouse.getX();
+				int mouseY = GLFrame.getHeight() - Mouse.getY();
+				TacticalMapEntityIndicator hit = guiDrawer.findIndicatorAtScreen(mouseX, mouseY, ENTITY_CLICK_THRESHOLD_PX);
+				if(hit != null) {
+					// A new TacticalMapRadial is created per-click so createMenu() always
+					// reflects the current target and selection state.
+					(new TacticalMapRadial(guiDrawer, hit)).activate();
+				} else {
+					guiDrawer.clearSelected();
+				}
+			}
+			wasLeftMouseDown = isLeftDown;
 		}
 	}
 

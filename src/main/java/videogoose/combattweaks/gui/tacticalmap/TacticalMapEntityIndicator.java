@@ -34,7 +34,6 @@ import org.schema.schine.graphicsengine.core.GlUtil;
 import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.PositionableSubColorSprite;
-import org.schema.schine.graphicsengine.forms.PositionableSubSprite;
 import org.schema.schine.graphicsengine.forms.SelectableSprite;
 import org.schema.schine.graphicsengine.forms.Sprite;
 import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
@@ -59,6 +58,7 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	private static final Vector4f TINT_NORMAL = new Vector4f(1.0f, 1.0f, 1.0f, 1.0f);
 	private static final Vector4f PATH_RED = new Vector4f(Color.RED.getColorComponents(new float[4]));
 	private static final Vector4f PATH_CYAN = new Vector4f(Color.CYAN.getColorComponents(new float[4]));
+	private static final Vector4f PATH_GREEN = new Vector4f(Color.GREEN.getColorComponents(new float[4]));
 	public final Transform entityTransform = new Transform();
 	private final SegmentController entity;
 	// Reusable temporaries to reduce per-frame allocations
@@ -73,7 +73,11 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 	public Sprite sprite;
 	public GUITextOverlay labelOverlay;
 	public boolean selected;
+	// Screen-space position cached each draw frame for click hit-testing
+	public float screenX, screenY;
+	public boolean screenPosValid = false;
 	private SegmentController targetData;
+	private SegmentController defendTarget;
 	private Indication indication;
 	private boolean drawIndication;
 	private float selectDepth;
@@ -89,26 +93,19 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		return TacticalMapGUIDrawer.getInstance().camera;
 	}
 
-	public void drawSprite() {
+	/**
+	 * Updates entityTransform from the entity's world state, adjusting for cross-sector
+	 * offsets relative to the player's ship. This must be called each frame before any
+	 * draw method that uses entityTransform (labels, paths, screen projection).
+	 * Icon rendering has been removed — only text labels are shown.
+	 */
+	public void updateEntityTransform() {
 		if(entity.isCloakedFor(getCurrentEntity())) return;
-		if(sprite == null) {
-			sprite = TacticalMapIndicatorPool.getInstance().acquireSprite();
-		}
 		entityTransform.set(entity.getWorldTransform());
 		SegmentController current = getCurrentEntity();
 		if(current != null) {
 			Vector3i curSector = current.getSector(tmpSectorOther);
 			if(!getSector().equals(curSector)) SectorUtils.transformToSector(entityTransform, curSector, getSector());
-		}
-		if(sprite != null && !entity.isCoreOverheating()) {
-			sprite.setSelectedMultiSprite(getSpriteIndex());
-			sprite.setTransform(entityTransform);
-			if(selected || getDrawer().selectedEntities.contains(entity)) {
-				sprite.setTint(TINT_SELECTED);
-			} else {
-				sprite.setTint(TINT_NORMAL);
-			}
-			Sprite.draw3D(sprite, new PositionableSubSprite[]{this}, getCamera());
 		}
 	}
 
@@ -305,15 +302,40 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 		this.targetData = targetData;
 	}
 
+	public SegmentController getDefendTarget() {
+		return defendTarget;
+	}
+
+	public void setDefendTarget(SegmentController defendTarget) {
+		this.defendTarget = defendTarget;
+	}
+
+	/** Draws a green dotted line from this ship to the entity it has been ordered to defend. */
+	public void drawDefendPath(Camera camera) {
+		if(defendTarget == null) return;
+		Vector3f start = tmpVec;
+		start.set(entityTransform.origin);
+		Vector3f end = new Vector3f(defendTarget.getWorldTransform().origin);
+		TacticalMapEntityIndicator defIndicator = TacticalMapGUIDrawer.getInstance().drawMap.get(defendTarget.getId());
+		if(defIndicator != null) {
+			end.set(defIndicator.entityTransform.origin);
+		}
+		if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
+			startDrawDottedLine(camera);
+			drawDottedLine(start, end, PATH_GREEN);
+			endDrawDottedLine();
+		}
+	}
+
 	public void drawTargetingPath(Camera camera) {
 		if(getCurrentTarget() != null) {
 			Vector3f start = tmpVec;
 			start.set(entityTransform.origin);
-			Vector3f end = getCurrentTarget().getWorldTransform().origin;
-			try {
-				end.set(TacticalMapGUIDrawer.getInstance().drawMap.get(getCurrentTarget().getId()).sprite.getPos());
-			} catch(Exception exception) {
-				exception.printStackTrace();
+			// Use the target indicator's adjusted transform if available, else raw world pos
+			Vector3f end = new Vector3f(getCurrentTarget().getWorldTransform().origin);
+			TacticalMapEntityIndicator targetIndicator = TacticalMapGUIDrawer.getInstance().drawMap.get(getCurrentTarget().getId());
+			if(targetIndicator != null) {
+				end.set(targetIndicator.entityTransform.origin);
 			}
 			if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
 				startDrawDottedLine(camera);
@@ -500,7 +522,8 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 
 	@Override
 	public boolean isSelectable() {
-		return true;
+		// Click detection is done via screen-space projection, not sprite picking
+		return false;
 	}
 
 	@Override
@@ -524,8 +547,6 @@ public class TacticalMapEntityIndicator implements PositionableSubColorSprite, S
 					}
 					getDrawer().removeAll();
 				}
-			} else {
-
 			}
 		}
 	}

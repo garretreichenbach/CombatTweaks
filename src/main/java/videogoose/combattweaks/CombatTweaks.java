@@ -12,6 +12,8 @@ import videogoose.combattweaks.manager.ConfigManager;
 import videogoose.combattweaks.manager.EventManager;
 import videogoose.combattweaks.manager.ResourceManager;
 import videogoose.combattweaks.network.client.SendAttackPacket;
+import videogoose.combattweaks.network.client.SendDefensePacket;
+import videogoose.combattweaks.network.client.SendIdlePacket;
 
 public class CombatTweaks extends StarMod {
 
@@ -50,6 +52,8 @@ public class CombatTweaks extends StarMod {
 
 	private void registerPackets() {
 		PacketUtil.registerPacket(SendAttackPacket.class);
+		PacketUtil.registerPacket(SendDefensePacket.class);
+		PacketUtil.registerPacket(SendIdlePacket.class);
 	}
 
 	private void initializeGlossary() {

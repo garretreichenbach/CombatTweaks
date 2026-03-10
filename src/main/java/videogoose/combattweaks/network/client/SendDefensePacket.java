@@ -6,32 +6,33 @@ import api.network.PacketWriteBuffer;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
+import videogoose.combattweaks.manager.DefenseManager;
 import videogoose.combattweaks.utils.AIUtils;
 
 import java.io.IOException;
 
-public class SendAttackPacket extends Packet {
-	private Ship entity;
-	private SegmentController target;
+public class SendDefensePacket extends Packet {
+	private Ship defender;
+	private SegmentController defendTarget;
 
-	public SendAttackPacket() {
+	public SendDefensePacket() {
 	}
 
-	public SendAttackPacket(Ship entity, SegmentController target) {
-		this.entity = entity;
-		this.target = target;
+	public SendDefensePacket(Ship defender, SegmentController defendTarget) {
+		this.defender = defender;
+		this.defendTarget = defendTarget;
 	}
 
 	@Override
 	public void readPacketData(PacketReadBuffer packetReadBuffer) throws IOException {
-		entity = (Ship) packetReadBuffer.readSendable();
-		target = (SegmentController) packetReadBuffer.readSendable();
+		defender = (Ship) packetReadBuffer.readSendable();
+		defendTarget = (SegmentController) packetReadBuffer.readSendable();
 	}
 
 	@Override
 	public void writePacketData(PacketWriteBuffer packetWriteBuffer) throws IOException {
-		packetWriteBuffer.writeSendable(entity);
-		packetWriteBuffer.writeSendable(target);
+		packetWriteBuffer.writeSendable(defender);
+		packetWriteBuffer.writeSendable(defendTarget);
 	}
 
 	@Override
@@ -40,6 +41,7 @@ public class SendAttackPacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-		AIUtils.setAttackTarget(entity, target);
+		AIUtils.clearTarget(defender);
+		DefenseManager.getInstance().addDefense(defender.getId(), defendTarget.getId());
 	}
 }

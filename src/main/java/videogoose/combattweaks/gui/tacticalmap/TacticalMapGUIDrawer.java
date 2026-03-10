@@ -1,12 +1,13 @@
 package videogoose.combattweaks.gui.tacticalmap;
 
 import api.common.GameClient;
-import api.common.GameCommon;
 import api.utils.draw.ModWorldDrawer;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.util.glu.Project;
 import org.schema.common.util.ByteUtil;
 import org.schema.common.util.linAlg.Vector3i;
-import org.schema.game.client.view.SegmentDrawer;
 import org.schema.game.client.view.effects.Indication;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelpManager;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelperContainer;
@@ -18,11 +19,13 @@ import org.schema.schine.graphicsengine.core.*;
 import org.schema.schine.graphicsengine.core.settings.ContextFilter;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
-import org.schema.schine.graphicsengine.shader.ShaderLibrary;
 import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
 
 import javax.vecmath.Vector3f;
+import javax.vecmath.Vector4f;
+import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,6 +34,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	private static TacticalMapGUIDrawer instance;
+	private static final FloatBuffer GL_MODELVIEW = BufferUtils.createFloatBuffer(16);
+	private static final FloatBuffer GL_PROJECTION = BufferUtils.createFloatBuffer(16);
+	private static final IntBuffer GL_VIEWPORT = BufferUtils.createIntBuffer(16);
+	private static final FloatBuffer GL_WIN_COORDS = BufferUtils.createFloatBuffer(3);
 	public final int sectorSize;
 	public final float maxDrawDistance;
 	public final Vector3f labelOffset;
@@ -41,13 +48,14 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public TacticalMapControlManager controlManager;
 	public TacticalMapCamera camera;
 	public boolean toggleDraw;
-	public boolean drawMovementPaths;
-	private final FrameBufferObjects outlinesFBO;
+	public boolean drawMovementPaths = true;
 	private boolean initialized;
 	private boolean firstTime = true;
 	private TacticalMapSelectionOverlay selectionOverlay;
 	private long updateTimer;
 	private final KeyboardMappings tacticalMapMapping;
+	/** The indicator currently under the mouse cursor, updated each frame. May be null. */
+	public TacticalMapEntityIndicator hoveredIndicator;
 
 	public TacticalMapGUIDrawer() {
 		instance = this;
@@ -58,7 +66,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		labelOffset = new Vector3f(0.0f, -20.0f, 0.0f);
 		drawMap = new ConcurrentHashMap<>();
 		updateTimer = 150;
-		outlinesFBO = new FrameBufferObjects("SELECTED_ENTITY_DRAWER", GLFrame.getWidth(), GLFrame.getHeight());
 		tacticalMapMapping = getMappingFromName("OPEN_TACTICAL_MAP");
 	}
 
@@ -180,7 +187,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			GlUtil.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
 			drawGrid(-sectorSize, sectorSize);
+			// Read GL matrices immediately after drawGrid() restores the engine's 3D state —
+			// before drawIndicators() can modify them (label overlays switch to orthographic).
+			computeScreenPositions();
+			updateHovered();
 			drawIndicators();
+			drawRingIndicators();
 			GUIElement.enableOrthogonal();
 			selectionOverlay.draw();
 			GUIElement.disableOrthogonal();
@@ -287,10 +299,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			try {
 				TacticalMapEntityIndicator indicator = entry.getValue();
 				if(indicator.getDistance() < maxDrawDistance && indicator.getEntity() != null) {
+					indicator.updateEntityTransform();
 					Indication indication = indicator.getIndication(indicator.getSystem());
-					indicator.drawSprite();
 					indicator.drawLabel(indication.getCurrentTransform());
 					indicator.drawTargetingPath(camera);
+					indicator.drawDefendPath(camera);
 					if(drawMovementPaths) {
 						indicator.drawMovementPath(camera);
 					}
@@ -343,39 +356,104 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		initialized = true;
 	}
 
-	private void drawOutlines() {
-		if(GameClient.getClientState() != null && (GameCommon.isClientConnectedToServer() || GameCommon.isOnSinglePlayer())) {
-			SegmentDrawer drawer = getSegmentDrawer();
-			for(Map.Entry<Integer, TacticalMapEntityIndicator> entry : drawMap.entrySet()) {
-				try {
-					if(entry.getValue().selected && GameCommon.getGameObject(entry.getValue().getEntityId()) instanceof SegmentController) {
-						drawer.drawElementCollectionsToFrameBuffer(outlinesFBO);
-						outlinesFBO.enable();
-						ShaderLibrary.cubeShader13SimpleWhite.loadWithoutUpdate();
-						GlUtil.updateShaderVector4f(ShaderLibrary.cubeShader13SimpleWhite, "col", entry.getValue().getColor());
-						ShaderLibrary.cubeShader13SimpleWhite.unloadWithoutExit();
-						int drawn = drawer.drawSegmentController(entry.getValue().getEntity(), ShaderLibrary.cubeShader13SimpleWhite);
-						outlinesFBO.disable();
-						if(drawn > 0) {
-							outlinesFBO.enable();
-							GlUtil.glDisable(GL11.GL_BLEND);
-							GlUtil.glDisable(GL11.GL_DEPTH_TEST);
-							GlUtil.glEnable(GL11.GL_BLEND);
-							GlUtil.glBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
-							drawer.drawElementCollectionsFromFrameBuffer(outlinesFBO, 0.5f);
-							GlUtil.glDisable(GL11.GL_BLEND);
-							outlinesFBO.disable();
-						}
-					}
-				} catch(Exception exception) {
-					CombatTweaks.getInstance().logException("Something went wrong while trying to draw entity outlines", exception);
-				}
+	/**
+	 * Projects every indicator's world position into screen space and caches the results
+	 * for use by the click-detection code in the control manager.
+	 * We snapshot whatever GL matrices the engine currently has rather than replicating
+	 * them ourselves — this guarantees the projection matches the actual rendered scene.
+	 * Must be called from the GL thread (inside draw()), after drawGrid() sets up 3D state.
+	 */
+	private void computeScreenPositions() {
+		GL_MODELVIEW.clear();
+		GL_PROJECTION.clear();
+		GL_VIEWPORT.clear();
+		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, GL_MODELVIEW);
+		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, GL_PROJECTION);
+		GL11.glGetInteger(GL11.GL_VIEWPORT, GL_VIEWPORT);
+
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			Vector3f pos = indicator.getPos();
+			GL_WIN_COORDS.clear();
+			boolean ok = Project.gluProject(pos.x, pos.y, pos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+			float depth = GL_WIN_COORDS.get(2);
+			indicator.screenPosValid = ok && depth > 0.0f && depth < 1.0f;
+			if(indicator.screenPosValid) {
+				indicator.screenX = GL_WIN_COORDS.get(0);
+				// gluProject gives Y from the bottom; flip to screen-top origin
+				indicator.screenY = GLFrame.getHeight() - GL_WIN_COORDS.get(1);
 			}
 		}
 	}
 
-	private SegmentDrawer getSegmentDrawer() {
-		return GameClient.getClientState().getWorldDrawer().getSegmentDrawer();
+	/**
+	 * Returns the indicator whose cached screen position is closest to (mouseX, mouseY),
+	 * or null if none falls within {@code threshold} pixels.
+	 */
+	public TacticalMapEntityIndicator findIndicatorAtScreen(int mouseX, int mouseY, float threshold) {
+		TacticalMapEntityIndicator closest = null;
+		float closestDistSq = threshold * threshold;
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(!indicator.screenPosValid) continue;
+			float dx = indicator.screenX - mouseX;
+			float dy = indicator.screenY - mouseY;
+			float distSq = dx * dx + dy * dy;
+			if(distSq < closestDistSq) {
+				closestDistSq = distSq;
+				closest = indicator;
+			}
+		}
+		return closest;
+	}
+
+	/** Updates hoveredIndicator based on the current mouse position. Called each draw frame. */
+	private void updateHovered() {
+		int mouseX = Mouse.getX();
+		int mouseY = GLFrame.getHeight() - Mouse.getY();
+		hoveredIndicator = findIndicatorAtScreen(mouseX, mouseY, TacticalMapControlManager.ENTITY_CLICK_THRESHOLD_PX);
+	}
+
+	// Ring indicator constants
+	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f); // yellow
+	private static final Vector4f OUTLINE_HOVERED  = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f); // white, slightly transparent
+	private static final float RING_RADIUS = 25.0f;
+
+	/**
+	 * Draws anti-aliased rings at the screen-projected position of each hovered or selected entity.
+	 * Uses a custom fragment shader to produce a smooth ring shape from a screen-space quad.
+	 * This replaces the FBO-based outline approach which required a depth texture.
+	 */
+	private void drawRingIndicators() {
+		org.schema.schine.graphicsengine.shader.Shader shader = videogoose.combattweaks.manager.ResourceManager.getTacRingShader();
+		if(shader == null) return;
+
+		GUIElement.enableOrthogonal();
+		GlUtil.glEnable(GL11.GL_BLEND);
+		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		shader.loadWithoutUpdate();
+
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(!indicator.screenPosValid) continue;
+			boolean isSelected = indicator.selected;
+			boolean isHovered = indicator == hoveredIndicator && !isSelected;
+			if(!isSelected && !isHovered) continue;
+
+			Vector4f color = isSelected ? OUTLINE_SELECTED : OUTLINE_HOVERED;
+			GlUtil.updateShaderVector4f(shader, "color", color);
+
+			float sx = indicator.screenX;
+			float sy = indicator.screenY;
+			GL11.glBegin(GL11.GL_QUADS);
+			GL11.glTexCoord2f(0, 0); GL11.glVertex2f(sx - RING_RADIUS, sy - RING_RADIUS);
+			GL11.glTexCoord2f(1, 0); GL11.glVertex2f(sx + RING_RADIUS, sy - RING_RADIUS);
+			GL11.glTexCoord2f(1, 1); GL11.glVertex2f(sx + RING_RADIUS, sy + RING_RADIUS);
+			GL11.glTexCoord2f(0, 1); GL11.glVertex2f(sx - RING_RADIUS, sy + RING_RADIUS);
+			GL11.glEnd();
+		}
+
+		shader.unloadWithoutExit();
+		GlUtil.glDisable(GL11.GL_BLEND);
+		GUIElement.disableOrthogonal();
 	}
 
 	private SegmentController getCurrentEntity() {
