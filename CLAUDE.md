@@ -156,7 +156,7 @@ src/main/resources/
 
 The StarMade source code is available locally and via documentation for API lookups and development reference.
 
-**Local source path** (in `gradle.properties`): `C:/Users/garre/Documents/GitHub/StarMade-Open/src/main/java/`
+**Local source path** (in `gradle.properties`): `/home/garret/Documents/Projects/StarMade-Release/src/main/java/`
 
 **Online documentation**: https://starmade-community.github.io/StarMade-Open/index.html
 - WIP but actively maintained

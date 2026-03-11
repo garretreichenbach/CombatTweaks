@@ -11,7 +11,6 @@ import org.schema.game.common.controller.ai.Types;
 import org.schema.game.common.data.SimpleGameObject;
 import org.schema.game.network.objects.NetworkShip;
 import org.schema.game.server.ai.ShipAIEntity;
-import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.schine.graphicsengine.forms.BoundingBox;
 import videogoose.combattweaks.CombatTweaks;
 
@@ -237,16 +236,6 @@ public class MineManager {
 	 * Ensures only salvage beams are used (asteroid should have targetType=MINABLE).
 	 */
 	private void applyMiningBehavior(Ship ship, FloatingRock asteroid, float speedScale) {
-		// Set the asteroid as the current target for mining
-		try {
-			TargetProgram<?> program = (TargetProgram<?>) ship.getAiConfiguration().getAiEntityState().getCurrentProgram();
-			program.setTarget(asteroid);
-			program.setSpecificTargetId(asteroid.getId());
-		} catch(Exception ignored) {
-		}
 
-		// Note: Ships should NOT move while mining to avoid ramming the asteroid
-		// and chasing moving asteroids around. Salvage beams have enough range
-		// to work from a stationary position once in mining range.
 	}
 }
