@@ -3,37 +3,35 @@ package videogoose.combattweaks.network.client;
 import api.network.Packet;
 import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
+import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
-import videogoose.combattweaks.manager.DefenseManager;
-import videogoose.combattweaks.manager.MoveManager;
 import videogoose.combattweaks.utils.AIUtils;
 
 import java.io.IOException;
 
-public class SendIdlePacket extends Packet {
-
+public class SendMoveToPacket extends Packet {
 	private int shipId;
+	private int targetId;
 
-	public SendIdlePacket() {
+	public SendMoveToPacket() {
 	}
 
-	public SendIdlePacket(Ship ship) {
+	public SendMoveToPacket(Ship ship, SegmentController target) {
 		shipId = ship.getId();
-	}
-
-	public SendIdlePacket(int shipId) {
-		this.shipId = shipId;
+		targetId = target.getId();
 	}
 
 	@Override
 	public void readPacketData(PacketReadBuffer buf) throws IOException {
 		shipId = buf.readInt();
+		targetId = buf.readInt();
 	}
 
 	@Override
 	public void writePacketData(PacketWriteBuffer buf) throws IOException {
 		buf.writeInt(shipId);
+		buf.writeInt(targetId);
 	}
 
 	@Override
@@ -42,8 +40,6 @@ public class SendIdlePacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-		DefenseManager.getInstance().removeDefense(shipId);
-		MoveManager.getInstance().removeMove(shipId);
-		AIUtils.clearTarget(shipId);
+		AIUtils.setMoveToTarget(shipId, targetId);
 	}
 }

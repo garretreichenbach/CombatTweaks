@@ -8,9 +8,7 @@ import glossar.GlossarCategory;
 import glossar.GlossarInit;
 import org.schema.schine.resource.ResourceLoader;
 import videogoose.combattweaks.element.block.BlockRegistry;
-import videogoose.combattweaks.manager.ConfigManager;
-import videogoose.combattweaks.manager.EventManager;
-import videogoose.combattweaks.manager.ResourceManager;
+import videogoose.combattweaks.manager.*;
 import videogoose.combattweaks.network.client.*;
 
 public class CombatTweaks extends StarMod {
@@ -29,6 +27,9 @@ public class CombatTweaks extends StarMod {
 		instance = this;
 		ConfigManager.initialize(this);
 		EventManager.initialize(this);
+		MoveManager.getInstance(); // Initialize move manager
+		MineManager.getInstance(); // Initialize mine manager
+		RepairManager.getInstance(); // Initialize repair manager
 		registerPackets();
 	}
 
@@ -54,6 +55,7 @@ public class CombatTweaks extends StarMod {
 		PacketUtil.registerPacket(SendIdlePacket.class);
 		PacketUtil.registerPacket(SendMinePacket.class);
 		PacketUtil.registerPacket(SendRepairPacket.class);
+		PacketUtil.registerPacket(SendMoveToPacket.class);
 	}
 
 	private void initializeGlossary() {

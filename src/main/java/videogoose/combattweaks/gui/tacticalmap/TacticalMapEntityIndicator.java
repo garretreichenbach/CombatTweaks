@@ -44,12 +44,16 @@ public class TacticalMapEntityIndicator {
 	 * draw method that uses entityTransform (labels, paths, screen projection).
 	 */
 	public void updateEntityTransform() {
+		if(entity.getWorldTransform() == null) return;
 		if(entity.isCloakedFor(getCurrentEntity())) return;
 		entityTransform.set(entity.getWorldTransform());
 		SegmentController current = getCurrentEntity();
 		if(current != null) {
 			Vector3i curSector = current.getSector(tmpSectorOther);
-			if(!getSector().equals(curSector)) SectorUtils.transformToSector(entityTransform, curSector, getSector());
+			Vector3i mySector = getSector();
+			if(curSector != null && mySector != null && !mySector.equals(curSector)) {
+				SectorUtils.transformToSector(entityTransform, curSector, mySector);
+			}
 		}
 	}
 
@@ -70,6 +74,7 @@ public class TacticalMapEntityIndicator {
 	}
 
 	public float getDistance() {
+		if(entity.getWorldTransform() == null) return Float.MAX_VALUE;
 		Vector3f currentPos = getCurrentEntityTransform().origin;
 		Vector3f entityPos = entity.getWorldTransform().origin;
 		return Math.abs(Vector3fTools.distance(currentPos.x, currentPos.y, currentPos.z, entityPos.x, entityPos.y, entityPos.z));

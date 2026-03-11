@@ -39,8 +39,8 @@ public class TacticalMapTurretSelector {
 			if(child.docked.getSegmentController() instanceof Ship) {
 				Ship dockedShip = (Ship) child.docked.getSegmentController();
 				if(dockedShip.isAIControlled()) {
-					availableTurrets.add(new TurretInfo("turret_" + i, "Turret " + (i + 1) + " (" + StringTools.massFormat(dockedShip.getMassWithDocks()) + ")", i));
-					i ++;
+					availableTurrets.add(new TurretInfo(dockedShip, "Turret " + (i + 1) + " (" + StringTools.massFormat(dockedShip.getMassWithDocks()) + ")", i));
+					i++;
 				}
 			}
 		}
@@ -49,11 +49,11 @@ public class TacticalMapTurretSelector {
 	/**
 	 * Toggle selection of a turret.
 	 */
-	public void toggleTurretSelection(String turretId) {
-		if(drawer.isTurretSelected(turretId)) {
-			drawer.removeTurretSelection(turretId);
+	public void toggleTurretSelection(Ship turret) {
+		if(drawer.isTurretSelected(turret)) {
+			drawer.removeTurretSelection(turret);
 		} else {
-			drawer.addTurretSelection(turretId);
+			drawer.addTurretSelection(turret);
 		}
 	}
 
@@ -83,7 +83,7 @@ public class TacticalMapTurretSelector {
 
 		// Toggle turret selection for the first available turret as a simple test
 		if(!availableTurrets.isEmpty()) {
-			toggleTurretSelection(availableTurrets.get(0).turretId);
+			toggleTurretSelection(availableTurrets.get(0).ship);
 		}
 	}
 
@@ -91,12 +91,12 @@ public class TacticalMapTurretSelector {
 	 * Simple data class to hold turret information.
 	 */
 	public static class TurretInfo {
-		public final String turretId;
+		public final Ship ship;
 		public final String displayName;
 		public final int railIndex;
 
-		public TurretInfo(String turretId, String displayName, int railIndex) {
-			this.turretId = turretId;
+		public TurretInfo(Ship ship, String displayName, int railIndex) {
+			this.ship = ship;
 			this.displayName = displayName;
 			this.railIndex = railIndex;
 		}

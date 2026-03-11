@@ -3,11 +3,10 @@ package videogoose.combattweaks.gui.tacticalmap;
 import api.common.GameClient;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.Display;
 import org.schema.common.util.linAlg.Vector3fTools;
 import org.schema.game.client.controller.manager.AbstractControlManager;
 import org.schema.game.client.controller.manager.ingame.PlayerInteractionControlManager;
-import org.schema.game.client.view.gui.PlayerPanel;
-import org.schema.game.client.view.gui.shiphud.newhud.BottomBarBuild;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.CameraMouseState;
@@ -24,7 +23,6 @@ public class TacticalMapControlManager extends AbstractControlManager {
 
 	private final TacticalMapGUIDrawer guiDrawer;
 	public float viewDistance;
-	private float defaultHotbarPos;
 
 	static final float ENTITY_CLICK_THRESHOLD_PX = 40.0f;
 	private static final long DOUBLE_CLICK_TIME_MS = 300;
@@ -66,19 +64,17 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		getInteractionManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().suspend(active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().suspend(active);
 		super.onSwitch(active);
-		if(active) {
-			if(defaultHotbarPos == 0) {
-				defaultHotbarPos = ((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y;
-			}
-			//Shitty hack to hide the build hotbar
-			((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y = -10000;
-		} else {
-			((BottomBarBuild) getPlayerPanel().getBuildSideBar()).getPos().y = defaultHotbarPos;
-		}
 	}
 
 	@Override
 	public void update(Timer timer) {
+		if(!Display.isActive()) {
+			// Window lost focus — release mouse grab and reset stuck input state
+			CameraMouseState.setGrabbed(false);
+			wasLeftMouseDown = false;
+			guiDrawer.isDragSelecting = false;
+			return;
+		}
 		CameraMouseState.setGrabbed(Mouse.isButtonDown(1));
 		getInteractionManager().suspend(true);
 		getInteractionManager().setActive(false);
@@ -86,6 +82,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		getInteractionManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().suspend(true);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().suspend(true);
 		handleInteraction(timer);
+
 	}
 	private int dragAnchorX;
 
@@ -125,9 +122,6 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		return GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getPlayerGameControlManager().getPlayerIntercationManager();
 	}
 
-	private PlayerPanel getPlayerPanel() {
-		return GameClient.getClientState().getWorldDrawer().getGuiDrawer().getPlayerPanel();
-	}
 	private int dragAnchorY;
 
 	private void handleInteraction(Timer timer) {

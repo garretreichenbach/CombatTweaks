@@ -6,7 +6,7 @@ import api.network.PacketWriteBuffer;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
-import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.manager.RepairManager;
 
 import java.io.IOException;
 
@@ -45,6 +45,6 @@ public class SendRepairPacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-		AIUtils.setRepairTarget(shipId, targetId);
+		RepairManager.getInstance().addRepair(shipId, targetId);
 	}
 }

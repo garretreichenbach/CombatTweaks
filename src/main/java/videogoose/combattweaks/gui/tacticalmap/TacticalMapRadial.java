@@ -203,6 +203,27 @@ public class TacticalMapRadial extends RadialMenuDialog {
 					}
 				}, null);
 			}
+
+			// "Move To" is available for any non-own-faction target when ships are selected
+			menu.addItem("Move To", new GUICallback() {
+				@Override
+				public void callback(GUIElement callingGuiElement, MouseEvent event) {
+					if(event.pressedLeftMouse()) {
+						for(SegmentController selected : drawer.selectedEntities) {
+							if(selected instanceof Ship && !target.getEntity().equals(selected)) {
+								PacketUtil.sendPacketToServer(new SendMoveToPacket((Ship) selected, target.getEntity()));
+							}
+						}
+						drawer.clearSelected();
+						deactivate();
+					}
+				}
+
+				@Override
+				public boolean isOccluded() {
+					return false;
+				}
+			}, null);
 		}
 
 		return menu;

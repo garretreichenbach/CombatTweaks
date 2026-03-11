@@ -1,6 +1,7 @@
 package videogoose.combattweaks.gui.tacticalmap;
 
 import org.schema.game.common.controller.SegmentController;
+import org.schema.game.common.controller.Ship;
 import org.schema.schine.graphicsengine.shader.Shader;
 import videogoose.combattweaks.manager.ResourceManager;
 
@@ -18,7 +19,7 @@ public class TacticalMapShaderOverlay {
 	private static final float OUTLINE_SCALE = 1.5f; // Scale factor for outline extrusion
 
 	private final ConcurrentHashMap<Integer, SegmentController> selectedShips = new ConcurrentHashMap<>();
-	private final ConcurrentHashMap<String, Object> selectedTurrets = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<Integer, Ship> selectedTurrets = new ConcurrentHashMap<>();
 	private Shader outlineShader;
 	private Shader tintShader;
 	private boolean initialized;
@@ -170,18 +171,18 @@ public class TacticalMapShaderOverlay {
 	/**
 	 * Add a turret to the selection overlay.
 	 */
-	public void addSelectedTurret(String turretId) {
-		if(turretId != null) {
-			selectedTurrets.put(turretId, true);
+	public void addSelectedTurret(Ship turret) {
+		if(turret != null) {
+			selectedTurrets.put(turret.getId(), turret);
 		}
 	}
 
 	/**
 	 * Remove a turret from the selection overlay.
 	 */
-	public void removeSelectedTurret(String turretId) {
-		if(turretId != null) {
-			selectedTurrets.remove(turretId);
+	public void removeSelectedTurret(Ship turret) {
+		if(turret != null) {
+			selectedTurrets.remove(turret.getId());
 		}
 	}
 
@@ -195,8 +196,8 @@ public class TacticalMapShaderOverlay {
 	/**
 	 * Check if a turret is selected.
 	 */
-	public boolean isTurretSelected(String turretId) {
-		return turretId != null && selectedTurrets.containsKey(turretId);
+	public boolean isTurretSelected(Ship turret) {
+		return turret != null && selectedTurrets.containsKey(turret.getId());
 	}
 
 	/**

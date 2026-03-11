@@ -36,8 +36,8 @@ public class DefenseManager {
 	/** Radius (world units) within which enemies are considered threats to the protected entity. */
 	private static final float THREAT_RANGE = 2000.0f;
 	/** Distance within which a defender is considered "close enough" and won't reposition. */
-	private static final float ESCORT_DISTANCE = 300.0f;
-	private static final int TICK_INTERVAL_SECONDS = 3;
+	private static final float ESCORT_DISTANCE = 500.0f;
+	private static final int TICK_INTERVAL_SECONDS = 5;
 
 	private static DefenseManager instance;
 

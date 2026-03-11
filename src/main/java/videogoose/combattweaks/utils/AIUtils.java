@@ -13,6 +13,7 @@ import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.game.server.ai.program.fleetcontrollable.FleetControllableProgram;
 import org.schema.schine.ai.stateMachines.FSMException;
 import org.schema.schine.ai.stateMachines.Transition;
+import videogoose.combattweaks.manager.MoveManager;
 
 import javax.vecmath.Vector3f;
 
@@ -85,6 +86,16 @@ public class AIUtils {
 		SegmentController target = EntityUtils.getEntityById(targetId);
 		if(ship instanceof Ship && target != null) {
 			setRepairTarget((Ship) ship, target);
+		}
+	}
+
+	public static void setMoveToTarget(int shipId, int targetId) {
+		SegmentController ship = EntityUtils.getEntityById(shipId);
+		SegmentController target = EntityUtils.getEntityById(targetId);
+		if(ship instanceof Ship && target != null && ship.getWorldTransform() != null && target.getWorldTransform() != null) {
+			Vector3f dest = MoveManager.computeDestination(ship, target);
+			clearTarget((Ship) ship);
+			MoveManager.getInstance().addMove(shipId, dest);
 		}
 	}
 

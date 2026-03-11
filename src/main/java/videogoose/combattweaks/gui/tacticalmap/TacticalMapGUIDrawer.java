@@ -13,6 +13,8 @@ import org.schema.common.util.ByteUtil;
 import org.schema.common.util.StringTools;
 import org.schema.common.util.linAlg.Vector3fTools;
 import org.schema.common.util.linAlg.Vector3i;
+import org.schema.game.client.view.gui.PlayerPanel;
+import org.schema.game.client.view.gui.shiphud.newhud.BottomBarBuild;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelpManager;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelperContainer;
 import org.schema.game.common.controller.SegmentController;
@@ -53,16 +55,20 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f PATH_RED = new Vector4f(Color.RED.getColorComponents(new float[4]));
 	private static final Vector4f PATH_CYAN = new Vector4f(Color.CYAN.getColorComponents(new float[4]));
 	private static final Vector4f PATH_GREEN = new Vector4f(Color.GREEN.getColorComponents(new float[4]));
-	// Bounding box wireframe colors
-	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f); // yellow
-	private static final Vector4f OUTLINE_HOVERED = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f); // white, slightly transparent
+	// Bounding box wireframe colors — solid pass (depth tested) and occluded pass (through geometry)
+	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f);   // yellow, solid
+	private static final Vector4f OUTLINE_SELECTED_OCCLUDED = new Vector4f(1.0f, 1.0f, 0.0f, 0.15f);
+	private static final Vector4f OUTLINE_HOVERED = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f);    // white, slightly transparent
+	private static final Vector4f OUTLINE_HOVERED_OCCLUDED = new Vector4f(1.0f, 1.0f, 1.0f, 0.08f);
+	private static final Vector4f OUTLINE_TURRET = new Vector4f(0.0f, 1.0f, 1.0f, 1.0f);     // cyan, solid
+	private static final Vector4f OUTLINE_TURRET_OCCLUDED = new Vector4f(0.0f, 1.0f, 1.0f, 0.15f);
 	private static TacticalMapGUIDrawer instance;
 	public final int sectorSize;
 	public final float maxDrawDistance;
 	public final Vector3f labelOffset;
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap;
 	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
-	public final ConcurrentHashMap<String, Object> selectedTurrets = new ConcurrentHashMap<>(); // Stores selected turrets by ID
+	public final ConcurrentHashMap<Integer, Ship> selectedTurrets = new ConcurrentHashMap<>(); // entity ID → turret Ship
 	private final KeyboardMappings tacticalMapMapping;
 	// Reusable temporaries for dotted line math
 	private final Vector3f dottedDir = new Vector3f();
@@ -73,7 +79,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public TacticalMapControlManager controlManager;
 	public TacticalMapCamera camera;
 	public boolean toggleDraw;
-	public boolean drawMovementPaths = true;
 	/** The indicator currently under the mouse cursor, updated each frame. May be null. */
 	public TacticalMapEntityIndicator hoveredIndicator;
 	// Temporary storage for bbox corner projection
@@ -145,17 +150,17 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		return selectedEntities.contains(entity);
 	}
 
-	public void addTurretSelection(String turretId) {
-		selectedTurrets.put(turretId, true);
+	public void addTurretSelection(Ship turret) {
+		selectedTurrets.put(turret.getId(), turret);
 		if(shaderOverlay != null) {
-			shaderOverlay.addSelectedTurret(turretId);
+			shaderOverlay.addSelectedTurret(turret);
 		}
 	}
 
-	public void removeTurretSelection(String turretId) {
-		selectedTurrets.remove(turretId);
+	public void removeTurretSelection(Ship turret) {
+		selectedTurrets.remove(turret.getId());
 		if(shaderOverlay != null) {
-			shaderOverlay.removeSelectedTurret(turretId);
+			shaderOverlay.removeSelectedTurret(turret);
 		}
 	}
 
@@ -166,8 +171,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 	}
 
-	public boolean isTurretSelected(String turretId) {
-		return selectedTurrets.containsKey(turretId);
+	public boolean isTurretSelected(Ship turret) {
+		return selectedTurrets.containsKey(turret.getId());
 	}
 
 	public void toggleDraw() {
@@ -484,9 +489,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private void drawPaths() {
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid) continue;
-			boolean isSelected = indicator.selected || selectedEntities.contains(indicator.getEntity());
-			boolean isHovered = indicator == hoveredIndicator;
-			if(!isSelected && !isHovered) continue;
 
 			// Draw targeting path (red) if entity has a target
 			if(indicator.getCurrentTarget() != null) {
@@ -519,7 +521,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 
 			// Draw movement path (cyan) if configured
-			if(drawMovementPaths && indicator.getEntity() instanceof Ship) {
+			if(indicator.getEntity() instanceof Ship) {
 				Vector3f start = new Vector3f(indicator.entityTransform.origin);
 				Vector3f end = GlUtil.getForwardVector(dottedA, indicator.getEntity().getWorldTransform());
 				end.scale(indicator.getEntity().getSpeedCurrent());
@@ -619,6 +621,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		return best;
 	}
 
+	private PlayerPanel getPlayerPanel() {
+		return GameClient.getClientState().getWorldDrawer().getGuiDrawer().getPlayerPanel();
+	}
+
 	@Override
 	public void draw() {
 		if(!initialized) {
@@ -629,6 +635,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			GlUtil.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
 //			drawGrid(-sectorSize, sectorSize); Probably not needed
+			((BottomBarBuild) getPlayerPanel().getBuildSideBar()).cleanUp();
 			// Update entity transforms first so screen positions use current data
 			drawIndicators();
 			computeScreenPositions();
@@ -761,7 +768,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Both operations use the same perspective + camera view to guarantee consistency.
 	 */
 	private void drawBoundingBoxWireframes() {
-		// Set up perspective + camera view — identical to startDrawDottedLine()
 		GlUtil.glDisable(GL11.GL_LIGHTING);
 		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
 		GlUtil.glEnable(GL11.GL_COLOR_MATERIAL);
@@ -776,26 +782,70 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glLoadIdentity();
 		camera.lookAt(true);
 		GL11.glLineWidth(2.0f);
+
+		// Pass 1: depth-tested — draw solid lines only where not occluded by geometry
+		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid) continue;
 			boolean isSelected = indicator.selected || selectedEntities.contains(indicator.getEntity());
 			boolean isHovered = indicator == hoveredIndicator && !isSelected;
 			if(!isSelected && !isHovered) continue;
-
 			BoundingBox bb = indicator.getEntity().getBoundingBox();
 			if(bb == null) continue;
-
 			Vector4f color = isSelected ? OUTLINE_SELECTED : OUTLINE_HOVERED;
 			GlUtil.glColor4f(color.x, color.y, color.z, color.w);
-
 			GlUtil.glPushMatrix();
 			GlUtil.glMultMatrix(indicator.entityTransform);
 			drawAABBLines(bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z);
 			GlUtil.glPopMatrix();
 		}
 
+		// Pass 2: no depth test — draw faint lines through occluding geometry
+		GlUtil.glDisable(GL11.GL_DEPTH_TEST);
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(!indicator.screenPosValid) continue;
+			boolean isSelected = indicator.selected || selectedEntities.contains(indicator.getEntity());
+			boolean isHovered = indicator == hoveredIndicator && !isSelected;
+			if(!isSelected && !isHovered) continue;
+			BoundingBox bb = indicator.getEntity().getBoundingBox();
+			if(bb == null) continue;
+			Vector4f color = isSelected ? OUTLINE_SELECTED_OCCLUDED : OUTLINE_HOVERED_OCCLUDED;
+			GlUtil.glColor4f(color.x, color.y, color.z, color.w);
+			GlUtil.glPushMatrix();
+			GlUtil.glMultMatrix(indicator.entityTransform);
+			drawAABBLines(bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z);
+			GlUtil.glPopMatrix();
+		}
+
+		// Pass 3: selected turrets — depth tested (solid)
+		if(!selectedTurrets.isEmpty()) {
+			GlUtil.glEnable(GL11.GL_DEPTH_TEST);
+			for(Ship turret : selectedTurrets.values()) {
+				BoundingBox bb = turret.getBoundingBox();
+				if(bb == null) continue;
+				GlUtil.glColor4f(OUTLINE_TURRET.x, OUTLINE_TURRET.y, OUTLINE_TURRET.z, OUTLINE_TURRET.w);
+				GlUtil.glPushMatrix();
+				GlUtil.glMultMatrix(turret.getWorldTransform());
+				drawAABBLines(bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z);
+				GlUtil.glPopMatrix();
+			}
+
+			// Pass 4: selected turrets — no depth test (occluded ghost)
+			GlUtil.glDisable(GL11.GL_DEPTH_TEST);
+			for(Ship turret : selectedTurrets.values()) {
+				BoundingBox bb = turret.getBoundingBox();
+				if(bb == null) continue;
+				GlUtil.glColor4f(OUTLINE_TURRET_OCCLUDED.x, OUTLINE_TURRET_OCCLUDED.y, OUTLINE_TURRET_OCCLUDED.z, OUTLINE_TURRET_OCCLUDED.w);
+				GlUtil.glPushMatrix();
+				GlUtil.glMultMatrix(turret.getWorldTransform());
+				drawAABBLines(bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z);
+				GlUtil.glPopMatrix();
+			}
+		}
+
 		GL11.glLineWidth(1.0f);
 		GlUtil.glColor4f(1, 1, 1, 1);
+		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
 		GlUtil.glPopMatrix(); // modelview
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPopMatrix();
