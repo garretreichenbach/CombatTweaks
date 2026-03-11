@@ -30,10 +30,12 @@ public class RepairManager {
 
 	/** Extra clearance to avoid collision with repair target. */
 	private static final float PADDING = 200.0f;
-	/** Distance at which the ship is considered in repair range. */
-	private static final float REPAIR_RANGE = 300.0f;
+	/** Distance at which the ship is considered in repair range (matches game's repair beam range). */
+	private static final float REPAIR_RANGE = 720.0f;
+	/** Hysteresis buffer to prevent toggling between repair and moving. */
+	private static final float REPAIR_RANGE_HYSTERESIS = 100.0f;
 	/** Distance at which to abandon repair if drifted away. */
-	private static final float REPAIR_REACQUIRE_DISTANCE = 500.0f;
+	private static final float REPAIR_REACQUIRE_DISTANCE = 900.0f;
 	private static final int TICK_INTERVAL_SECONDS = 5;
 	/** Direction change threshold before resending moveTo command. */
 	private static final float DIRECTION_CHANGE_THRESHOLD = 0.1f;
@@ -248,6 +250,7 @@ public class RepairManager {
 	 * Apply repair behavior: target the object and maintain position with gentle correction.
 	 * Repair beams will only fire if target is friendly (same faction) and has reactor damage.
 	 * Only sets the target once per repair assignment to avoid repeated state transition errors.
+	 * Maintains a subtle orientation vector toward the target to keep the ship facing it.
 	 */
 	private void applyRepairBehavior(Ship ship, SegmentController target, float speedScale) {
 		int shipId = ship.getId();
@@ -260,6 +263,18 @@ public class RepairManager {
 			lastDirections.remove(shipId);
 			AIUtils.setRepairTarget(ship, target);
 			repairTargetSet.put(shipId, true);
+		} else {
+			// While repairing, maintain orientation towards target with a very small movement vector
+			// This ensures the ship's weapons point at the target without actually moving
+			Vector3f shipPos = ship.getWorldTransform().origin;
+			Vector3f targetPos = target.getWorldTransform().origin;
+			tmpMoveDir.sub(targetPos, shipPos);
+			float dist = tmpMoveDir.length();
+			if(dist > 0.1f) {
+				tmpMoveDir.scale(0.001f / dist); // Tiny orientation vector, won't actually move ship
+				ShipAIEntity aiEntity = ship.getAiConfiguration().getAiEntityState();
+				aiEntity.moveTo(GameServer.getServerState().getController().getTimer(), tmpMoveDir, true);
+			}
 		}
 	}
 }

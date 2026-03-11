@@ -241,6 +241,7 @@ public class MineManager {
 	/**
 	 * Apply mining behavior: use AIUtils to properly set up the mining state machine.
 	 * Only sets the target once per mining assignment to avoid repeated state transition errors.
+	 * Maintains a subtle orientation vector toward the asteroid to keep the ship facing it.
 	 */
 	private void applyMiningBehavior(Ship ship, FloatingRock asteroid) {
 		int shipId = ship.getId();
@@ -253,6 +254,18 @@ public class MineManager {
 			lastDirections.remove(shipId);
 			AIUtils.setMineTarget(ship, asteroid);
 			mineTargetSet.put(shipId, true);
+		} else {
+			// While mining, maintain orientation towards asteroid with a very small movement vector
+			// This ensures the ship's weapons point at the target without actually moving
+			Vector3f shipPos = ship.getWorldTransform().origin;
+			Vector3f asteroidPos = asteroid.getWorldTransform().origin;
+			tmpMoveDir.sub(asteroidPos, shipPos);
+			float dist = tmpMoveDir.length();
+			if(dist > 0.1f) {
+				tmpMoveDir.scale(0.001f / dist); // Tiny orientation vector, won't actually move ship
+				ShipAIEntity aiEntity = ship.getAiConfiguration().getAiEntityState();
+				aiEntity.moveTo(GameServer.getServerState().getController().getTimer(), tmpMoveDir, true);
+			}
 		}
 	}
 }
