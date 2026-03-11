@@ -252,6 +252,12 @@ public class RepairManager {
 	private void applyRepairBehavior(Ship ship, SegmentController target, float speedScale) {
 		int shipId = ship.getId();
 		if(!repairTargetSet.getOrDefault(shipId, false)) {
+			// Clear movement commands when entering repair mode
+			if(ship.getNetworkObject() instanceof NetworkShip) {
+				((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
+				((NetworkShip) ship.getNetworkObject()).targetPosition.set(ship.getWorldTransform().origin);
+			}
+			lastDirections.remove(shipId);
 			AIUtils.setRepairTarget(ship, target);
 			repairTargetSet.put(shipId, true);
 		}

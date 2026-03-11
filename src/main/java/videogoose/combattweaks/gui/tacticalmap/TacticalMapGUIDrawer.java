@@ -486,11 +486,18 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	/**
-	 * Renders targeting, defend, and movement paths for selected or hovered entities.
+	 * Renders targeting, defend, and movement paths only for own ships, selected, or hovered entities.
 	 */
 	private void drawPaths() {
+		SegmentController playerEntity = getCurrentEntity();
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid) continue;
+
+			// Only show paths for: own ships, selected entities, or hovered entity
+			boolean isOwnShip = indicator.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId();
+			boolean isSelected = selectedEntities.contains(indicator.getEntity());
+			boolean isHovered = indicator == hoveredIndicator;
+			if(!isOwnShip && !isSelected && !isHovered) continue;
 
 			// Draw targeting path (red) if entity has a target
 			if(indicator.getCurrentTarget() != null) {

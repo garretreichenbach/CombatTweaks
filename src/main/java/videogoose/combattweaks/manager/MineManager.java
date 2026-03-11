@@ -31,10 +31,12 @@ public class MineManager {
 
 	/** Extra clearance to avoid collision with asteroid. */
 	private static final float PADDING = 200.0f;
-	/** Distance at which the ship is considered in mining range. */
-	private static final float MINING_RANGE = 300.0f;
+	/** Distance at which the ship is considered in mining range (matches game's salvage beam range). */
+	private static final float MINING_RANGE = 720.0f;
+	/** Hysteresis buffer to prevent toggling between mining and moving. */
+	private static final float MINING_RANGE_HYSTERESIS = 100.0f;
 	/** Distance at which to abandon mining if drifted away. */
-	private static final float MINING_REACQUIRE_DISTANCE = 500.0f;
+	private static final float MINING_REACQUIRE_DISTANCE = 900.0f;
 	private static final int TICK_INTERVAL_SECONDS = 5;
 	/** Direction change threshold before resending moveTo command. */
 	private static final float DIRECTION_CHANGE_THRESHOLD = 0.1f;
@@ -243,6 +245,12 @@ public class MineManager {
 	private void applyMiningBehavior(Ship ship, FloatingRock asteroid) {
 		int shipId = ship.getId();
 		if(!mineTargetSet.getOrDefault(shipId, false)) {
+			// Clear movement commands when entering mining mode
+			if(ship.getNetworkObject() instanceof NetworkShip) {
+				((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
+				((NetworkShip) ship.getNetworkObject()).targetPosition.set(ship.getWorldTransform().origin);
+			}
+			lastDirections.remove(shipId);
 			AIUtils.setMineTarget(ship, asteroid);
 			mineTargetSet.put(shipId, true);
 		}
