@@ -41,6 +41,7 @@ public class AIUtils {
 			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
 			FleetControllableProgram program = ensureFleetProgram(ship);
 			program.setTarget(asteroid);
+			program.setSpecificTargetId(asteroid.getAsTargetId());
 			program.suspend(false);
 			program.getMachine().getFsm().stateTransition(Transition.FLEET_GET_TO_MINING_POS);
 		} catch(FSMException e) {
@@ -51,7 +52,8 @@ public class AIUtils {
 			} catch(FSMException exception) {
 				exception.printStackTrace();
 			}
-		} catch(Exception ignored) {
+		} catch(Exception exception) {
+			exception.printStackTrace();
 		}
 	}
 
@@ -68,6 +70,7 @@ public class AIUtils {
 			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
 			FleetControllableProgram program = ensureFleetProgram(ship);
 			program.setTarget(target);
+			program.setSpecificTargetId(target.getAsTargetId());
 			program.suspend(false);
 			program.getMachine().getFsm().stateTransition(Transition.FLEET_REPAIR);
 		} catch(FSMException e) {
