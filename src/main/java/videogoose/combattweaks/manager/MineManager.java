@@ -13,6 +13,7 @@ import org.schema.game.network.objects.NetworkShip;
 import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.schine.graphicsengine.forms.BoundingBox;
 import videogoose.combattweaks.CombatTweaks;
+import videogoose.combattweaks.utils.AIUtils;
 
 import javax.vecmath.Vector3f;
 import java.util.Iterator;
@@ -169,8 +170,8 @@ public class MineManager {
 				// Drifted away (e.g., asteroid moved or ship was pushed), reacquire
 				miningStates.put(shipId, false);
 			} else {
-				// Maintain mining target with low-velocity approach to adjust position
-				applyMiningBehavior(ship, asteroid, 0.05f);
+				// Maintain mining target
+				applyMiningBehavior(ship, asteroid);
 				return true;
 			}
 		}
@@ -179,7 +180,7 @@ public class MineManager {
 		if(dist <= MINING_RANGE) {
 			// In mining range; switch to mining state
 			miningStates.put(shipId, true);
-			applyMiningBehavior(ship, asteroid, 0.05f);
+			applyMiningBehavior(ship, asteroid);
 			return true;
 		}
 
@@ -232,10 +233,9 @@ public class MineManager {
 	}
 
 	/**
-	 * Apply mining behavior: target the asteroid and maintain position with gentle correction.
-	 * Ensures only salvage beams are used (asteroid should have targetType=MINABLE).
+	 * Apply mining behavior: use AIUtils to properly set up the mining state machine.
 	 */
-	private void applyMiningBehavior(Ship ship, FloatingRock asteroid, float speedScale) {
-
+	private void applyMiningBehavior(Ship ship, FloatingRock asteroid) {
+		AIUtils.setMineTarget(ship, asteroid);
 	}
 }

@@ -10,9 +10,9 @@ import org.schema.game.common.controller.ai.Types;
 import org.schema.game.common.data.SimpleGameObject;
 import org.schema.game.network.objects.NetworkShip;
 import org.schema.game.server.ai.ShipAIEntity;
-import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.schine.graphicsengine.forms.BoundingBox;
 import videogoose.combattweaks.CombatTweaks;
+import videogoose.combattweaks.utils.AIUtils;
 
 import javax.vecmath.Vector3f;
 import java.util.Iterator;
@@ -245,16 +245,6 @@ public class RepairManager {
 	 * Repair beams will only fire if target is friendly (same faction) and has reactor damage.
 	 */
 	private void applyRepairBehavior(Ship ship, SegmentController target, float speedScale) {
-		// Set the target as the current repair target
-		try {
-			TargetProgram<?> program = (TargetProgram<?>) ship.getAiConfiguration().getAiEntityState().getCurrentProgram();
-			program.setTarget(target);
-			program.setSpecificTargetId(target.getId());
-		} catch(Exception ignored) {
-		}
-
-		// Note: Ships should NOT move while repairing to avoid complications with physics
-		// and target tracking. Repair beams have enough range to work from a stationary
-		// position once in repair range.
+		AIUtils.setRepairTarget(ship, target);
 	}
 }
