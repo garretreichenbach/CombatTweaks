@@ -51,10 +51,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final FloatBuffer GL_PROJECTION = BufferUtils.createFloatBuffer(16);
 	private static final IntBuffer GL_VIEWPORT = BufferUtils.createIntBuffer(16);
 	private static final FloatBuffer GL_WIN_COORDS = BufferUtils.createFloatBuffer(3);
-	// Path colors for dotted line rendering
-	private static final Vector4f PATH_RED = new Vector4f(Color.RED.getColorComponents(new float[4]));
-	private static final Vector4f PATH_CYAN = new Vector4f(Color.CYAN.getColorComponents(new float[4]));
-	private static final Vector4f PATH_GREEN = new Vector4f(Color.GREEN.getColorComponents(new float[4]));
+	// Path colors for dotted line rendering — bright colors with full opacity
+	private static final Vector4f PATH_RED = new Vector4f(1.0f, 0.2f, 0.2f, 1.0f);     // bright red for targeting
+	private static final Vector4f PATH_CYAN = new Vector4f(0.2f, 1.0f, 1.0f, 1.0f);    // bright cyan for movement
+	private static final Vector4f PATH_GREEN = new Vector4f(0.2f, 1.0f, 0.2f, 1.0f);   // bright green for defend
 	// Bounding box wireframe colors — solid pass (depth tested) and occluded pass (through geometry)
 	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f);   // yellow, solid
 	private static final Vector4f OUTLINE_SELECTED_OCCLUDED = new Vector4f(1.0f, 1.0f, 0.0f, 0.15f);
@@ -553,6 +553,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
 		camera.lookAt(true);
+		GL11.glLineWidth(2.0f); // Make paths more visible
 		GlUtil.glBegin(GL11.GL_LINES);
 	}
 
@@ -595,6 +596,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 */
 	private void endDrawDottedLine() {
 		GlUtil.glEnd();
+		GL11.glLineWidth(1.0f); // Restore line width
 		GlUtil.glPopMatrix();
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
