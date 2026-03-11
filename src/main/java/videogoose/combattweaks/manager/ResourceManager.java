@@ -45,7 +45,7 @@ public class ResourceManager {
 		return spriteMap.get(name);
 	}
 
-	public static Shader loadShader(String shaderName) {
+	public static Shader getShader(String shaderName) {
 		return shaderMap.get(shaderName);
 	}
 }

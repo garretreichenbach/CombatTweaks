@@ -21,7 +21,7 @@ public class TacticalMapShaderOverlay {
 	private final ConcurrentHashMap<String, Object> selectedTurrets = new ConcurrentHashMap<>();
 	private Shader outlineShader;
 	private Shader tintShader;
-	private boolean initialized = false;
+	private boolean initialized;
 
 	public TacticalMapShaderOverlay() {
 	}
@@ -31,8 +31,8 @@ public class TacticalMapShaderOverlay {
 	 */
 	public void onInit() {
 		if (!initialized) {
-			outlineShader = ResourceManager.loadShader("selection_outline");
-			tintShader = ResourceManager.loadShader("selection_tint");
+			outlineShader = ResourceManager.getShader("selection_outline");
+			tintShader = ResourceManager.getShader("selection_tint");
 			initialized = true;
 		}
 	}
