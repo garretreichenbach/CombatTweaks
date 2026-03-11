@@ -63,7 +63,7 @@ public class TacticalMapRadial extends RadialMenuDialog {
 
 			// Only show action options if something is already selected
 			if(hasSelection) {
-				menu.addItem("Defend", new GUICallback() {
+				menu.addItem("Order Defend", new GUICallback() {
 					@Override
 					public void callback(GUIElement callingGuiElement, MouseEvent event) {
 						if(event.pressedLeftMouse()) {
@@ -88,7 +88,7 @@ public class TacticalMapRadial extends RadialMenuDialog {
 					}
 				}, null);
 
-				menu.addItem("Idle", new GUICallback() {
+				menu.addItem("Order Idle", new GUICallback() {
 					@Override
 					public void callback(GUIElement callingGuiElement, MouseEvent event) {
 						if(event.pressedLeftMouse()) {

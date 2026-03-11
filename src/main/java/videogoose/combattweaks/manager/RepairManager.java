@@ -151,10 +151,15 @@ public class RepairManager {
 		if(target.getWorldTransform() == null) return false;
 
 		// Check if target is fully repaired (reactor hp at max or destroyed)
-		try {
-			if(target.getReactorHp() >= target.getReactorHpMax() || target.getReactorHp() <= 0) return false;
-		} catch(Exception ignored) {
-			// Target doesn't have reactor or method not available - continue with repair
+		if(target instanceof Ship) {
+			Ship targetShip = (Ship) target;
+			try {
+				long reactorHp = targetShip.getReactorHp();
+				long maxHp = targetShip.getReactorHpMax();
+				if(reactorHp >= maxHp || reactorHp <= 0) return false;
+			} catch(Exception ignored) {
+				// Target doesn't have reactor methods
+			}
 		}
 
 		// Keep AI active
@@ -248,13 +253,8 @@ public class RepairManager {
 		} catch(Exception ignored) {
 		}
 
-		// Also apply gentle movement correction to stay in range
-		Vector3f shipPos = ship.getWorldTransform().origin;
-		Vector3f targetPos = target.getWorldTransform().origin;
-		tmpMoveDir.sub(targetPos, shipPos);
-		tmpMoveDir.scale(speedScale);
-
-		ShipAIEntity aiEntity = ship.getAiConfiguration().getAiEntityState();
-		aiEntity.moveTo(GameServer.getServerState().getController().getTimer(), tmpMoveDir, true);
+		// Note: Ships should NOT move while repairing to avoid complications with physics
+		// and target tracking. Repair beams have enough range to work from a stationary
+		// position once in repair range.
 	}
 }

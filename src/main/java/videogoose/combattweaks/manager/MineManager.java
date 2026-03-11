@@ -35,7 +35,7 @@ public class MineManager {
 	private static final float MINING_RANGE = 300.0f;
 	/** Distance at which to abandon mining if drifted away. */
 	private static final float MINING_REACQUIRE_DISTANCE = 500.0f;
-	private static final int TICK_INTERVAL_SECONDS = 10;
+	private static final int TICK_INTERVAL_SECONDS = 5;
 	/** Direction change threshold before resending moveTo command. */
 	private static final float DIRECTION_CHANGE_THRESHOLD = 0.1f;
 	private static MineManager instance;
@@ -151,17 +151,8 @@ public class MineManager {
 		FloatingRock asteroid = (FloatingRock) asteroidObj;
 		if(asteroid.getWorldTransform() == null) return false;
 
-		// Check if asteroid is fully mined (health <= 0)
-		// FloatingRock may not have reactor HP, so use try-catch
-		try {
-			if(asteroid instanceof SegmentController) {
-				SegmentController sc = asteroid;
-				// Try to access health if available
-				if(sc.getHp() <= 0) return false;
-			}
-		} catch(Exception ignored) {
-			// Asteroid doesn't have health methods - continue
-		}
+		// Note: FloatingRock doesn't have a standard health property
+		// Mining will continue until the asteroid is removed from the world
 
 		// Keep AI active
 		//noinspection unchecked
@@ -254,13 +245,8 @@ public class MineManager {
 		} catch(Exception ignored) {
 		}
 
-		// Also apply gentle movement correction to stay in range
-		Vector3f shipPos = ship.getWorldTransform().origin;
-		Vector3f asteroidPos = asteroid.getWorldTransform().origin;
-		tmpMoveDir.sub(asteroidPos, shipPos);
-		tmpMoveDir.scale(speedScale);
-
-		ShipAIEntity aiEntity = ship.getAiConfiguration().getAiEntityState();
-		aiEntity.moveTo(GameServer.getServerState().getController().getTimer(), tmpMoveDir, true);
+		// Note: Ships should NOT move while mining to avoid ramming the asteroid
+		// and chasing moving asteroids around. Salvage beams have enough range
+		// to work from a stationary position once in mining range.
 	}
 }

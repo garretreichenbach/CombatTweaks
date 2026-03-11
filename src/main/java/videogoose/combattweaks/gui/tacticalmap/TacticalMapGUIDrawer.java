@@ -89,6 +89,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private boolean firstTime = true;
 	private long updateTimer;
 	private TacticalMapShaderOverlay shaderOverlay;
+	private int lastKnownWidth = -1;
+	private int lastKnownHeight = -1;
 
 	public TacticalMapGUIDrawer() {
 		instance = this;
@@ -657,10 +659,22 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * exactly match what is rendered.
 	 */
 	private void computeScreenPositions() {
+		// Detect resolution changes and invalidate cached screen positions
+		int currentWidth = GLFrame.getWidth();
+		int currentHeight = GLFrame.getHeight();
+		if(currentWidth != lastKnownWidth || currentHeight != lastKnownHeight) {
+			// Resolution changed — mark all positions as invalid until recalculated
+			for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+				indicator.screenPosValid = false;
+			}
+			lastKnownWidth = currentWidth;
+			lastKnownHeight = currentHeight;
+		}
+
 		// Set up the same matrices used for 3D rendering
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPushMatrix();
-		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
+		float aspect = (float) currentWidth / currentHeight;
 		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, 10, 25000, true);
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		GlUtil.glPushMatrix();

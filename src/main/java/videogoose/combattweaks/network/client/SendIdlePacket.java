@@ -6,7 +6,9 @@ import api.network.PacketWriteBuffer;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
 import videogoose.combattweaks.manager.DefenseManager;
+import videogoose.combattweaks.manager.MineManager;
 import videogoose.combattweaks.manager.MoveManager;
+import videogoose.combattweaks.manager.RepairManager;
 import videogoose.combattweaks.utils.AIUtils;
 
 import java.io.IOException;
@@ -44,6 +46,8 @@ public class SendIdlePacket extends Packet {
 	public void processPacketOnServer(PlayerState playerState) {
 		DefenseManager.getInstance().removeDefense(shipId);
 		MoveManager.getInstance().removeMove(shipId);
+		MineManager.getInstance().removeMine(shipId);
+		RepairManager.getInstance().removeRepair(shipId);
 		AIUtils.clearTarget(shipId);
 	}
 }
