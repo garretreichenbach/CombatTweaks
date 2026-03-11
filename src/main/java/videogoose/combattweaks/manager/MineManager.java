@@ -43,6 +43,8 @@ public class MineManager {
 	private final ConcurrentHashMap<Integer, Integer> assignments = new ConcurrentHashMap<>();
 	/** Tracks which ships are already in mining range and actively mining. */
 	private final ConcurrentHashMap<Integer, Boolean> miningStates = new ConcurrentHashMap<>();
+	/** Tracks which ships have had their mining target set (to avoid repeated state transitions). */
+	private final ConcurrentHashMap<Integer, Boolean> mineTargetSet = new ConcurrentHashMap<>();
 	/** Caches last movement direction sent to avoid unnecessary re-commands. */
 	private final ConcurrentHashMap<Integer, Vector3f> lastDirections = new ConcurrentHashMap<>();
 	private final ScheduledExecutorService scheduler;
@@ -108,12 +110,14 @@ public class MineManager {
 	public void addMine(int shipId, int asteroidId) {
 		assignments.put(shipId, asteroidId);
 		miningStates.remove(shipId); // Reset mining state when reassigned
+		mineTargetSet.remove(shipId); // Reset target-set flag when reassigned
 	}
 
 	/** Cancel any active mining order for the given ship. */
 	public void removeMine(int shipId) {
 		assignments.remove(shipId);
 		miningStates.remove(shipId);
+		mineTargetSet.remove(shipId);
 		lastDirections.remove(shipId);
 	}
 
@@ -234,8 +238,13 @@ public class MineManager {
 
 	/**
 	 * Apply mining behavior: use AIUtils to properly set up the mining state machine.
+	 * Only sets the target once per mining assignment to avoid repeated state transition errors.
 	 */
 	private void applyMiningBehavior(Ship ship, FloatingRock asteroid) {
-		AIUtils.setMineTarget(ship, asteroid);
+		int shipId = ship.getId();
+		if(!mineTargetSet.getOrDefault(shipId, false)) {
+			AIUtils.setMineTarget(ship, asteroid);
+			mineTargetSet.put(shipId, true);
+		}
 	}
 }

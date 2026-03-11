@@ -46,6 +46,7 @@ public class AIUtils {
 			program.getMachine().getFsm().stateTransition(Transition.FLEET_GET_TO_MINING_POS);
 		} catch(FSMException e) {
 			// Transition not available from current state — try resetting to idle first
+			e.printStackTrace();
 			try {
 				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_BREAKING);
 				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_GET_TO_MINING_POS);
@@ -80,7 +81,8 @@ public class AIUtils {
 			} catch(FSMException exception) {
 				exception.printStackTrace();
 			}
-		} catch(Exception ignored) {
+		} catch(Exception exception) {
+			exception.printStackTrace();
 		}
 	}
 
@@ -106,7 +108,9 @@ public class AIUtils {
 		try {
 			((TargetProgram<?>) ship.getAiConfiguration().getAiEntityState().getCurrentProgram()).setTarget(null);
 			((TargetProgram<?>) ship.getAiConfiguration().getAiEntityState().getCurrentProgram()).setSpecificTargetId(-1);
-		} catch(Exception ignored) {}
+		} catch(Exception exception) {
+			exception.printStackTrace();
+		}
 		if(ship.getNetworkObject() instanceof NetworkShip) {
 			((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
 			((NetworkShip) ship.getNetworkObject()).targetPosition.set(ship.getWorldTransform().origin);

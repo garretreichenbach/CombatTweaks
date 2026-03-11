@@ -42,6 +42,8 @@ public class RepairManager {
 	private final ConcurrentHashMap<Integer, Integer> assignments = new ConcurrentHashMap<>();
 	/** Tracks which ships are already in repair range and actively repairing. */
 	private final ConcurrentHashMap<Integer, Boolean> repairingStates = new ConcurrentHashMap<>();
+	/** Tracks which ships have had their repair target set (to avoid repeated state transitions). */
+	private final ConcurrentHashMap<Integer, Boolean> repairTargetSet = new ConcurrentHashMap<>();
 	/** Caches last movement direction sent to avoid unnecessary re-commands. */
 	private final ConcurrentHashMap<Integer, Vector3f> lastDirections = new ConcurrentHashMap<>();
 	private final ScheduledExecutorService scheduler;
@@ -107,12 +109,14 @@ public class RepairManager {
 	public void addRepair(int shipId, int targetId) {
 		assignments.put(shipId, targetId);
 		repairingStates.remove(shipId); // Reset repairing state when reassigned
+		repairTargetSet.remove(shipId); // Reset target-set flag when reassigned
 	}
 
 	/** Cancel any active repair order for the given ship. */
 	public void removeRepair(int shipId) {
 		assignments.remove(shipId);
 		repairingStates.remove(shipId);
+		repairTargetSet.remove(shipId);
 		lastDirections.remove(shipId);
 	}
 
@@ -243,8 +247,13 @@ public class RepairManager {
 	/**
 	 * Apply repair behavior: target the object and maintain position with gentle correction.
 	 * Repair beams will only fire if target is friendly (same faction) and has reactor damage.
+	 * Only sets the target once per repair assignment to avoid repeated state transition errors.
 	 */
 	private void applyRepairBehavior(Ship ship, SegmentController target, float speedScale) {
-		AIUtils.setRepairTarget(ship, target);
+		int shipId = ship.getId();
+		if(!repairTargetSet.getOrDefault(shipId, false)) {
+			AIUtils.setRepairTarget(ship, target);
+			repairTargetSet.put(shipId, true);
+		}
 	}
 }
