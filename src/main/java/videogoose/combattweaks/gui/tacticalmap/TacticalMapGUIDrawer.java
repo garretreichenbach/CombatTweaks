@@ -48,6 +48,14 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final FloatBuffer GL_PROJECTION = BufferUtils.createFloatBuffer(16);
 	private static final IntBuffer GL_VIEWPORT = BufferUtils.createIntBuffer(16);
 	private static final FloatBuffer GL_WIN_COORDS = BufferUtils.createFloatBuffer(3);
+	// Path colors for dotted line rendering
+	private static final Vector4f PATH_RED = new Vector4f(Color.RED.getColorComponents(new float[4]));
+	private static final Vector4f PATH_CYAN = new Vector4f(Color.CYAN.getColorComponents(new float[4]));
+	private static final Vector4f PATH_GREEN = new Vector4f(Color.GREEN.getColorComponents(new float[4]));
+	// Ring indicator constants
+	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f); // yellow
+	private static final Vector4f OUTLINE_HOVERED = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f); // white, slightly transparent
+	private static final float RING_RADIUS = 25.0f;
 	private static TacticalMapGUIDrawer instance;
 	public final int sectorSize;
 	public final float maxDrawDistance;
@@ -56,6 +64,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
 	public final ConcurrentHashMap<String, Object> selectedTurrets = new ConcurrentHashMap<>(); // Stores selected turrets by ID
 	private final KeyboardMappings tacticalMapMapping;
+	// Reusable temporaries for dotted line math
+	private final Vector3f dottedDir = new Vector3f();
+	private final Vector3f dottedDirN = new Vector3f();
+	private final Vector3f dottedA = new Vector3f();
+	private final Vector3f dottedB = new Vector3f();
 	public float selectedRange;
 	public TacticalMapControlManager controlManager;
 	public TacticalMapCamera camera;
@@ -107,9 +120,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			shaderOverlay.removeSelected(indicator.getEntity());
 		}
 	}
-
-	// Path colors for dotted line rendering
-	private static final Vector4f PATH_RED = new Vector4f(Color.RED.getColorComponents(new float[4]));
 
 	public void removeAll() {
 		clearSelected();
@@ -212,7 +222,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			updateTimer = 150;
 		}
 	}
-	private static final Vector4f PATH_CYAN = new Vector4f(Color.CYAN.getColorComponents(new float[4]));
 
 	public boolean shouldDraw() {
 		return (GameClient.getClientState().getPlayerInputs().isEmpty() || GameClient.getClientState().getController().isChatActive() || GameClient.getClientState().isInAnyStructureBuildMode() || GameClient.getClientState().isInFlightMode()) && !GameClient.getClientState().getWorldDrawer().getGameMapDrawer().isMapActive();
@@ -312,7 +321,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glPopMatrix();
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 	}
-	private static final Vector4f PATH_GREEN = new Vector4f(Color.GREEN.getColorComponents(new float[4]));
 
 	@Override
 	public void cleanUp() {
@@ -335,8 +343,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		hud = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
 		initialized = true;
 	}
-	// Reusable temporaries for dotted line math
-	private final Vector3f dottedDir = new Vector3f();
 
 	/**
 	 * Returns the indicator whose cached screen position is closest to (mouseX, mouseY),
@@ -372,14 +378,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			return null;
 		}
 	}
-
-	// Ring indicator constants
-	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f); // yellow
-	private static final Vector4f OUTLINE_HOVERED = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f); // white, slightly transparent
-	private static final float RING_RADIUS = 25.0f;
-	private final Vector3f dottedDirN = new Vector3f();
-	private final Vector3f dottedA = new Vector3f();
-	private final Vector3f dottedB = new Vector3f();
 
 	public void clearSelected() {
 		ArrayList<SegmentController> temp = new ArrayList<>(selectedEntities);
@@ -708,10 +706,14 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 
 			GL11.glBegin(GL11.GL_QUADS);
-			GL11.glTexCoord2f(0, 0); GL11.glVertex2f(sx - RING_RADIUS, sy - RING_RADIUS);
-			GL11.glTexCoord2f(1, 0); GL11.glVertex2f(sx + RING_RADIUS, sy - RING_RADIUS);
-			GL11.glTexCoord2f(1, 1); GL11.glVertex2f(sx + RING_RADIUS, sy + RING_RADIUS);
-			GL11.glTexCoord2f(0, 1); GL11.glVertex2f(sx - RING_RADIUS, sy + RING_RADIUS);
+			GL11.glTexCoord2f(0, 0);
+			GL11.glVertex2f(sx - RING_RADIUS, sy - RING_RADIUS);
+			GL11.glTexCoord2f(1, 0);
+			GL11.glVertex2f(sx + RING_RADIUS, sy - RING_RADIUS);
+			GL11.glTexCoord2f(1, 1);
+			GL11.glVertex2f(sx + RING_RADIUS, sy + RING_RADIUS);
+			GL11.glTexCoord2f(0, 1);
+			GL11.glVertex2f(sx - RING_RADIUS, sy + RING_RADIUS);
 			GL11.glEnd();
 		}
 
