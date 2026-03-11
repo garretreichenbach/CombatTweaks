@@ -18,6 +18,7 @@ public class AIUtils {
 	public static void clearTarget(ManagedUsableSegmentController<?> ship) {
 		try {
 			((TargetProgram<?>) ship.getAiConfiguration().getAiEntityState().getCurrentProgram()).setTarget(null);
+			((TargetProgram<?>) ship.getAiConfiguration().getAiEntityState().getCurrentProgram()).setSpecificTargetId(-1);
 		} catch(Exception ignored) {}
 		if(ship.getNetworkObject() instanceof NetworkShip) {
 			((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);

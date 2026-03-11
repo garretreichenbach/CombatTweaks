@@ -1,7 +1,9 @@
 package videogoose.combattweaks.gui.tacticalmap;
 
 import api.common.GameClient;
+import api.common.GameCommon;
 import api.utils.draw.ModWorldDrawer;
+import com.bulletphysics.linearmath.Transform;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
@@ -24,13 +26,12 @@ import org.schema.schine.graphicsengine.core.GlUtil;
 import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.graphicsengine.core.settings.ContextFilter;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
+import org.schema.schine.graphicsengine.forms.BoundingBox;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
-import org.schema.schine.graphicsengine.shader.Shader;
 import org.schema.schine.input.InputType;
 import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
-import videogoose.combattweaks.manager.ResourceManager;
 
 import javax.vecmath.Vector3f;
 import javax.vecmath.Vector4f;
@@ -52,10 +53,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f PATH_RED = new Vector4f(Color.RED.getColorComponents(new float[4]));
 	private static final Vector4f PATH_CYAN = new Vector4f(Color.CYAN.getColorComponents(new float[4]));
 	private static final Vector4f PATH_GREEN = new Vector4f(Color.GREEN.getColorComponents(new float[4]));
-	// Ring indicator constants
+	// Bounding box wireframe colors
 	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f); // yellow
 	private static final Vector4f OUTLINE_HOVERED = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f); // white, slightly transparent
-	private static final float RING_RADIUS = 25.0f;
 	private static TacticalMapGUIDrawer instance;
 	public final int sectorSize;
 	public final float maxDrawDistance;
@@ -76,6 +76,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public boolean drawMovementPaths = true;
 	/** The indicator currently under the mouse cursor, updated each frame. May be null. */
 	public TacticalMapEntityIndicator hoveredIndicator;
+	// Temporary storage for bbox corner projection
+	private static final float[] BBOX_XS = {0, 0, 0, 0, 1, 1, 1, 1};
+	private static final float[] BBOX_YS = {0, 0, 1, 1, 0, 0, 1, 1};
 	private HudContextHelpManager hud;
 	private boolean initialized;
 	private boolean firstTime = true;
@@ -226,19 +229,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public boolean shouldDraw() {
 		return (GameClient.getClientState().getPlayerInputs().isEmpty() || GameClient.getClientState().getController().isChatActive() || GameClient.getClientState().isInAnyStructureBuildMode() || GameClient.getClientState().isInFlightMode()) && !GameClient.getClientState().getWorldDrawer().getGameMapDrawer().isMapActive();
 	}
-
-	private void drawHudIndicators() {
-		if(shouldDraw()) {
-			hud.addHelper(tacticalMapMapping, "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.IMPORTANT);
-		}
-		if(toggleDraw) {
-			hud.addHelper(InputType.MOUSE, 0, "Select | Double-click: Focus | Shift+Click: Multi-select", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_LCONTROL, "(Hold) Show Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Holding Left Control) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-		}
-	}
+	private static final float[] BBOX_ZS = {0, 1, 0, 1, 0, 1, 0, 1};
 
 	private void drawGrid(float start, float spacing) {
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
@@ -343,26 +334,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		hud = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
 		initialized = true;
 	}
-
-	/**
-	 * Returns the indicator whose cached screen position is closest to (mouseX, mouseY),
-	 * or null if none falls within {@code threshold} pixels.
-	 */
-	public TacticalMapEntityIndicator findIndicatorAtScreen(int mouseX, int mouseY, float threshold) {
-		TacticalMapEntityIndicator closest = null;
-		float closestDistSq = threshold * threshold;
-		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(!indicator.screenPosValid) continue;
-			float dx = indicator.screenX - mouseX;
-			float dy = indicator.screenY - mouseY;
-			float distSq = dx * dx + dy * dy;
-			if(distSq < closestDistSq) {
-				closestDistSq = distSq;
-				closest = indicator;
-			}
-		}
-		return closest;
-	}
+	private static final Vector4f DRAG_FILL = new Vector4f(0.3f, 0.6f, 1.0f, 0.15f);
 
 	/** Updates hoveredIndicator based on the current mouse position. Called each draw frame. */
 	private void updateHovered() {
@@ -392,29 +364,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			shaderOverlay.clearSelected();
 		}
 	}
-
-	@Override
-	public void draw() {
-		if(!initialized) {
-			onInit();
-		}
-
-		if(toggleDraw && Controller.getCamera() instanceof TacticalMapCamera) {
-			GlUtil.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
-			drawGrid(-sectorSize, sectorSize);
-			// Read GL matrices immediately after drawGrid() restores the engine's 3D state —
-			// before label overlays switch to orthographic.
-			computeScreenPositions();
-			updateHovered();
-			drawIndicators();
-			drawPaths();
-			drawLabels();
-			drawRingIndicators();
-			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		}
-		drawHudIndicators();
-	}
+	private static final Vector4f DRAG_BORDER = new Vector4f(0.3f, 0.6f, 1.0f, 0.8f);
 
 	private void drawIndicators() {
 		ArrayList<Integer> toRemove = null;
@@ -445,38 +395,54 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 		}
 	}
+	private final Vector3f tmpBboxCorner = new Vector3f();
+	/** Drag-select rectangle in screen space. Only valid when isDragSelecting == true. */
+	public boolean isDragSelecting;
+	public float dragMinX, dragMaxX, dragMinY, dragMaxY;
 
-	/**
-	 * Projects every indicator's world position into screen space and caches the results
-	 * for use by the click-detection code in the control manager.
-	 * We snapshot whatever GL matrices the engine currently has rather than replicating
-	 * them ourselves — this guarantees the projection matches the actual rendered scene.
-	 * Must be called from the GL thread (inside draw()), after drawGrid() sets up 3D state.
-	 */
-	private void computeScreenPositions() {
-		GL_MODELVIEW.clear();
-		GL_PROJECTION.clear();
-		GL_VIEWPORT.clear();
-		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, GL_MODELVIEW);
-		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, GL_PROJECTION);
-		GL11.glGetInteger(GL11.GL_VIEWPORT, GL_VIEWPORT);
+	/** Emits 12 GL_LINES edges of an axis-aligned bounding box. Must be called inside a GL_LINES begin/end or standalone. */
+	private static void drawAABBLines(float x0, float y0, float z0, float x1, float y1, float z1) {
+		GL11.glBegin(GL11.GL_LINES);
+		// Bottom face
+		GL11.glVertex3f(x0, y0, z0);
+		GL11.glVertex3f(x1, y0, z0);
+		GL11.glVertex3f(x1, y0, z0);
+		GL11.glVertex3f(x1, y0, z1);
+		GL11.glVertex3f(x1, y0, z1);
+		GL11.glVertex3f(x0, y0, z1);
+		GL11.glVertex3f(x0, y0, z1);
+		GL11.glVertex3f(x0, y0, z0);
+		// Top face
+		GL11.glVertex3f(x0, y1, z0);
+		GL11.glVertex3f(x1, y1, z0);
+		GL11.glVertex3f(x1, y1, z0);
+		GL11.glVertex3f(x1, y1, z1);
+		GL11.glVertex3f(x1, y1, z1);
+		GL11.glVertex3f(x0, y1, z1);
+		GL11.glVertex3f(x0, y1, z1);
+		GL11.glVertex3f(x0, y1, z0);
+		// Vertical edges
+		GL11.glVertex3f(x0, y0, z0);
+		GL11.glVertex3f(x0, y1, z0);
+		GL11.glVertex3f(x1, y0, z0);
+		GL11.glVertex3f(x1, y1, z0);
+		GL11.glVertex3f(x1, y0, z1);
+		GL11.glVertex3f(x1, y1, z1);
+		GL11.glVertex3f(x0, y0, z1);
+		GL11.glVertex3f(x0, y1, z1);
+		GL11.glEnd();
+	}
 
-		int debugCount = 0;
-		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			Vector3f pos = indicator.entityTransform.origin;
-			GL_WIN_COORDS.clear();
-			boolean ok = Project.gluProject(pos.x, pos.y, pos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
-			float depth = GL_WIN_COORDS.get(2);
-			indicator.screenPosValid = ok && depth > 0.0f && depth < 1.0f;
-			if(indicator.screenPosValid) {
-				indicator.screenX = GL_WIN_COORDS.get(0);
-				// gluProject gives Y from the bottom; flip to screen-top origin
-				indicator.screenY = GLFrame.getHeight() - GL_WIN_COORDS.get(1);
-				if(debugCount < 3) {
-					CombatTweaks.getInstance().logInfo("Screen pos for " + indicator.getEntity().getName() + ": (" + indicator.screenX + ", " + indicator.screenY + ") viewport: " + GLFrame.getWidth() + "x" + GLFrame.getHeight());
-					debugCount++;
-				}
-			}
+	private void drawHudIndicators() {
+		if(shouldDraw()) {
+			hud.addHelper(tacticalMapMapping, "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.IMPORTANT);
+		}
+		if(toggleDraw) {
+			hud.addHelper(InputType.MOUSE, 0, "Select | Double-click: Focus | Shift+Click: Multi-select", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_LMENU, "(Hold) Show Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Holding Left Control) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
 	}
 
@@ -583,7 +549,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
 		camera.lookAt(true);
-		GlUtil.translateModelview(-50.0f, -50.0f, -50.0f);
 		GlUtil.glBegin(GL11.GL_LINES);
 	}
 
@@ -634,23 +599,148 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	/**
+	 * Returns the indicator whose screen-space bounding box contains (mouseX, mouseY),
+	 * preferring the smallest bbox when multiple overlap. Returns null if none hit.
+	 * The {@code threshold} parameter is unused but kept for call-site compatibility.
+	 */
+	public TacticalMapEntityIndicator findIndicatorAtScreen(int mouseX, int mouseY, float threshold) {
+		TacticalMapEntityIndicator best = null;
+		float bestArea = Float.MAX_VALUE;
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(!indicator.screenPosValid) continue;
+			if(mouseX >= indicator.screenMinX && mouseX <= indicator.screenMaxX && mouseY >= indicator.screenMinY && mouseY <= indicator.screenMaxY) {
+				float area = (indicator.screenMaxX - indicator.screenMinX) * (indicator.screenMaxY - indicator.screenMinY);
+				if(area < bestArea) {
+					bestArea = area;
+					best = indicator;
+				}
+			}
+		}
+		return best;
+	}
+
+	@Override
+	public void draw() {
+		if(!initialized) {
+			onInit();
+		}
+
+		if(toggleDraw && Controller.getCamera() instanceof TacticalMapCamera) {
+			GlUtil.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
+//			drawGrid(-sectorSize, sectorSize); Probably not needed
+			// Update entity transforms first so screen positions use current data
+			drawIndicators();
+			computeScreenPositions();
+			updateHovered();
+			drawBoundingBoxWireframes();
+			drawPaths();
+			drawLabels();
+			drawDragSelectRect();
+			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		}
+		drawHudIndicators();
+	}
+
+	/**
+	 * Projects every indicator's world position into screen space and caches the results
+	 * for use by the click-detection code in the control manager.
+	 * Also projects the 8 bounding box corners to compute a screen-space AABB for hit testing.
+	 * Uses the same perspective + camera view as drawBoundingBoxWireframes so hover regions
+	 * exactly match what is rendered.
+	 */
+	private void computeScreenPositions() {
+		// Set up the same matrices used for 3D rendering
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPushMatrix();
+		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
+		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, 10, 25000, true);
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glPushMatrix();
+		GlUtil.glLoadIdentity();
+		camera.lookAt(true); // loads view matrix; push/pop above ensures GL state is restored
+
+		GL_MODELVIEW.clear();
+		GL_PROJECTION.clear();
+		GL_VIEWPORT.clear();
+		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, GL_MODELVIEW);
+		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, GL_PROJECTION);
+		GL11.glGetInteger(GL11.GL_VIEWPORT, GL_VIEWPORT);
+
+		GlUtil.glPopMatrix(); // modelview
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPopMatrix();
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+
+		int vpH = GL_VIEWPORT.get(3);
+
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			// Project entity center for label placement
+			Vector3f pos = indicator.entityTransform.origin;
+			GL_WIN_COORDS.clear();
+			boolean ok = Project.gluProject(pos.x, pos.y, pos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+			float depth = GL_WIN_COORDS.get(2);
+			indicator.screenPosValid = ok && depth > 0.0f && depth < 1.0f;
+			if(!indicator.screenPosValid) continue;
+
+			indicator.screenX = GL_WIN_COORDS.get(0);
+			indicator.screenY = vpH - GL_WIN_COORDS.get(1);
+
+			// Project all 8 bounding box corners to get screen-space extents for hit testing
+			BoundingBox bb = indicator.getEntity().getBoundingBox();
+			if(bb == null) {
+				// Fallback: use a small fixed radius around center
+				float r = 30.0f;
+				indicator.screenMinX = indicator.screenX - r;
+				indicator.screenMaxX = indicator.screenX + r;
+				indicator.screenMinY = indicator.screenY - r;
+				indicator.screenMaxY = indicator.screenY + r;
+				continue;
+			}
+
+			float sMinX = Float.MAX_VALUE, sMaxX = -Float.MAX_VALUE;
+			float sMinY = Float.MAX_VALUE, sMaxY = -Float.MAX_VALUE;
+			Transform t = indicator.entityTransform;
+			for(int i = 0; i < 8; i++) {
+				tmpBboxCorner.set(bb.min.x + BBOX_XS[i] * (bb.max.x - bb.min.x), bb.min.y + BBOX_YS[i] * (bb.max.y - bb.min.y), bb.min.z + BBOX_ZS[i] * (bb.max.z - bb.min.z));
+				t.transform(tmpBboxCorner);
+				GL_WIN_COORDS.clear();
+				boolean cornerOk = Project.gluProject(tmpBboxCorner.x, tmpBboxCorner.y, tmpBboxCorner.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+				if(!cornerOk) continue;
+				float cx = GL_WIN_COORDS.get(0);
+				float cy = vpH - GL_WIN_COORDS.get(1);
+				if(cx < sMinX) sMinX = cx;
+				if(cx > sMaxX) sMaxX = cx;
+				if(cy < sMinY) sMinY = cy;
+				if(cy > sMaxY) sMaxY = cy;
+			}
+			// Ensure at least a minimal click target even for single-block entities
+			float MIN_HALF = 20.0f;
+			if(sMaxX - sMinX < MIN_HALF * 2) {
+				sMinX = indicator.screenX - MIN_HALF;
+				sMaxX = indicator.screenX + MIN_HALF;
+			}
+			if(sMaxY - sMinY < MIN_HALF * 2) {
+				sMinY = indicator.screenY - MIN_HALF;
+				sMaxY = indicator.screenY + MIN_HALF;
+			}
+			indicator.screenMinX = sMinX;
+			indicator.screenMaxX = sMaxX;
+			indicator.screenMinY = sMinY;
+			indicator.screenMaxY = sMaxY;
+		}
+	}
+
+	/**
 	 * Builds the display text for an entity label.
 	 */
 	private String getEntityDisplay(TacticalMapEntityIndicator indicator, SegmentController playerEntity) {
 		SegmentController entity = indicator.getEntity();
 		StringBuilder builder = new StringBuilder();
-		if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
-			builder.append(entity.getRealName()); // TODO: distort string for jammed/cloaked
-		} else {
-			builder.append(entity.getRealName());
-		}
+		builder.append(entity.getRealName()); // TODO: distort string for jammed/cloaked
 		builder.append("\n");
 		if(entity.getFaction() != null) {
-			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
-				builder.append("[").append(entity.getFaction().getName()).append("]\n"); // TODO: distort
-			} else {
-				builder.append("[").append(entity.getFaction().getName()).append("]\n");
-			}
+			builder.append("[").append(entity.getFaction().getName()).append("]\n");
 		}
 		if(!entity.equals(playerEntity)) {
 			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
@@ -666,65 +756,112 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	/**
-	 * Draws anti-aliased rings at the screen-projected position of each hovered or selected entity.
-	 * Uses a custom fragment shader to produce a smooth ring shape from a screen-space quad.
+	 * Draws a 3D wireframe bounding box around each selected or hovered entity,
+	 * then immediately samples the GL matrices for screen-position projection.
+	 * Both operations use the same perspective + camera view to guarantee consistency.
 	 */
-	private void drawRingIndicators() {
-		Shader shader = ResourceManager.getShader("tactical_ring");
-		if(shader == null) {
-			CombatTweaks.getInstance().logWarning("tactical_ring shader not loaded");
-			return;
-		}
-
-		CombatTweaks.getInstance().logInfo("Starting ring indicator render. Screen: " + GLFrame.getWidth() + "x" + GLFrame.getHeight());
-		GlUtil.printGlError();
-		GUIElement.enableOrthogonal();
-		GlUtil.printGlError();
-
+	private void drawBoundingBoxWireframes() {
+		// Set up perspective + camera view — identical to startDrawDottedLine()
+		GlUtil.glDisable(GL11.GL_LIGHTING);
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		GlUtil.glEnable(GL11.GL_COLOR_MATERIAL);
 		GlUtil.glEnable(GL11.GL_BLEND);
 		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
-		shader.loadWithoutUpdate();
-		GlUtil.printGlError();
-
-		int ringCount = 0;
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPushMatrix();
+		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
+		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, 10, 25000, true);
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glPushMatrix();
+		GlUtil.glLoadIdentity();
+		camera.lookAt(true);
+		GL11.glLineWidth(2.0f);
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid) continue;
 			boolean isSelected = indicator.selected || selectedEntities.contains(indicator.getEntity());
 			boolean isHovered = indicator == hoveredIndicator && !isSelected;
 			if(!isSelected && !isHovered) continue;
 
-			ringCount++;
+			BoundingBox bb = indicator.getEntity().getBoundingBox();
+			if(bb == null) continue;
+
 			Vector4f color = isSelected ? OUTLINE_SELECTED : OUTLINE_HOVERED;
-			GlUtil.updateShaderVector4f(shader, "color", color);
+			GlUtil.glColor4f(color.x, color.y, color.z, color.w);
 
-			float sx = indicator.screenX;
-			float sy = indicator.screenY;
-
-			if(ringCount <= 2) {
-				CombatTweaks.getInstance().logInfo("Ring for " + indicator.getEntity().getName() + " at (" + sx + ", " + sy + ") radius=" + RING_RADIUS + " selected=" + isSelected);
-			}
-
-			GL11.glBegin(GL11.GL_QUADS);
-			GL11.glTexCoord2f(0, 0);
-			GL11.glVertex2f(sx - RING_RADIUS, sy - RING_RADIUS);
-			GL11.glTexCoord2f(1, 0);
-			GL11.glVertex2f(sx + RING_RADIUS, sy - RING_RADIUS);
-			GL11.glTexCoord2f(1, 1);
-			GL11.glVertex2f(sx + RING_RADIUS, sy + RING_RADIUS);
-			GL11.glTexCoord2f(0, 1);
-			GL11.glVertex2f(sx - RING_RADIUS, sy + RING_RADIUS);
-			GL11.glEnd();
+			GlUtil.glPushMatrix();
+			GlUtil.glMultMatrix(indicator.entityTransform);
+			drawAABBLines(bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z);
+			GlUtil.glPopMatrix();
 		}
 
-		if(ringCount > 0) {
-			CombatTweaks.getInstance().logInfo("Drew " + ringCount + " ring indicators");
-		}
-		GlUtil.printGlError();
-
-		shader.unloadWithoutExit();
+		GL11.glLineWidth(1.0f);
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GlUtil.glPopMatrix(); // modelview
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPopMatrix();
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		GlUtil.glDisable(GL11.GL_BLEND);
+		GlUtil.glEnable(GL11.GL_LIGHTING);
+		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
+	}
+
+	/**
+	 * Draws the drag-select rectangle overlay in screen-space orthographic mode.
+	 */
+	private void drawDragSelectRect() {
+		if(!isDragSelecting) return;
+		GUIElement.enableOrthogonal();
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		// Depth test would reject 2D quads against 3D scene depth values — disable it
+		GlUtil.glDisable(GL11.GL_DEPTH_TEST);
+		GlUtil.glEnable(GL11.GL_BLEND);
+		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+
+		// Semi-transparent fill
+		GlUtil.glColor4f(DRAG_FILL.x, DRAG_FILL.y, DRAG_FILL.z, DRAG_FILL.w);
+		GL11.glBegin(GL11.GL_QUADS);
+		GL11.glVertex2f(dragMinX, dragMinY);
+		GL11.glVertex2f(dragMaxX, dragMinY);
+		GL11.glVertex2f(dragMaxX, dragMaxY);
+		GL11.glVertex2f(dragMinX, dragMaxY);
+		GL11.glEnd();
+
+		// Border
+		GL11.glLineWidth(1.5f);
+		GlUtil.glColor4f(DRAG_BORDER.x, DRAG_BORDER.y, DRAG_BORDER.z, DRAG_BORDER.w);
+		GL11.glBegin(GL11.GL_LINE_LOOP);
+		GL11.glVertex2f(dragMinX, dragMinY);
+		GL11.glVertex2f(dragMaxX, dragMinY);
+		GL11.glVertex2f(dragMaxX, dragMaxY);
+		GL11.glVertex2f(dragMinX, dragMaxY);
+		GL11.glEnd();
+		GL11.glLineWidth(1.0f);
+
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GlUtil.glDisable(GL11.GL_BLEND);
+		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
 		GUIElement.disableOrthogonal();
-		GlUtil.printGlError();
+	}
+
+	/**
+	 * Selects all entities whose screen bbox overlaps the given screen-space rectangle.
+	 * If additive is false, the current selection is cleared first.
+	 */
+	public void applyDragSelection(float minX, float minY, float maxX, float maxY, boolean additive) {
+		if(!additive) clearSelected();
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(!indicator.screenPosValid) continue;
+			if(canSelect(indicator.getEntity())) {
+				// Overlap test: two AABBs overlap if neither is fully outside the other
+				if(indicator.screenMaxX < minX || indicator.screenMinX > maxX || indicator.screenMaxY < minY || indicator.screenMinY > maxY) {
+					continue;
+				}
+				addSelection(indicator);
+			}
+		}
+	}
+
+	private boolean canSelect(SegmentController entity) {
+		return GameCommon.getGameState().getFactionManager().isFriend(entity.getFactionId(), GameClient.getClientState().getPlayer().getFactionId()) && entity.getFactionId() != 0;
 	}
 }

@@ -27,6 +27,8 @@ public class TacticalMapEntityIndicator {
 	public boolean selected;
 	// Screen-space position cached each draw frame for click hit-testing
 	public float screenX, screenY;
+	// Screen-space bounding box extents for hover/click detection
+	public float screenMinX, screenMaxX, screenMinY, screenMaxY;
 	public boolean screenPosValid;
 	private SegmentController targetData;
 	private SegmentController defendTarget;
