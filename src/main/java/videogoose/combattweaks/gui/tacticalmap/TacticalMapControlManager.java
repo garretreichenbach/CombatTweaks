@@ -31,6 +31,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	private static final int DOUBLE_CLICK_DISTANCE_PX = 10;
 	private static final int DRAG_THRESHOLD_PX = 6;
 	private boolean wasLeftMouseDown;
+	private boolean turretTargetingMode;
 	private static final float FOCUS_DISTANCE = 300.0f;
 	private static final float FOCUS_ELEVATION_ANGLE = 0.3f; // ~23 degrees above horizontal
 	private long lastClickTime;
@@ -60,6 +61,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	@Override
 	public void onSwitch(boolean active) {
 		guiDrawer.clearSelected();
+		if(!active) turretTargetingMode = false;
 		getInteractionManager().setActive(!active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().suspend(active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().suspend(active);
@@ -135,12 +137,16 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			if(Keyboard.isKeyDown(Keyboard.KEY_X)) {
 				guiDrawer.camera.reset();
 			}
-			if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) && Keyboard.getEventKey() == Keyboard.KEY_A && Keyboard.getEventKeyState()) {
-				guiDrawer.toggleSelectAllFriendly();
+			if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) && Keyboard.getEventKeyState()) {
+				if(Keyboard.getEventKey() == Keyboard.KEY_A) {
+					guiDrawer.toggleSelectAllFriendly();
+				} else if(Keyboard.getEventKey() == Keyboard.KEY_S) {
+					turretTargetingMode = !turretTargetingMode;
+				}
 			}
 
-			// Skip camera movement when Ctrl is held to avoid conflicts with selection commands
-			if(!Keyboard.isKeyDown(Keyboard.KEY_LMETA)) {
+			// Skip camera movement when Ctrl or Meta is held to avoid conflicts with selection commands
+			if(!Keyboard.isKeyDown(Keyboard.KEY_LMETA) && !Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
 				if(Keyboard.isKeyDown(KeyboardMappings.FORWARD.getMapping())) {
 					movement.add(new Vector3f(0, 0, amount));
 				}
@@ -222,7 +228,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 					// radial menu doesn't immediately consume the same press that opened it.
 					TacticalMapEntityIndicator hit = guiDrawer.findIndicatorAtScreen(mouseX, mouseY, ENTITY_CLICK_THRESHOLD_PX);
 					if(hit != null) {
-						if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
+						if(turretTargetingMode) {
 							handleTurretTargeting(hit.getEntity());
 						} else {
 							long currentTime = System.currentTimeMillis();

@@ -1,5 +1,6 @@
 package videogoose.combattweaks.utils;
 
+import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
@@ -7,13 +8,85 @@ import org.schema.game.common.controller.ai.AIConfiguationElements;
 import org.schema.game.common.controller.ai.Types;
 import org.schema.game.common.controller.rails.RailRelation;
 import org.schema.game.network.objects.NetworkShip;
+import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
+import org.schema.game.server.ai.program.fleetcontrollable.FleetControllableProgram;
+import org.schema.schine.ai.stateMachines.FSMException;
+import org.schema.schine.ai.stateMachines.Transition;
 
 import javax.vecmath.Vector3f;
 
 public class AIUtils {
 
 	private static final Vector3f targetVelocityTmp = new Vector3f();
+
+	/**
+	 * Ensures the ship is running FleetControllableProgram so fleet-state transitions work.
+	 * If the ship already has one, it's reused; otherwise a new one is created and set.
+	 */
+	@SuppressWarnings("unchecked")
+	private static FleetControllableProgram ensureFleetProgram(Ship ship) {
+		ShipAIEntity aiEntity = ship.getAiConfiguration().getAiEntityState();
+		if(aiEntity.getCurrentProgram() instanceof FleetControllableProgram) {
+			return (FleetControllableProgram) aiEntity.getCurrentProgram();
+		}
+		FleetControllableProgram program = new FleetControllableProgram(aiEntity, false);
+		aiEntity.setCurrentProgram(program);
+		return program;
+	}
+
+	public static void setMineTarget(Ship ship, SegmentController asteroid) {
+		try {
+			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
+			FleetControllableProgram program = ensureFleetProgram(ship);
+			program.setTarget(asteroid);
+			program.suspend(false);
+			program.getMachine().getFsm().stateTransition(Transition.FLEET_GET_TO_MINING_POS);
+		} catch(FSMException e) {
+			// Transition not available from current state — try resetting to idle first
+			try {
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_BREAKING);
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_GET_TO_MINING_POS);
+			} catch(FSMException exception) {
+				exception.printStackTrace();
+			}
+		} catch(Exception ignored) {
+		}
+	}
+
+	public static void setMineTarget(int shipId, int asteroidId) {
+		SegmentController ship = EntityUtils.getEntityById(shipId);
+		SegmentController asteroid = EntityUtils.getEntityById(asteroidId);
+		if(ship instanceof Ship && asteroid instanceof FloatingRock) {
+			setMineTarget((Ship) ship, asteroid);
+		}
+	}
+
+	public static void setRepairTarget(Ship ship, SegmentController target) {
+		try {
+			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
+			FleetControllableProgram program = ensureFleetProgram(ship);
+			program.setTarget(target);
+			program.suspend(false);
+			program.getMachine().getFsm().stateTransition(Transition.FLEET_REPAIR);
+		} catch(FSMException e) {
+			try {
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_BREAKING);
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_REPAIR);
+			} catch(FSMException exception) {
+				exception.printStackTrace();
+			}
+		} catch(Exception ignored) {
+		}
+	}
+
+	public static void setRepairTarget(int shipId, int targetId) {
+		SegmentController ship = EntityUtils.getEntityById(shipId);
+		SegmentController target = EntityUtils.getEntityById(targetId);
+		if(ship instanceof Ship && target != null) {
+			setRepairTarget((Ship) ship, target);
+		}
+	}
 
 	public static void clearTarget(ManagedUsableSegmentController<?> ship) {
 		try {

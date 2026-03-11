@@ -6,15 +6,14 @@ import api.network.packets.PacketUtil;
 import org.schema.game.client.view.gui.RadialMenu;
 import org.schema.game.client.view.gui.RadialMenuCenter;
 import org.schema.game.client.view.gui.RadialMenuDialog;
+import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.schine.graphicsengine.core.MouseEvent;
 import org.schema.schine.graphicsengine.forms.font.FontLibrary;
 import org.schema.schine.graphicsengine.forms.gui.GUICallback;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
-import videogoose.combattweaks.network.client.SendAttackPacket;
-import videogoose.combattweaks.network.client.SendDefensePacket;
-import videogoose.combattweaks.network.client.SendIdlePacket;
+import videogoose.combattweaks.network.client.*;
 
 public class TacticalMapRadial extends RadialMenuDialog {
 
@@ -34,6 +33,7 @@ public class TacticalMapRadial extends RadialMenuDialog {
 		boolean isOwnFaction = target.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId() && GameClient.getClientPlayerState().getFactionId() != 0;
 		boolean isAlly = GameCommon.getGameState().getFactionManager().isFriend(target.getEntity().getFactionId(), GameClient.getClientPlayerState().getFactionId());
 		boolean hasSelection = !drawer.selectedEntities.isEmpty();
+		boolean isMinable = target.getEntity() instanceof FloatingRock;
 
 		if(isOwnFaction) {
 			boolean alreadySelected = drawer.selectedEntities.contains(target.getEntity());
@@ -114,9 +114,30 @@ public class TacticalMapRadial extends RadialMenuDialog {
 				}, null);
 			}
 		} else if(hasSelection) {
-			// Only show attack/defend orders if something is selected
-			if(!isAlly) {
-				// Order all selected friendly ships to attack this entity
+			// Only show orders if something is selected
+			if(isMinable) {
+				// Minable target (asteroid) — order selected ships to mine it
+				menu.addItem("Order Mine", new GUICallback() {
+					@Override
+					public void callback(GUIElement callingGuiElement, MouseEvent event) {
+						if(event.pressedLeftMouse()) {
+							for(SegmentController selected : drawer.selectedEntities) {
+								if(selected instanceof Ship) {
+									PacketUtil.sendPacketToServer(new SendMinePacket((Ship) selected, target.getEntity()));
+								}
+							}
+							drawer.clearSelected();
+							deactivate();
+						}
+					}
+
+					@Override
+					public boolean isOccluded() {
+						return false;
+					}
+				}, null);
+			} else if(!isAlly) {
+				// Enemy — order attack
 				menu.addItem("Order Attack", new GUICallback() {
 					@Override
 					public void callback(GUIElement callingGuiElement, MouseEvent event) {
@@ -137,6 +158,7 @@ public class TacticalMapRadial extends RadialMenuDialog {
 					}
 				}, null);
 			} else {
+				// Ally/own faction ship — offer both defend and repair
 				menu.addItem("Order Defend", new GUICallback() {
 					@Override
 					public void callback(GUIElement callingGuiElement, MouseEvent event) {
@@ -144,11 +166,30 @@ public class TacticalMapRadial extends RadialMenuDialog {
 							for(SegmentController selected : drawer.selectedEntities) {
 								if(selected instanceof Ship && !target.getEntity().equals(selected)) {
 									PacketUtil.sendPacketToServer(new SendDefensePacket((Ship) selected, target.getEntity()));
-									// Update client-side indicator immediately so the green path appears at once
 									TacticalMapEntityIndicator defenderIndicator = drawer.drawMap.get(selected.getId());
 									if(defenderIndicator != null) {
 										defenderIndicator.setDefendTarget(target.getEntity());
 									}
+								}
+							}
+							drawer.clearSelected();
+							deactivate();
+						}
+					}
+
+					@Override
+					public boolean isOccluded() {
+						return false;
+					}
+				}, null);
+
+				menu.addItem("Order Repair", new GUICallback() {
+					@Override
+					public void callback(GUIElement callingGuiElement, MouseEvent event) {
+						if(event.pressedLeftMouse()) {
+							for(SegmentController selected : drawer.selectedEntities) {
+								if(selected instanceof Ship && !target.getEntity().equals(selected)) {
+									PacketUtil.sendPacketToServer(new SendRepairPacket((Ship) selected, target.getEntity()));
 								}
 							}
 							drawer.clearSelected();

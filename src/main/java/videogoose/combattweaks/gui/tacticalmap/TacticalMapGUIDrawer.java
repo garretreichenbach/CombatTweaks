@@ -440,7 +440,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(toggleDraw) {
 			hud.addHelper(InputType.MOUSE, 0, "Select | Double-click: Focus | Shift+Click: Multi-select", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_LMENU, "(Hold) Show Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Holding Left Control) Toggle Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Holding Left Control) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
