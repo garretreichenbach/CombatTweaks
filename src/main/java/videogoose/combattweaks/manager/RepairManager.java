@@ -114,6 +114,13 @@ public class RepairManager {
 		repairTargetSet.remove(shipId); // Reset target-set flag when reassigned
 	}
 
+	/**
+	 * Returns the repair target id assigned to the given ship, or null if none.
+	 */
+	public Integer getAssignedTarget(int shipId) {
+		return assignments.get(shipId);
+	}
+
 	/** Cancel any active repair order for the given ship. */
 	public void removeRepair(int shipId) {
 		assignments.remove(shipId);

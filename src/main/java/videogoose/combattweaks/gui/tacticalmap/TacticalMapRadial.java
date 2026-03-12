@@ -4,7 +4,6 @@ import api.common.GameClient;
 import api.common.GameCommon;
 import api.network.packets.PacketUtil;
 import org.schema.game.client.view.gui.RadialMenu;
-import org.schema.game.client.view.gui.RadialMenuCenter;
 import org.schema.game.client.view.gui.RadialMenuDialog;
 import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.SegmentController;
@@ -36,30 +35,6 @@ public class TacticalMapRadial extends RadialMenuDialog {
 		boolean isMinable = target.getEntity() instanceof FloatingRock;
 
 		if(isOwnFaction) {
-			boolean alreadySelected = drawer.selectedEntities.contains(target.getEntity());
-
-			// Create center button for Select/Deselect
-			GUICallback selectCallback = new GUICallback() {
-				@Override
-				public void callback(GUIElement callingGuiElement, MouseEvent event) {
-					if(event.pressedLeftMouse()) {
-						if(drawer.selectedEntities.contains(target.getEntity())) {
-							drawer.removeSelection(target);
-						} else {
-							drawer.addSelection(target);
-						}
-						deactivate();
-					}
-				}
-
-				@Override
-				public boolean isOccluded() {
-					return false;
-				}
-			};
-
-			RadialMenuCenter centerItem = new RadialMenuCenter(getState(), menu, alreadySelected ? "Deselect" : "Select", selectCallback, null);
-			menu.setCenter(centerItem);
 
 			// Only show action options if something is already selected
 			if(hasSelection) {

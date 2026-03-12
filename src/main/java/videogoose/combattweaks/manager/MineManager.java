@@ -115,6 +115,13 @@ public class MineManager {
 		mineTargetSet.remove(shipId); // Reset target-set flag when reassigned
 	}
 
+	/**
+	 * Returns the asteroid id assigned to the given ship, or null if none.
+	 */
+	public Integer getAssignedTarget(int shipId) {
+		return assignments.get(shipId);
+	}
+
 	/** Cancel any active mining order for the given ship. */
 	public void removeMine(int shipId) {
 		assignments.remove(shipId);

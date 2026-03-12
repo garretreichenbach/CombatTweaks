@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Code Agents when working with code in this repository.
 
 ## Project Overview
 
@@ -164,9 +164,8 @@ The StarMade source code is available locally and via documentation for API look
 - Cross-reference with local source for detailed implementation
 
 **To look up a StarMade API**:
-- Ask Claude Code to look up a class, method, or interface
 - Example: "What does the `StarMod` class provide?" or "Show me the `BlockConfig` API"
-- Claude will search the local source and provide relevant code samples
+- Agent will search the local source and provide relevant code samples
 - Use the online docs to browse the overall API structure
 
 **Source structure** (typical StarMade-Open layout):

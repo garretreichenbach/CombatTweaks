@@ -19,6 +19,7 @@ import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelpManager;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelperContainer;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
+import org.schema.game.common.data.SimpleGameObject;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.Camera;
@@ -37,7 +38,6 @@ import videogoose.combattweaks.CombatTweaks;
 
 import javax.vecmath.Vector3f;
 import javax.vecmath.Vector4f;
-import java.awt.*;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
@@ -55,6 +55,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f PATH_RED = new Vector4f(1.0f, 0.2f, 0.2f, 1.0f);     // bright red for targeting
 	private static final Vector4f PATH_CYAN = new Vector4f(0.2f, 1.0f, 1.0f, 1.0f);    // bright cyan for movement
 	private static final Vector4f PATH_GREEN = new Vector4f(0.2f, 1.0f, 0.2f, 1.0f);   // bright green for defend
+	private static final Vector4f PATH_ORANGE = new Vector4f(1.0f, 0.6f, 0.0f, 1.0f);  // orange for mining
+	private static final Vector4f PATH_MAGENTA = new Vector4f(1.0f, 0.2f, 0.8f, 1.0f); // magenta for repair
 	// Bounding box wireframe colors — solid pass (depth tested) and occluded pass (through geometry)
 	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f);   // yellow, solid
 	private static final Vector4f OUTLINE_SELECTED_OCCLUDED = new Vector4f(1.0f, 1.0f, 0.0f, 0.15f);
@@ -538,6 +540,58 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 					startDrawDottedLine();
 					drawDottedLine(start, end, PATH_CYAN);
 					endDrawDottedLine();
+				}
+			}
+
+			// Draw mining path (orange) if this ship has a mine assignment
+			if(indicator.getEntity() instanceof Ship) {
+				Integer assignedAsteroid = null;
+				try {
+					assignedAsteroid = videogoose.combattweaks.manager.MineManager.getInstance().getAssignedTarget(indicator.getEntity().getId());
+				} catch(Exception ignored) {
+				}
+				if(assignedAsteroid != null) {
+					SimpleGameObject obj = (SimpleGameObject) GameCommon.getGameObject(assignedAsteroid);
+					if(obj instanceof SegmentController) {
+						SegmentController asteroid = (SegmentController) obj;
+						Vector3f start = new Vector3f(indicator.entityTransform.origin);
+						Vector3f end = new Vector3f(asteroid.getWorldTransform().origin);
+						TacticalMapEntityIndicator targetIndicator = drawMap.get(asteroid.getId());
+						if(targetIndicator != null) {
+							end.set(targetIndicator.entityTransform.origin);
+						}
+						if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
+							startDrawDottedLine();
+							drawDottedLine(start, end, PATH_ORANGE);
+							endDrawDottedLine();
+						}
+					}
+				}
+			}
+
+			// Draw repair path (magenta) if this ship has a repair assignment
+			if(indicator.getEntity() instanceof Ship) {
+				Integer assignedTarget = null;
+				try {
+					assignedTarget = videogoose.combattweaks.manager.RepairManager.getInstance().getAssignedTarget(indicator.getEntity().getId());
+				} catch(Exception ignored) {
+				}
+				if(assignedTarget != null) {
+					SimpleGameObject obj = (SimpleGameObject) GameCommon.getGameObject(assignedTarget);
+					if(obj instanceof SegmentController) {
+						SegmentController target = (SegmentController) obj;
+						Vector3f start = new Vector3f(indicator.entityTransform.origin);
+						Vector3f end = new Vector3f(target.getWorldTransform().origin);
+						TacticalMapEntityIndicator targetIndicator = drawMap.get(target.getId());
+						if(targetIndicator != null) {
+							end.set(targetIndicator.entityTransform.origin);
+						}
+						if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
+							startDrawDottedLine();
+							drawDottedLine(start, end, PATH_MAGENTA);
+							endDrawDottedLine();
+						}
+					}
 				}
 			}
 		}
