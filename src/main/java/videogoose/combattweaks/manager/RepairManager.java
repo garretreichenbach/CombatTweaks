@@ -110,6 +110,7 @@ public class RepairManager {
 	/** Register a repair order for the given ship targeting the given object. Replaces any existing order. */
 	public void addRepair(int shipId, int targetId) {
 		assignments.put(shipId, targetId);
+		MoveManager.getInstance().removeMove(shipId);
 		repairingStates.remove(shipId); // Reset repairing state when reassigned
 		repairTargetSet.remove(shipId); // Reset target-set flag when reassigned
 	}

@@ -3,6 +3,7 @@ package videogoose.combattweaks.gui.tacticalmap;
 import api.common.GameClient;
 import api.common.GameCommon;
 import api.utils.draw.ModWorldDrawer;
+import api.utils.game.PlayerUtils;
 import com.bulletphysics.linearmath.Transform;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.input.Keyboard;
@@ -32,9 +33,11 @@ import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.BoundingBox;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
+import org.schema.schine.graphicsengine.util.WorldToScreenConverter;
 import org.schema.schine.input.InputType;
 import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
+import videogoose.combattweaks.manager.MoveManager;
 
 import javax.vecmath.Vector3f;
 import javax.vecmath.Vector4f;
@@ -68,7 +71,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public final int sectorSize;
 	public final float maxDrawDistance;
 	public final Vector3f labelOffset;
-	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap;
+	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap = new ConcurrentHashMap<>();
 	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
 	public final ConcurrentHashMap<Integer, Ship> selectedTurrets = new ConcurrentHashMap<>(); // entity ID → turret Ship
 	private final KeyboardMappings tacticalMapMapping;
@@ -101,7 +104,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		sectorSize = (int) ServerConfig.SECTOR_SIZE.getCurrentState();
 		maxDrawDistance = sectorSize * 4.0f;
 		labelOffset = new Vector3f(0.0f, -20.0f, 0.0f);
-		drawMap = new ConcurrentHashMap<>();
 		updateTimer = 150;
 		tacticalMapMapping = getMappingFromName("OPEN_TACTICAL_MAP");
 	}
@@ -140,7 +142,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public void toggleSelectAllFriendly() {
 		clearSelected();
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(indicator.getEntity() != null && indicator.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId() && GameClient.getClientPlayerState().getFactionId() != 0 && !indicator.getEntity().isDocked()) {
+			if(indicator.getEntity() != null && indicator.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId() && GameClient.getClientPlayerState().getFactionId() != 0 && !indicator.getEntity().isDocked() && !isOwnShip(indicator.getEntity())) {
 				if(isSelected(indicator.getEntity())) {
 					removeSelection(indicator);
 				} else {
@@ -148,6 +150,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				}
 			}
 		}
+	}
+
+	private boolean isOwnShip(SegmentController entity) {
+		return PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()).equals(entity.railController.getRoot());
 	}
 
 	public boolean isSelected(SegmentController entity) {
@@ -460,12 +466,44 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Manages a per-indicator GUITextOverlay cache.
 	 */
 	private void drawLabels() {
+		WorldToScreenConverter worldToScreenConverter;
+		try {
+			worldToScreenConverter = GameClient.getClientState().getScene().getWorldToScreenConverter();
+		} catch(Exception ignored) {
+			return;
+		}
+		if(worldToScreenConverter == null) {
+			return;
+		}
+
+		// Mirror sector indicator setup: build tactical-map projection/view, then cache matrices in converter.
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPushMatrix();
+		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
+		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, 10, 25000, true);
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glPushMatrix();
+		GlUtil.glLoadIdentity();
+		camera.lookAt(true);
+		worldToScreenConverter.storeCurrentModelviewProjection();
+		GlUtil.glPopMatrix();
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPopMatrix();
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+
+		Vector3f posOnScreen = new Vector3f();
+
 		GlUtil.printGlError();
 		GUIElement.enableOrthogonal();
 		GlUtil.printGlError();
 
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(!indicator.screenPosValid || indicator.getEntity().isCloakedFor(getCurrentEntity())) {
+			if(indicator.getEntity().isCloakedFor(getCurrentEntity())) {
+				continue;
+			}
+
+			worldToScreenConverter.convert(indicator.entityTransform.origin, posOnScreen, true);
+			if(posOnScreen.x < -200 || posOnScreen.x > GLFrame.getWidth() + 200 || posOnScreen.y < -200 || posOnScreen.y > GLFrame.getHeight() + 200) {
 				continue;
 			}
 
@@ -474,9 +512,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			overlay.setTextSimple(displayText);
 			overlay.updateTextSize();
 
-			// Position overlay at screen coordinates with upward offset
 			float offsetY = -40.0f;
-			overlay.getTransform().origin.set(indicator.screenX, indicator.screenY + offsetY, 0);
+			overlay.getPos().set((int) posOnScreen.x, (int) (posOnScreen.y + offsetY), 0);
 			overlay.draw();
 			GlUtil.printGlError();
 
@@ -491,7 +528,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Renders targeting, defend, and movement paths only for own ships, selected, or hovered entities.
 	 */
 	private void drawPaths() {
-		SegmentController playerEntity = getCurrentEntity();
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid) continue;
 
@@ -531,15 +567,30 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				}
 			}
 
-			// Draw movement path (cyan) if configured
+			// Draw movement path (cyan) only for explicit move orders.
+			// Mining/repair assignments have their own paths and should not show an additional move vector.
 			if(indicator.getEntity() instanceof Ship) {
-				Vector3f start = new Vector3f(indicator.entityTransform.origin);
-				Vector3f end = GlUtil.getForwardVector(dottedA, indicator.getEntity().getWorldTransform());
-				end.scale(indicator.getEntity().getSpeedCurrent());
-				if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
-					startDrawDottedLine();
-					drawDottedLine(start, end, PATH_CYAN);
-					endDrawDottedLine();
+				Integer assignedAsteroid = null;
+				Integer assignedRepairTarget = null;
+				try {
+					assignedAsteroid = videogoose.combattweaks.manager.MineManager.getInstance().getAssignedTarget(indicator.getEntity().getId());
+				} catch(Exception ignored) {
+				}
+				try {
+					assignedRepairTarget = videogoose.combattweaks.manager.RepairManager.getInstance().getAssignedTarget(indicator.getEntity().getId());
+				} catch(Exception ignored) {
+				}
+				if(assignedAsteroid == null && assignedRepairTarget == null) {
+					Vector3f destination = MoveManager.getInstance().getAssignedDestination(indicator.getEntity().getId());
+					if(destination != null) {
+						Vector3f start = new Vector3f(indicator.entityTransform.origin);
+						Vector3f end = new Vector3f(destination);
+						if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
+							startDrawDottedLine();
+							drawDottedLine(start, end, PATH_CYAN);
+							endDrawDottedLine();
+						}
+					}
 				}
 			}
 
@@ -629,24 +680,24 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		Vector3f a = dottedA;
 		Vector3f b = dottedB;
 		float dottedSize = Math.min(Math.max(2, len * 0.1f), 40);
+		float gap = dottedSize;
+		float cycle = dottedSize + gap;
+		// Phase advances forward along the line over time, so dashes march toward the target.
+		float phase = (System.currentTimeMillis() * 0.05f) % cycle;
 		GlUtil.glColor4f(color);
-		boolean first = true;
-		// Use a simple animation based on time
-		float f = 0;
-		for(; f < len; f += (dottedSize * 2)) {
+		for(float f = phase - cycle; f < len; f += cycle) {
+			if(f + dottedSize <= 0) {
+				continue;
+			}
+			float segStart = Math.max(0.0f, f);
+			float segEnd = Math.min(len, f + dottedSize);
+			if(segEnd <= segStart) {
+				continue;
+			}
 			a.set(dottedDirN);
-			a.scale(f);
-			if(first) {
-				a.set(0, 0, 0);
-				first = false;
-			}
+			a.scale(segStart);
 			b.set(dottedDirN);
-			if((f + dottedSize) >= len) {
-				b.scale(len);
-				f = len;
-			} else {
-				b.scale(f + dottedSize);
-			}
+			b.scale(segEnd);
 			GL11.glVertex3f(from.x + a.x, from.y + a.y, from.z + a.z);
 			GL11.glVertex3f(from.x + b.x, from.y + b.y, from.z + b.z);
 		}
@@ -817,6 +868,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	/**
 	 * Builds the display text for an entity label.
+	 * Distance is shown from the tactical map camera position, matching sector indicator behaviour.
 	 */
 	private String getEntityDisplay(TacticalMapEntityIndicator indicator, SegmentController playerEntity) {
 		SegmentController entity = indicator.getEntity();
@@ -830,7 +882,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
 				builder.append("???km\n");
 			} else {
-				builder.append(StringTools.formatDistance(indicator.getDistanceFromFocusedShip())).append("\n");
+				// Use tactical-map camera position as the reference, same way sector indicators do it.
+				Vector3f camPos = camera.getPos();
+				Vector3f entityPos = indicator.entityTransform.origin;
+				float camDist = Vector3fTools.distance(camPos.x, camPos.y, camPos.z, entityPos.x, entityPos.y, entityPos.z);
+				builder.append(StringTools.formatDistance(camDist)).append("\n");
 			}
 		}
 		if(indicator.getCurrentTarget() != null) {

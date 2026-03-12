@@ -5,7 +5,8 @@
   "compatibilityLevel": "JAVA_8",
   "target": "@env(DEFAULT)",
   "mixins": [
-    "KeyboardMappingsMixin"
+    "KeyboardMappingsMixin",
+    "SmoothMovementMixin"
   ],
   "client": [],
   "server": [],

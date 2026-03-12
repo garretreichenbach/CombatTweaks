@@ -180,6 +180,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 
 			boolean isLeftDown = Mouse.isButtonDown(0);
 			boolean rightDown = Mouse.isButtonDown(1);
+			boolean isMiddleDown = Mouse.isButtonDown(2);
 			int mouseX = Mouse.getX();
 			int mouseY = GLFrame.getHeight() - Mouse.getY();
 
@@ -245,7 +246,12 @@ public class TacticalMapControlManager extends AbstractControlManager {
 						guiDrawer.clearSelected();
 					}
 				}
+			} else if(isMiddleDown && !rightDown) {
+				if(!guiDrawer.selectedEntities.isEmpty()) {
+					(new TacticalMapRadial(guiDrawer, null)).activate();
+				}
 			}
+
 			wasLeftMouseDown = isLeftDown;
 		}
 	}

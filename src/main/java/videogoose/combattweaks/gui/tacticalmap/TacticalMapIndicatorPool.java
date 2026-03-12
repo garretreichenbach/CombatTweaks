@@ -37,7 +37,6 @@ public class TacticalMapIndicatorPool {
 			}
 			try {
 				o.onInit();
-				o.getScale().y *= -1;
 			} catch(Exception ignored) {
 			}
 		}

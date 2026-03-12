@@ -111,6 +111,7 @@ public class MineManager {
 	/** Register a mining order for the given ship targeting the given asteroid. Replaces any existing order. */
 	public void addMine(int shipId, int asteroidId) {
 		assignments.put(shipId, asteroidId);
+		MoveManager.getInstance().removeMove(shipId);
 		miningStates.remove(shipId); // Reset mining state when reassigned
 		mineTargetSet.remove(shipId); // Reset target-set flag when reassigned
 	}
