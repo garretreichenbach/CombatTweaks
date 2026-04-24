@@ -203,9 +203,7 @@ public class MineManager {
 		float hardBrakeDistance = MINING_RANGE;
 		float mediumBrakeDistance = MINING_RANGE * 2.0f;
 
-		if(dist < hardBrakeDistance) {
-			speedScale = 0.1f; // Hard brake near target
-		} else if(dist < mediumBrakeDistance) {
+		if(dist < mediumBrakeDistance) {
 			// Linear interpolation: 50% speed at mediumBrakeDistance, 10% at hardBrakeDistance
 			float range = mediumBrakeDistance - hardBrakeDistance;
 			float progress = (dist - hardBrakeDistance) / range;
@@ -224,8 +222,8 @@ public class MineManager {
 	 */
 	private void applyMovement(Ship ship, Vector3f destination, float speedScale) {
 		if(ship.getNetworkObject() instanceof NetworkShip) {
-			((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
-			((NetworkShip) ship.getNetworkObject()).targetPosition.set(destination);
+			ship.getNetworkObject().targetVelocity.set(0, 0, 0);
+			ship.getNetworkObject().targetPosition.set(destination);
 		}
 
 		Vector3f shipPos = ship.getWorldTransform().origin;
@@ -256,8 +254,8 @@ public class MineManager {
 		if(!mineTargetSet.getOrDefault(shipId, false)) {
 			// Clear movement commands when entering mining mode
 			if(ship.getNetworkObject() instanceof NetworkShip) {
-				((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
-				((NetworkShip) ship.getNetworkObject()).targetPosition.set(ship.getWorldTransform().origin);
+				ship.getNetworkObject().targetVelocity.set(0, 0, 0);
+				ship.getNetworkObject().targetPosition.set(ship.getWorldTransform().origin);
 			}
 			lastDirections.remove(shipId);
 			AIUtils.setMineTarget(ship, asteroid);

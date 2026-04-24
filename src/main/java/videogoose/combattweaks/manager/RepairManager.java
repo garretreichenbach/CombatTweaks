@@ -211,9 +211,7 @@ public class RepairManager {
 		float hardBrakeDistance = REPAIR_RANGE;
 		float mediumBrakeDistance = REPAIR_RANGE * 2.0f;
 
-		if(dist < hardBrakeDistance) {
-			speedScale = 0.1f; // Hard brake near target
-		} else if(dist < mediumBrakeDistance) {
+		if(dist < mediumBrakeDistance) {
 			// Linear interpolation: 50% speed at mediumBrakeDistance, 10% at hardBrakeDistance
 			float range = mediumBrakeDistance - hardBrakeDistance;
 			float progress = (dist - hardBrakeDistance) / range;

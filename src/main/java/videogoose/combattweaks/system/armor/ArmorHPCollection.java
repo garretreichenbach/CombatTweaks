@@ -97,7 +97,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	@Override
 	public boolean needsUpdate() {
-		return flagCollectionChanged;
+		return flagCollectionChanged || lastChangeTimestamp.containsKey(getSegmentController());
 	}
 
 	@Override
@@ -154,6 +154,9 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			recalcHP();
 		} catch(Exception e) {
 			CombatTweaks.getInstance().logException("Failed to recalc armor HP for entity " + getSegmentController().getName() + " (" + getSegmentController().getUniqueIdentifier() + ")", e);
+		} finally {
+			lastChangeTimestamp.remove(sc);
+			pending.remove(sc);
 		}
 	}
 
@@ -193,6 +196,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	private void recalcHP() {
 		long start = System.currentTimeMillis();
+		double previousHP = currentHP;
 		currentHP = 0;
 		maxHP = 0;
 
@@ -217,6 +221,11 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 					maxHP += (info.getArmorValue() * armorHPValueMultiplier) * count;
 				}
 			}
+		}
+
+		// When only updating max, preserve current HP but cap at new max
+		if(updateMaxOnly) {
+			currentHP = Math.min(previousHP, maxHP);
 		}
 
 		if(currentHP < 0) {

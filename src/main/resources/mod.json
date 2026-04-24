@@ -1,20 +1,20 @@
 {
-  "name": "CombatTweaks",
-  "author": "VideoGoose",
-  "description": "Useful combat-related game additions.",
-  "version": "2.1.0",
-  "starmade_version": "0.205.1",
-  "client_mod": true,
-  "server_mod": true,
-  "main_class": "videogoose.combattweaks.CombatTweaks",
-  "smd_resource_id": 8559,
-  "dependencies": [
-	-1
-  ],
-  "core_mod": false,
-  "requires_class_resize": false,
-  "hard_load_all_classes": false,
-  "mixin_configs": [
-    "combattweaks.mixins.json"
-  ]
+	"name": "CombatTweaks",
+	"author": "VideoGoose",
+	"description": "Useful combat-related game additions.",
+	"version": "2.1.0",
+	"starmade_version": "0.205.4",
+	"client_mod": true,
+	"server_mod": true,
+	"main_class": "videogoose.combattweaks.CombatTweaks",
+	"smd_resource_id": 8559,
+	"dependencies": [
+		-1
+	],
+	"core_mod": false,
+	"requires_class_resize": false,
+	"hard_load_all_classes": false,
+	"mixin_configs": [
+		"combattweaks.mixins.json"
+	]
 }
