@@ -10,6 +10,7 @@ import org.schema.schine.resource.ResourceLoader;
 import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.manager.*;
 import videogoose.combattweaks.network.client.*;
+import videogoose.combattweaks.network.server.SendArmorHPSyncPacket;
 
 public class CombatTweaks extends StarMod {
 
@@ -56,6 +57,7 @@ public class CombatTweaks extends StarMod {
 		PacketUtil.registerPacket(SendMinePacket.class);
 		PacketUtil.registerPacket(SendRepairPacket.class);
 		PacketUtil.registerPacket(SendMoveToPacket.class);
+		PacketUtil.registerPacket(SendArmorHPSyncPacket.class);
 	}
 
 	private void initializeGlossary() {

@@ -2,7 +2,7 @@
 	"required": true,
 	"minVersion": "0.8.7",
 	"package": "videogoose.combattweaks.mixins",
-	"compatibilityLevel": "JAVA_8",
+	"compatibilityLevel": "JAVA_21",
 	"target": "@env(DEFAULT)",
 	"mixins": [
 		"KeyboardMappingsMixin"

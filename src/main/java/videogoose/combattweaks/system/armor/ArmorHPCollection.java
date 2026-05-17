@@ -1,6 +1,8 @@
 package videogoose.combattweaks.system.armor;
 
 import api.common.GameClient;
+import api.common.GameServer;
+import api.network.packets.PacketUtil;
 import it.unimi.dsi.fastutil.shorts.Short2IntArrayMap;
 import org.schema.common.util.StringTools;
 import org.schema.game.client.data.GameClientState;
@@ -13,10 +15,12 @@ import org.schema.game.common.controller.rails.RailRelation;
 import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.element.ElementInformation;
 import org.schema.game.common.data.element.ElementKeyMap;
+import org.schema.game.common.data.player.PlayerState;
 import org.schema.schine.common.language.Lng;
 import org.schema.schine.graphicsengine.core.Timer;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
+import videogoose.combattweaks.network.server.SendArmorHPSyncPacket;
 
 import java.util.*;
 
@@ -28,6 +32,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	private static final long UPDATE_FREQUENCY = 1000;
 	private static final long REGEN_FREQUENCY = 1000;
+	private static final long SYNC_FREQUENCY = 500;
 	// Delay after the last enqueued change before processing the batch (ms)
 	private static final long PROCESS_DELAY_MS = 500; // arbitrary time since last update
 	private static final Set<SegmentController> pending = Collections.synchronizedSet(new HashSet<SegmentController>());
@@ -36,6 +41,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private final Short2IntArrayMap armorCountCacheMap = new Short2IntArrayMap();
 
 	private final double armorHPValueMultiplier;
+	private final double armorHPScalingExponent;
 	private final double armorHPLostPerDamageAbsorbed;
 	private final double baseArmorHPBleedThroughStart;
 	private double currentHP;
@@ -44,10 +50,13 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private boolean updateMaxOnly;
 	private long lastRegen;
 	private boolean regenEnabled;
+	private long lastSync;
+	private double lastSyncedHP = -1;
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
 		armorHPValueMultiplier = ConfigManager.getSystemConfig().getDouble("armor_hp_value_multiplier");
+		armorHPScalingExponent = ConfigManager.getSystemConfig().getDouble("armor_hp_scaling_exponent");
 		armorHPLostPerDamageAbsorbed = ConfigManager.getSystemConfig().getDouble("armor_hp_lost_per_damage_absorbed");
 		baseArmorHPBleedThroughStart = ConfigManager.getSystemConfig().getDouble("base_armor_hp_bleed_through_start");
 	}
@@ -123,18 +132,23 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 		if(currentHP < maxHP && maxHP > 0) {
 			flagCollectionChanged = false; // prevent placing blocks to reset HP unintentionally
-			return;
-		}
-
-		if(System.currentTimeMillis() - lastUpdate > UPDATE_FREQUENCY && maxHP <= 0 && hasAnyArmorBlocks() && getSegmentController().isFullyLoadedWithDock() && flagCollectionChanged) {
-			lastUpdate = System.currentTimeMillis();
-			enqueueRecalc(getSegmentController());
+		} else {
+			if(System.currentTimeMillis() - lastUpdate > UPDATE_FREQUENCY && maxHP <= 0 && hasAnyArmorBlocks() && getSegmentController().isFullyLoadedWithDock() && flagCollectionChanged) {
+				lastUpdate = System.currentTimeMillis();
+				enqueueRecalc(getSegmentController());
+			}
 		}
 
 		regenEnabled = getSegmentController().getConfigManager().apply(StatusEffectType.ARMOR_HP_REGENERATION, 1.0f) > 1.0f;
 		if(System.currentTimeMillis() - lastRegen >= REGEN_FREQUENCY && regenEnabled && currentHP < maxHP) {
 			lastRegen = System.currentTimeMillis();
 			doRegen();
+		}
+
+		if(isOnServer() && maxHP > 0 && System.currentTimeMillis() - lastSync >= SYNC_FREQUENCY && currentHP != lastSyncedHP) {
+			lastSync = System.currentTimeMillis();
+			lastSyncedHP = currentHP;
+			broadcastSync();
 		}
 	}
 
@@ -165,6 +179,23 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			double regen = getSegmentController().getConfigManager().apply(StatusEffectType.ARMOR_HP_REGENERATION, 1.0f) * maxHP;
 			currentHP = Math.min(maxHP, currentHP + regen);
 		}
+	}
+
+	private void broadcastSync() {
+		try {
+			SendArmorHPSyncPacket packet = new SendArmorHPSyncPacket(getSegmentController().getId(), currentHP, maxHP);
+			for(PlayerState playerState : GameServer.getServerState().getPlayerStatesByName().values()) {
+				PacketUtil.sendPacket(playerState, packet);
+			}
+		} catch(Exception e) {
+			CombatTweaks.getInstance().logException("Error broadcasting armor HP sync", e);
+		}
+	}
+
+	public void applySync(double syncedCurrentHP, double syncedMaxHP) {
+		if(isOnServer()) return;
+		maxHP = syncedMaxHP;
+		currentHP = Math.max(0, Math.min(syncedMaxHP, syncedCurrentHP));
 	}
 
 	@Override
@@ -210,20 +241,22 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		}
 		getArmorCounts(getSegmentController(), armorCountCacheMap, true);
 
+		double rawSum = 0;
 		for(short type : armorCountCacheMap.keySet()) {
 			int count = armorCountCacheMap.get(type);
 			if(count > 0) {
 				ElementInformation info = ElementKeyMap.getInfo(type);
 				if(info != null) {
-					if(!updateMaxOnly) {
-						currentHP += (info.getArmorValue() * armorHPValueMultiplier) * count;
-					}
-					maxHP += (info.getArmorValue() * armorHPValueMultiplier) * count;
+					rawSum += info.getArmorValue() * count;
 				}
 			}
 		}
 
-		// When only updating max, preserve current HP but cap at new max
+		maxHP = armorHPValueMultiplier * Math.pow(rawSum, armorHPScalingExponent);
+		if(!updateMaxOnly) {
+			currentHP = maxHP;
+		}
+
 		if(updateMaxOnly) {
 			currentHP = Math.min(previousHP, maxHP);
 		}
@@ -307,13 +340,13 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		}
 		double hpPercent = getHPPercent();
 		double bleedThreshold = getBleedThroughThreshold();
-		if(hpPercent >= bleedThreshold) {
-			double hpLoss = dmgAfterBaseArmorProtection * armorHPLostPerDamageAbsorbed;
-			setCurrentHP(currentHP - hpLoss);
-			return 0.0f;
+		double bleedFrac;
+		if(bleedThreshold <= 0) {
+			bleedFrac = 0;
+		} else {
+			bleedFrac = Math.min(1.0, (1.0 - hpPercent) / bleedThreshold);
 		}
-		double bleedFrac = (bleedThreshold - hpPercent) / (bleedThreshold <= 0 ? 1.0 : bleedThreshold);
-		bleedFrac = Math.max(0.0, Math.min(1.0, bleedFrac));
+		bleedFrac = Math.max(0.0, bleedFrac);
 		double desiredAbsorbed = dmgAfterBaseArmorProtection * (1.0 - bleedFrac);
 		double absorbCapacity = currentHP / armorHPLostPerDamageAbsorbed;
 		double actualAbsorbed = Math.min(desiredAbsorbed, absorbCapacity);
@@ -328,6 +361,6 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	}
 
 	public boolean canBleedThrough() {
-		return getHPPercent() < getBleedThroughThreshold();
+		return getBleedThroughThreshold() > 0 && getHPPercent() < 1.0;
 	}
 }

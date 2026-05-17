@@ -66,6 +66,7 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 
 	private boolean isValidTarget(ShipAIEntity shipAIEntity) {
 		try {
+			if(shipAIEntity == null || shipAIEntity.getCurrentProgram() == null) return false;
 			SimpleGameObject target = ((TargetProgram<?>) ((shipAIEntity.getEntity()).getAiConfiguration().getAiEntityState().getCurrentProgram())).getTarget();
 			if(target instanceof SegmentController) {
 				SegmentController segmentController = (SegmentController) target;
