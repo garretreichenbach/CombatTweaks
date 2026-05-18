@@ -19,3 +19,6 @@ gradle-app.setting
 .classpath
 
 *.DS_Store
+
+# MkDocs build output
+site/

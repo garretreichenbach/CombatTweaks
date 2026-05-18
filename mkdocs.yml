@@ -1,0 +1,27 @@
+site_name: CombatTweaks
+site_description: A StarMade mod for tactical fleet management and armor HP defense
+site_url: https://garretreichenbach.github.io/CombatTweaks/
+repo_url: https://github.com/garretreichenbach/CombatTweaks
+repo_name: garretreichenbach/CombatTweaks
+
+theme:
+  name: readthedocs
+  highlightjs: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Configuration: getting-started/configuration.md
+  - Features:
+    - Tactical Map: features/tactical-map.md
+    - Fleet AI Orders: features/fleet-orders.md
+    - Armor HP System: features/armor-hp.md
+  - Development:
+    - Building from Source: development/building.md
+
+markdown_extensions:
+  - tables
+  - admonition
+  - toc:
+      permalink: true
