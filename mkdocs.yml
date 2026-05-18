@@ -5,15 +5,8 @@ repo_url: https://github.com/garretreichenbach/CombatTweaks
 repo_name: garretreichenbach/CombatTweaks
 
 theme:
-  name: material
-  palette:
-    scheme: slate
-    primary: indigo
-    accent: cyan
-  features:
-    - navigation.sections
-    - navigation.expand
-    - toc.integrate
+  name: readthedocs
+  highlightjs: true
 
 nav:
   - Home: index.md
