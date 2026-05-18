@@ -7,6 +7,7 @@ import org.lwjgl.opengl.Display;
 import org.schema.common.util.linAlg.Vector3fTools;
 import org.schema.game.client.controller.manager.AbstractControlManager;
 import org.schema.game.client.controller.manager.ingame.PlayerInteractionControlManager;
+import org.schema.game.client.controller.manager.ingame.navigation.NavigationFilter;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.CameraMouseState;
@@ -29,12 +30,15 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	private static final int DOUBLE_CLICK_DISTANCE_PX = 10;
 	private static final int DRAG_THRESHOLD_PX = 6;
 	private boolean wasLeftMouseDown;
-	private boolean turretTargetingMode;
+	public boolean turretTargetingMode;
+	private boolean wasADown;
+	private boolean wasSDown;
 	private static final float FOCUS_DISTANCE = 300.0f;
 	private static final float FOCUS_ELEVATION_ANGLE = 0.3f; // ~23 degrees above horizontal
-	private long lastClickTime;
 	private int lastClickX;
 	private int lastClickY;
+	private TacticalMapEntityIndicator pendingClickIndicator;
+	private long pendingClickTime;
 
 	public TacticalMapControlManager(TacticalMapGUIDrawer guiDrawer) {
 		super(GameClient.getClientState());
@@ -131,16 +135,22 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			if(Keyboard.isKeyDown(Keyboard.KEY_X)) {
 				guiDrawer.camera.reset();
 			}
-			if(Keyboard.isKeyDown(Keyboard.KEY_GRAVE) && Keyboard.getEventKeyState()) {
-				if(Keyboard.getEventKey() == Keyboard.KEY_A) {
+			// Edge-detected Ctrl+A / Ctrl+S commands
+			boolean aDown = Keyboard.isKeyDown(Keyboard.KEY_A);
+			boolean sDown = Keyboard.isKeyDown(Keyboard.KEY_S);
+			if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
+				if(aDown && !wasADown) {
 					guiDrawer.toggleSelectAllFriendly();
-				} else if(Keyboard.getEventKey() == Keyboard.KEY_S) {
+				} else if(sDown && !wasSDown) {
 					turretTargetingMode = !turretTargetingMode;
+					getState().getGlobalGameControlManager().getIngameControlManager().getPlayerGameControlManager().getNavigationControlManager().getFilter().setFilter(turretTargetingMode, NavigationFilter.POW_DOCKED);
 				}
 			}
+			wasADown = aDown;
+			wasSDown = sDown;
 
 			// Skip camera movement when Ctrl or Meta is held to avoid conflicts with selection commands
-			if(!Keyboard.isKeyDown(Keyboard.KEY_LMETA) && !Keyboard.isKeyDown(Keyboard.KEY_GRAVE)) {
+			if(!Keyboard.isKeyDown(Keyboard.KEY_LMETA) && !Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
 				if(Keyboard.isKeyDown(KeyboardMappings.FORWARD.getMapping())) {
 					movement.add(new Vector3f(0, 0, amount));
 				}
@@ -210,6 +220,12 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				}
 			}
 
+			// Flush pending single-click if the double-click window has expired
+			if(pendingClickIndicator != null && (System.currentTimeMillis() - pendingClickTime) >= DOUBLE_CLICK_TIME_MS) {
+				(new TacticalMapRadial(guiDrawer, pendingClickIndicator)).activate();
+				pendingClickIndicator = null;
+			}
+
 			// LMB released
 			if(!isLeftDown && wasLeftMouseDown && !rightDown) {
 				if(guiDrawer.isDragSelecting) {
@@ -219,31 +235,42 @@ public class TacticalMapControlManager extends AbstractControlManager {
 							Keyboard.isKeyDown(Keyboard.KEY_LSHIFT));
 					guiDrawer.isDragSelecting = false;
 				} else {
-					// Treat as a click — entity click detection fires on release so the
-					// radial menu doesn't immediately consume the same press that opened it.
 					TacticalMapEntityIndicator hit = guiDrawer.findIndicatorAtScreen(mouseX, mouseY, ENTITY_CLICK_THRESHOLD_PX);
 					if(hit != null) {
 						if(turretTargetingMode) {
 							handleTurretTargeting(hit.getEntity());
-						} else {
-							long currentTime = System.currentTimeMillis();
+						} else if(pendingClickIndicator != null) {
+							// Second click arrived within the window — double-click
 							int deltaX = mouseX - lastClickX;
 							int deltaY = mouseY - lastClickY;
 							int distSq = deltaX * deltaX + deltaY * deltaY;
-							boolean isDoubleClick = (currentTime - lastClickTime) < DOUBLE_CLICK_TIME_MS
-									&& distSq < DOUBLE_CLICK_DISTANCE_PX * DOUBLE_CLICK_DISTANCE_PX;
-							if(isDoubleClick) {
+							if(distSq < DOUBLE_CLICK_DISTANCE_PX * DOUBLE_CLICK_DISTANCE_PX) {
 								focusCameraOnEntity(hit.getEntity());
-								lastClickTime = 0;
 							} else {
-								(new TacticalMapRadial(guiDrawer, hit)).activate();
-								lastClickTime = currentTime;
+								// Too far from first click — treat as a new single click
+								(new TacticalMapRadial(guiDrawer, pendingClickIndicator)).activate();
+								pendingClickTime = System.currentTimeMillis();
 								lastClickX = mouseX;
 								lastClickY = mouseY;
+								pendingClickIndicator = hit;
+								return;
 							}
+							pendingClickIndicator = null;
+						} else {
+							// First click — defer action until we know it's not a double-click
+							pendingClickIndicator = hit;
+							pendingClickTime = System.currentTimeMillis();
+							lastClickX = mouseX;
+							lastClickY = mouseY;
 						}
-					} else if(!hasModifierKeyPressed()) {
-						guiDrawer.clearSelected();
+					} else {
+						// Clicked empty space — flush any pending click and clear selection
+						if(pendingClickIndicator != null) {
+							(new TacticalMapRadial(guiDrawer, pendingClickIndicator)).activate();
+							pendingClickIndicator = null;
+						} else if(!hasModifierKeyPressed()) {
+							guiDrawer.clearSelected();
+						}
 					}
 				}
 			} else if(isMiddleDown && !rightDown) {
@@ -257,7 +284,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	}
 
 	private boolean hasModifierKeyPressed() {
-		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_GRAVE) || Keyboard.isKeyDown(Keyboard.KEY_LMENU);
+		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_LMENU);
 	}
 
 	/**

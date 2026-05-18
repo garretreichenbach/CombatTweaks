@@ -221,10 +221,18 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			indicator.update(timer);
 		}
 		if(updateTimer <= 0) {
+			boolean showDocked = controlManager.turretTargetingMode;
 			for(SimpleTransformableSendableObject<?> object : GameClient.getClientState().getCurrentSectorEntities().values()) {
-				if(object instanceof SegmentController && !((SegmentController) object).isDocked() && !drawMap.containsKey(object.getId())) {
-					drawMap.put(object.getId(), new TacticalMapEntityIndicator((SegmentController) object));
+				if(object instanceof SegmentController && !drawMap.containsKey(object.getId())) {
+					boolean isDocked = ((SegmentController) object).isDocked();
+					if(!isDocked || showDocked) {
+						drawMap.put(object.getId(), new TacticalMapEntityIndicator((SegmentController) object));
+					}
 				}
+			}
+			// Remove docked entities from drawMap when turret targeting mode is disabled
+			if(!showDocked) {
+				drawMap.values().removeIf(indicator -> indicator.getEntity().isDocked());
 			}
 			updateTimer = 150;
 		}
@@ -444,8 +452,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(toggleDraw) {
 			hud.addHelper(InputType.MOUSE, 0, "Select | Double-click: Focus | Shift+Click: Multi-select", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Holding Tilde) Toggle Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Holding Tilde) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Ctrl) Toggle Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Ctrl) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
 	}
