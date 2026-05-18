@@ -2,7 +2,7 @@
 	"name": "CombatTweaks",
 	"author": "VideoGoose",
 	"description": "Useful combat-related game additions.",
-	"version": "2.1.2",
+	"version": "2.1.3",
 	"starmade_version": "0.303.16",
 	"client_mod": false,
 	"server_mod": false,
@@ -10,8 +10,5 @@
 	"smd_resource_id": 8559,
 	"dependencies": [
 		-1
-	],
-	"mixin_configs": [
-		"combattweaks.mixins.json"
 	]
 }
