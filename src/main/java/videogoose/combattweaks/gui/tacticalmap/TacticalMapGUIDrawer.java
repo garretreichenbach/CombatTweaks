@@ -35,8 +35,8 @@ import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
 import org.schema.schine.graphicsengine.util.WorldToScreenConverter;
 import org.schema.schine.input.InputType;
-import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
+import videogoose.combattweaks.manager.ConfigManager;
 import videogoose.combattweaks.manager.MoveManager;
 
 import javax.vecmath.Vector3f;
@@ -74,7 +74,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap = new ConcurrentHashMap<>();
 	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
 	public final ConcurrentHashMap<Integer, Ship> selectedTurrets = new ConcurrentHashMap<>(); // entity ID → turret Ship
-	private final KeyboardMappings tacticalMapMapping;
 	// Reusable temporaries for dotted line math
 	private final Vector3f dottedDir = new Vector3f();
 	private final Vector3f dottedDirN = new Vector3f();
@@ -105,20 +104,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		maxDrawDistance = sectorSize * 4.0f;
 		labelOffset = new Vector3f(0.0f, -20.0f, 0.0f);
 		updateTimer = 150;
-		tacticalMapMapping = getMappingFromName("OPEN_TACTICAL_MAP");
 	}
 
 	public static TacticalMapGUIDrawer getInstance() {
 		return instance;
-	}
-
-	private KeyboardMappings getMappingFromName(String name) {
-		for(KeyboardMappings mapping : KeyboardMappings.values()) {
-			if(mapping.name().equals(name)) {
-				return mapping;
-			}
-		}
-		return null;
 	}
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
@@ -450,13 +439,13 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	private void drawHudIndicators() {
 		if(shouldDraw()) {
-			hud.addHelper(tacticalMapMapping, "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.IMPORTANT);
+			hud.addHelper(InputType.KEYBOARD, ConfigManager.getTacticalMapKey(), "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.IMPORTANT);
 		}
 		if(toggleDraw) {
 			hud.addHelper(InputType.MOUSE, 0, "Select | Double-click: Focus | Shift+Click: Multi-select", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Holding Left Control) Toggle Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Holding Left Control) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Holding Tilde) Toggle Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Holding Tilde) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
 	}

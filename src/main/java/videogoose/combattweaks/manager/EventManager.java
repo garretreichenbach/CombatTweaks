@@ -20,7 +20,6 @@ import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.element.ElementKeyMap;
-import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.effect.ConfigGroupRegistry;
 import videogoose.combattweaks.gui.elements.AdvancedStructureStatsArmor;
@@ -34,19 +33,7 @@ public class EventManager {
 	public static ShipAIShootListenerImpl shipAIShootListener;
 	public static DamageReductionByArmorCalcListenerImpl damageReductionByArmorCalcListener;
 
-	private static KeyboardMappings tacticalMapMapping;
-
-	private static KeyboardMappings getMappingFromName(String name) {
-		for(KeyboardMappings mapping : KeyboardMappings.values()) {
-			if(mapping.name().equals(name)) {
-				return mapping;
-			}
-		}
-		return null;
-	}
-
 	public static void initialize(CombatTweaks instance) {
-		tacticalMapMapping = getMappingFromName("OPEN_TACTICAL_MAP");
 
 		FastListenerCommon.shipAIEntityAttemptToShootListeners.add(shipAIShootListener = new ShipAIShootListenerImpl());
 		FastListenerCommon.damageReductionByArmorCalcListeners.add(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl());
@@ -70,22 +57,8 @@ public class EventManager {
 			public void onEvent(KeyPressEvent event) {
 				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
 					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
-						int tacticalKey = tacticalMapMapping.get();
-						// Determine if the event corresponds to the tactical key. Some layouts deliver character events with key==0 (NONE),
-						// so we accept the backslash character as a fallback.
-						boolean isTacticalKey = false;
-						try {
-							if(event.getKey() == tacticalKey) {
-								isTacticalKey = true;
-							} else if(event.getKey() == 0) {
-								char c = Keyboard.getEventCharacter();
-								if(c == '\\') {
-									isTacticalKey = true;
-								}
-							}
-						} catch(Throwable t) {
-							// Ignore, but do not block processing
-						}
+						int tacticalKey = ConfigManager.getTacticalMapKey();
+						boolean isTacticalKey = event.getKey() == tacticalKey;
 						if((event.getKey() == Keyboard.KEY_ESCAPE || isTacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
 							TacticalMapGUIDrawer.getInstance().toggleDraw();
 						} else {

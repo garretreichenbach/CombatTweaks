@@ -131,7 +131,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			if(Keyboard.isKeyDown(Keyboard.KEY_X)) {
 				guiDrawer.camera.reset();
 			}
-			if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) && Keyboard.getEventKeyState()) {
+			if(Keyboard.isKeyDown(Keyboard.KEY_GRAVE) && Keyboard.getEventKeyState()) {
 				if(Keyboard.getEventKey() == Keyboard.KEY_A) {
 					guiDrawer.toggleSelectAllFriendly();
 				} else if(Keyboard.getEventKey() == Keyboard.KEY_S) {
@@ -140,7 +140,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			}
 
 			// Skip camera movement when Ctrl or Meta is held to avoid conflicts with selection commands
-			if(!Keyboard.isKeyDown(Keyboard.KEY_LMETA) && !Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
+			if(!Keyboard.isKeyDown(Keyboard.KEY_LMETA) && !Keyboard.isKeyDown(Keyboard.KEY_GRAVE)) {
 				if(Keyboard.isKeyDown(KeyboardMappings.FORWARD.getMapping())) {
 					movement.add(new Vector3f(0, 0, amount));
 				}
@@ -257,7 +257,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	}
 
 	private boolean hasModifierKeyPressed() {
-		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_LMENU);
+		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_GRAVE) || Keyboard.isKeyDown(Keyboard.KEY_LMENU);
 	}
 
 	/**

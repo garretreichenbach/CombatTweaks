@@ -1,13 +1,15 @@
 package videogoose.combattweaks.manager;
 
 import api.mod.config.FileConfiguration;
+import org.lwjgl.input.Keyboard;
 import videogoose.combattweaks.CombatTweaks;
 
 public class ConfigManager {
 
 	public static final String[] defaultMainConfig = {
 			"debug_mode: false",
-			"tactical_map_view_distance: 1.2"
+			"tactical_map_view_distance: 1.2",
+			"tactical_map_keybind: BACKSLASH"
 	};
 
 	public static final String[] defaultSystemConfig = {
@@ -39,5 +41,12 @@ public class ConfigManager {
 
 	public static FileConfiguration getSystemConfig() {
 		return systemConfig;
+	}
+
+	public static int getTacticalMapKey() {
+		String keyName = mainConfig.getString("tactical_map_keybind");
+		if(keyName == null || keyName.isEmpty()) return Keyboard.KEY_BACKSLASH;
+		int key = Keyboard.getKeyIndex(keyName.toUpperCase().trim());
+		return key != Keyboard.KEY_NONE ? key : Keyboard.KEY_BACKSLASH;
 	}
 }
