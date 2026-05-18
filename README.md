@@ -6,7 +6,7 @@ A StarMade mod that adds real-time tactical fleet management and an armor HP def
 
 ### Tactical Map
 
-Press **Backslash** to open a real-time tactical overlay of your current sector. The map shows all ships and asteroids with faction-colored indicators, distance readouts, and active order paths.
+Press **Backslash** to open a real-time tactical overlay of your current sector. The map shows all ships, stations, and asteroids with faction-colored indicators, distance readouts, and active order paths.
 
 **Camera Controls:**
 - WASD to pan, Space/Ctrl+Space for vertical movement, Shift to sprint

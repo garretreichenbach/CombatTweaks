@@ -22,7 +22,7 @@ public class ArmorHPAbsorptionEffect1 extends ConfigEffectGroup {
 			configElement.stackType = ModifierStackType.ADD;
 			configElement.priority = 1;
 			StatusEffectFloatValue value = new StatusEffectFloatValue();
-			value.value.set((float) ConfigManager.getSystemConfig().getDouble("armor_hp_absorption_effect_1_sub"));
+			value.value.set(ConfigManager.getSystemConfig().armorHpAbsorptionEffect1Sub.value.floatValue());
 			configElement.value = value;
 			elements.add(configElement);
 		}

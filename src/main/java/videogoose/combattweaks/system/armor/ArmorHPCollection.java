@@ -55,10 +55,10 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
-		armorHPValueMultiplier = ConfigManager.getSystemConfig().getDouble("armor_hp_value_multiplier");
-		armorHPScalingExponent = ConfigManager.getSystemConfig().getDouble("armor_hp_scaling_exponent");
-		armorHPLostPerDamageAbsorbed = ConfigManager.getSystemConfig().getDouble("armor_hp_lost_per_damage_absorbed");
-		baseArmorHPBleedThroughStart = ConfigManager.getSystemConfig().getDouble("base_armor_hp_bleed_through_start");
+		armorHPValueMultiplier = ConfigManager.getSystemConfig().armorHpValueMultiplier.value;
+		armorHPScalingExponent = ConfigManager.getSystemConfig().armorHpScalingExponent.value;
+		armorHPLostPerDamageAbsorbed = ConfigManager.getSystemConfig().armorHpLostPerDamageAbsorbed.value;
+		baseArmorHPBleedThroughStart = ConfigManager.getSystemConfig().baseArmorHpBleedThroughStart.value;
 	}
 
 	public static ArmorHPCollection getCollection(SegmentController controller) {
