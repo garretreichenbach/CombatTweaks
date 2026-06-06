@@ -43,9 +43,17 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 	private static final float MAX_APPROACH_SPEED = 60.0f;
 	/** How often to re-find the nearest block (ms) — used only as the approach target. */
 	private static final long BLOCK_REFRESH_MS = 300;
-	/** Clamp for the distance at which we hand off to the engine mining state. */
-	private static final float MIN_ENTER_DIST = 60.0f;
-	private static final float MAX_ENTER_DIST = 300.0f;
+	/**
+	 * Stand-off the ship keeps between its hull (bounding sphere) and the nearest surface block while
+	 * mining — small, since salvage beams are short range, but enough to never touch the rock. As blocks
+	 * are mined the nearest block recedes and the ship follows inward at this stand-off, so it tunnels
+	 * cleanly instead of stalling or ramming.
+	 */
+	private static final float STANDOFF = 35.0f;
+	/** Dead-band around the stand-off so the ship doesn't constantly nudge in and out (jitter). */
+	private static final float STANDOFF_SLACK = 15.0f;
+	/** Bleed velocity below this before handing off, so the ship enters the mining state nearly still. */
+	private static final float ENTER_SPEED = 6.0f;
 
 	/** Per-ship throttle for debug logging (entity id → last log time ms). */
 	private final Map<Integer, Long> lastDebugLog = new ConcurrentHashMap<>();
@@ -64,10 +72,9 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 			}
 
 			Object asteroidObj = GameCommon.getGameObject(asteroidId);
-			if(!(asteroidObj instanceof FloatingRock)) {
+			if(!(asteroidObj instanceof FloatingRock asteroid)) {
 				return;
 			}
-			FloatingRock asteroid = (FloatingRock) asteroidObj;
 			if(asteroid.getWorldTransform() == null || asteroid.getTotalElements() <= 0) {
 				return;
 			}
@@ -77,17 +84,10 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 				return;
 			}
 
-			ShipAIEntity aiEntity = (ShipAIEntity) entity.getAiConfiguration().getAiEntityState();
+			ShipAIEntity aiEntity = entity.getAiConfiguration().getAiEntityState();
 			// Disable collision avoidance toward the asteroid so the ship can close in (and during
 			// mining); only the AIDocking state acts on dockingTarget, which we never enter.
 			aiEntity.setDockingTarget(asteroid);
-
-			// Already mining via the engine's FleetMining state? It handles holding, block-finding and
-			// firing — leave it alone.
-			if(AIUtils.isMiningState(entity)) {
-				debug(entity, "mining (engine FleetMining state)");
-				return;
-			}
 
 			Vector3f shipPos = entity.getWorldTransform().origin;
 			Vector3f target = getTargetBlock(entity.getId(), asteroid, shipPos);
@@ -95,39 +95,52 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 				return; // no block found this tick
 			}
 			float dist = Vector3fTools.distance(shipPos.x, shipPos.y, shipPos.z, target.x, target.y, target.z);
+			// Stand-off measured from the hull (bounding sphere), so it's consistent across ship sizes.
+			float standoff = entity.getBoundingSphere().radius + STANDOFF;
+			float speed = entity.getLinearVelocity(new Vector3f()).length();
 
-			float salvageRange = aiEntity.getSalvageRange();
-			if(salvageRange <= 0) {
-				salvageRange = 200.0f; // not computed yet — use a sane default for the approach
-			}
-			// Hand off to the engine mining state once we're comfortably inside salvage range of a block.
-			float enterDist = Math.min(Math.max(salvageRange * 0.7f, MIN_ENTER_DIST), MAX_ENTER_DIST);
+			// While FleetMining is active it owns the aiming (it orients the ship at the exact block it's
+			// salvaging). Our movement must NOT also orient the ship or the two fight and the beam points
+			// off-target — so only orient toward travel while still approaching.
+			boolean mining = AIUtils.isMiningState(entity);
 
-			if(dist > enterDist) {
-				// Approach the nearest block. Cap speed near the enter range so the ship coasts in
-				// instead of overshooting and bouncing.
-				float speed = entity.getLinearVelocity(new Vector3f()).length();
-				if(dist < enterDist + APPROACH_SLOW_ZONE && speed > MAX_APPROACH_SPEED) {
+			// Position control — keep the ship `standoff` from the nearest solid block, in BOTH phases.
+			// FleetMining only aims+fires (never thrusts), so we own movement throughout: as blocks are
+			// mined the nearest block recedes and the ship follows it inward, staying off the surface, so
+			// it tunnels cleanly without ramming and without stalling once the surface layer is gone.
+			if(dist > standoff + STANDOFF_SLACK) {
+				// Approach. Cap speed near the stand-off so it coasts in instead of overshooting.
+				if(dist < standoff + APPROACH_SLOW_ZONE && speed > MAX_APPROACH_SPEED) {
 					aiEntity.stop();
 				} else {
 					Vector3f toBlock = new Vector3f();
 					toBlock.sub(target, shipPos);
-					aiEntity.moveTo(timer, toBlock, true);
+					aiEntity.moveTo(timer, toBlock, !mining);
 				}
+			} else if(dist < standoff - STANDOFF_SLACK) {
+				// Too close — ease back so the hull never reaches the surface.
+				Vector3f away = new Vector3f();
+				away.sub(shipPos, target);
+				aiEntity.moveTo(timer, away, false);
+			} else {
+				aiEntity.stop(); // at the stand-off — hold against drift/gravity
+			}
+
+			// Already mining? FleetMining aims + fires; we handled positioning above, so leave it.
+			if(mining) {
+				debug(entity, "mining (engine FleetMining state)");
 				return;
 			}
 
-			// In range. canSalvage() is only true when the salvage beams are linked to storage with
-			// free space; without it the engine state would just restart, so wait here instead.
-			if(!aiEntity.canSalvage()) {
-				aiEntity.stop();
-				debug(entity, "in range but canSalvage()==false (link salvage beams to a cargo/storage with free space)");
-				return;
+			// Not mining yet — once we're at the stand-off and nearly stopped, hand off to FleetMining.
+			if(dist <= standoff + STANDOFF_SLACK && speed <= ENTER_SPEED) {
+				if(!aiEntity.canSalvage()) {
+					debug(entity, "at rock but canSalvage()==false (link salvage beams to a cargo/storage with free space)");
+					return;
+				}
+				AIUtils.enterMiningState(entity, asteroid);
+				debug(entity, "entering FleetMining on " + asteroid.getName());
 			}
-
-			// Hand off to the engine's FleetMining state — it now does the actual salvaging.
-			AIUtils.enterMiningState(entity, asteroid);
-			debug(entity, "entering FleetMining on " + asteroid.getName());
 		} catch(Exception e) {
 			CombatTweaks.getInstance().logException("Error in mining controller", e);
 		}
@@ -170,7 +183,7 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 	/** Throttled debug log (once per ~3s per ship) gated on the mod's debug_mode config. */
 	private void debug(Ship entity, String message) {
 		try {
-			if(!ConfigManager.getMainConfig().debugMode.value) {
+			if(!ConfigManager.getMainConfig().debugMode.getValue()) {
 				return;
 			}
 			long now = System.currentTimeMillis();

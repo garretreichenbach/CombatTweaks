@@ -3,7 +3,7 @@
 	"author": "VideoGoose",
 	"description": "Useful combat-related game additions.",
 	"version": "2.1.5",
-	"starmade_version": "0.303.21",
+	"starmade_version": "0.303.24",
 	"client_mod": false,
 	"server_mod": false,
 	"main_class": "videogoose.combattweaks.CombatTweaks",

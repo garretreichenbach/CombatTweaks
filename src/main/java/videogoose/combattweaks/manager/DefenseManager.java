@@ -68,6 +68,11 @@ public class DefenseManager {
 		assignments.put(defenderId, protectedId);
 	}
 
+	/** Whether the given ship currently has a defense order. */
+	public boolean isDefending(int defenderId) {
+		return assignments.containsKey(defenderId);
+	}
+
 	/** Cancel the defense order for the given defender. */
 	public void removeDefense(int defenderId) {
 		if(assignments.remove(defenderId) != null) {

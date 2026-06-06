@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import videogoose.combattweaks.manager.MineManager;
+import videogoose.combattweaks.utils.AIUtils;
 
 /**
  * Lets a single fleeted ship mine on its own.
@@ -38,8 +38,9 @@ public abstract class FleetStateMixin {
 			if(!mem.isLoaded() || !(mem.getLoaded() instanceof Ship s)) {
 				continue;
 			}
-			// Leave ships we're actively solo-mining with alone so the idle fleet doesn't break them.
-			if(MineManager.getInstance().getAssignedTarget(s.getId()) != null) {
+			// Leave ships under any CombatTweaks order (attack/defend/mine/repair) alone — otherwise the
+			// idle fleet breaks them out of their combat/repair/mining states.
+			if(AIUtils.isUnderCommand(s.getId())) {
 				continue;
 			}
 			if(s.isCoreOverheating()

@@ -8,6 +8,8 @@
 		"defaultRequire": 1
 	},
 	"mixins": [
-		"FleetStateMixin"
+		"FleetStateMixin",
+		"ShipAIEntityMixin",
+		"FleetMiningMixin"
 	]
 }

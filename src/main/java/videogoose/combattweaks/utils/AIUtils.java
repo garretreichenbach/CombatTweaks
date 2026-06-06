@@ -23,8 +23,27 @@ import videogoose.combattweaks.manager.MoveManager;
 import videogoose.combattweaks.manager.RepairManager;
 
 import javax.vecmath.Vector3f;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class AIUtils {
+
+	/** Ships currently ordered to attack (no manager tracks attack, unlike mine/defend/repair). */
+	private static final Set<Integer> attackOrders = ConcurrentHashMap.newKeySet();
+
+	/**
+	 * Whether a ship is under any CombatTweaks order (attack/defend/mine/repair). Used by the fleet
+	 * mixin: an idle fleet force-breaks members that aren't idle, which would yank our commanded ships
+	 * out of their combat/repair/mining states — so the fleet must leave commanded ships alone. (Move
+	 * isn't included: it drives the ship via moveTo while it stays in the idle state, so the fleet
+	 * never breaks it.)
+	 */
+	public static boolean isUnderCommand(int shipId) {
+		return attackOrders.contains(shipId)
+				|| MineManager.getInstance().getAssignedTarget(shipId) != null
+				|| RepairManager.getInstance().getAssignedTarget(shipId) != null
+				|| DefenseManager.getInstance().isDefending(shipId);
+	}
 
 	/**
 	 * Whether a ship may be given tactical-map orders (move/attack/defend/mine/repair).
@@ -212,6 +231,7 @@ public class AIUtils {
 			((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
 			((NetworkShip) ship.getNetworkObject()).targetPosition.set(ship.getWorldTransform().origin);
 		}
+		attackOrders.remove(ship.getId()); // no longer attacking under our command
 	}
 
 	public static void clearTarget(int shipId) {
@@ -285,6 +305,7 @@ public class AIUtils {
 	 * (the search state nulls a plain target and would otherwise re-acquire a random enemy).
 	 */
 	private static void engageWithFleetShip(Ship ship, SegmentController to) {
+		attackOrders.add(ship.getId()); // mark commanded so the idle fleet won't break it out of combat
 		try {
 			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
 			FleetControllableProgram program = ensureFleetProgram(ship);
