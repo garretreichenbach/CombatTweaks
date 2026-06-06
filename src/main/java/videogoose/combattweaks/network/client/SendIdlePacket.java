@@ -41,5 +41,6 @@ public class SendIdlePacket extends Packet {
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
 		AIUtils.clearAllOrders(shipId);
+		AIUtils.haltShip(shipId); // stop residual drift/spin so "idle" actually parks the ship
 	}
 }

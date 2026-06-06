@@ -6,14 +6,9 @@ import org.schema.common.util.linAlg.Vector3fTools;
 import org.schema.common.util.linAlg.Vector3i;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
-import org.schema.game.common.controller.ai.AIConfiguationElements;
-import org.schema.game.common.controller.ai.Types;
 import org.schema.game.common.data.SimpleGameObject;
 import org.schema.game.common.data.player.faction.FactionRelation;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
-import org.schema.game.network.objects.NetworkShip;
-import org.schema.game.server.ai.ShipAIEntity;
-import org.schema.game.server.ai.program.common.TargetProgram;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.utils.AIUtils;
 
@@ -75,7 +70,9 @@ public class DefenseManager {
 
 	/** Cancel the defense order for the given defender. */
 	public void removeDefense(int defenderId) {
-		assignments.remove(defenderId);
+		if(assignments.remove(defenderId) != null) {
+			MoveManager.getInstance().removeMove(defenderId);
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -112,7 +109,9 @@ public class DefenseManager {
 
 		SegmentController threat = findNearestThreat(protectedEntity, defender.getFactionId());
 		if(threat != null) {
-			// Attack the threat using the existing, proven mechanism
+			// Engage: hand off to the engine's combat FSM. Stop any escort movement so the two
+			// controllers don't fight over the ship.
+			MoveManager.getInstance().removeMove(defender.getId());
 			AIUtils.setAttackTarget(defender, threat);
 		} else {
 			positionNearProtected(defender, protectedEntity);
@@ -153,37 +152,23 @@ public class DefenseManager {
 	}
 
 	/**
-	 * When no threats are present, move the defender to stay within {@link #ESCORT_DISTANCE}
-	 * of the protected entity. We clear the AI's attack target and set a position target
-	 * toward the protected entity so the ship follows without engaging it.
+	 * When no threats are present, keep the defender within {@link #ESCORT_DISTANCE} of the protected
+	 * entity. Movement is delegated to {@link MoveManager} (which thrusts at ~20 Hz with collision
+	 * avoidance and holds position on arrival) — driving moveTo() from this 5s tick barely moved the
+	 * ship at all.
 	 */
 	private void positionNearProtected(ManagedUsableSegmentController<?> defender, SegmentController protectedEntity) {
+		// Not engaging anything while escorting.
+		AIUtils.clearTarget(defender.getId());
+
 		Vector3f defPos = defender.getWorldTransform().origin;
 		Vector3f protPos = protectedEntity.getWorldTransform().origin;
 		float dist = Vector3fTools.distance(defPos.x, defPos.y, defPos.z, protPos.x, protPos.y, protPos.z);
-		if(dist <= ESCORT_DISTANCE) return;
-
-		// Keep AI active for movement
-		((AIConfiguationElements<Boolean>) defender.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
-
-		// Clear attack target to prevent friendly fire
-		try {
-			((TargetProgram<?>) defender.getAiConfiguration().getAiEntityState().getCurrentProgram()).setTarget(null);
-		} catch(Exception exception) {
-			exception.printStackTrace();
-		}
-
-		// Point the ship toward the protected entity via the network target position
-		if(defender.getNetworkObject() instanceof NetworkShip) {
-			protectedEntity.getPhysicsObject().getLinearVelocity(tmpVec);
-			((NetworkShip) defender.getNetworkObject()).targetVelocity.set(tmpVec);
-			((NetworkShip) defender.getNetworkObject()).targetPosition.set(protPos);
-			ShipAIEntity aiEntity = (ShipAIEntity) defender.getAiConfiguration().getAiEntityState();
-			// moveTo() expects a ship->destination direction vector (its length drives braking and
-			// feeds the engine's collision-avoidance calc), NOT an absolute world position. Passing
-			// the raw world position steered toward the world origin and disabled near-target braking.
-			tmpVec.sub(protPos, defPos);
-			aiEntity.moveTo(GameServer.getServerState().getController().getTimer(), tmpVec, true);
+		if(dist <= ESCORT_DISTANCE) {
+			// Close enough — stop escorting and hold.
+			MoveManager.getInstance().removeMove(defender.getId());
+		} else {
+			MoveManager.getInstance().addMove(defender.getId(), MoveManager.computeDestination(defender, protectedEntity));
 		}
 	}
 }

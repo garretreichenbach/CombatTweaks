@@ -10,5 +10,8 @@
 	"smd_resource_id": 8559,
 	"dependencies": [
 		-1
+	],
+	"mixin_configs": [
+		"mixins.combattweaks.json"
 	]
 }

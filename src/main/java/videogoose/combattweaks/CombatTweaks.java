@@ -9,6 +9,9 @@ import videogoose.combattweaks.manager.*;
 import videogoose.combattweaks.network.client.*;
 import videogoose.combattweaks.network.server.SendArmorHPSyncPacket;
 
+import java.util.Collections;
+import java.util.List;
+
 public class CombatTweaks extends StarMod {
 
 	public static void main(String[] args) {}
@@ -18,6 +21,11 @@ public class CombatTweaks extends StarMod {
 	}
 	public CombatTweaks() {
 		instance = this;
+	}
+
+	@Override
+	public List<String> getMixinConfigs() {
+		return Collections.singletonList("mixins.combattweaks.json");
 	}
 
 	@Override

@@ -1,0 +1,13 @@
+{
+	"required": true,
+	"minVersion": "0.8",
+	"package": "videogoose.combattweaks.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"target": "@env(DEFAULT)",
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"mixins": [
+		"FleetStateMixin"
+	]
+}

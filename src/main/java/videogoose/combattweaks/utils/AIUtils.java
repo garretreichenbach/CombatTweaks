@@ -1,5 +1,6 @@
 package videogoose.combattweaks.utils;
 
+import com.bulletphysics.dynamics.RigidBody;
 import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
@@ -11,6 +12,7 @@ import org.schema.game.network.objects.NetworkShip;
 import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.game.server.ai.program.fleetcontrollable.FleetControllableProgram;
+import org.schema.game.server.ai.program.fleetcontrollable.states.FleetMining;
 import org.schema.game.common.data.player.PlayerState;
 import org.schema.schine.ai.stateMachines.FSMException;
 import org.schema.schine.ai.stateMachines.Transition;
@@ -23,8 +25,6 @@ import videogoose.combattweaks.manager.RepairManager;
 import javax.vecmath.Vector3f;
 
 public class AIUtils {
-
-	private static final Vector3f targetVelocityTmp = new Vector3f();
 
 	/**
 	 * Whether a ship may be given tactical-map orders (move/attack/defend/mine/repair).
@@ -110,10 +110,55 @@ public class AIUtils {
 		}
 	}
 
+	/** True if the ship's AI is currently in the engine's FleetMining state (actively salvaging). */
+	public static boolean isMiningState(Ship ship) {
+		try {
+			return ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().getCurrentState() instanceof FleetMining;
+		} catch(Exception exception) {
+			return false;
+		}
+	}
+
+	/**
+	 * Drives the ship straight into the engine's FleetMining state with the asteroid as the target.
+	 *
+	 * <p>The transitions go idle → FLEET_GET_TO_MINING_POS (formationMining) → FLEET_MINE (mining)
+	 * back-to-back in one call, so the formation state's onUpdate (which restarts a lone ship that is
+	 * its own flagship) never runs — but FleetMining itself, which has no flagship dependency, then does
+	 * the real block-finding, aiming and salvage firing exactly like NPC miners. The ship must already
+	 * be within salvage range of the rock (FleetMining doesn't fly there); the caller navigates it
+	 * close first.</p>
+	 */
+	public static void enterMiningState(Ship ship, SegmentController asteroid) {
+		try {
+			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
+			FleetControllableProgram program = ensureFleetProgram(ship);
+			program.setTarget(asteroid);
+			program.setSpecificTargetId(asteroid.getAsTargetId());
+			program.suspend(false);
+			program.getMachine().getFsm().stateTransition(Transition.FLEET_GET_TO_MINING_POS);
+			program.getMachine().getFsm().stateTransition(Transition.FLEET_MINE);
+		} catch(FSMException e) {
+			// Not in a state that allows the transition — reset to idle first, then retry the pair.
+			try {
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_BREAKING);
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_GET_TO_MINING_POS);
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_MINE);
+			} catch(FSMException exception) {
+				exception.printStackTrace();
+			}
+		} catch(Exception exception) {
+			exception.printStackTrace();
+		}
+	}
+
 	public static void setRepairTarget(Ship ship, SegmentController target) {
 		try {
 			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
 			FleetControllableProgram program = ensureFleetProgram(ship);
+			if(program.getTarget() == target) {
+				return; // already repairing this target — don't re-transition and interrupt it
+			}
 			program.setTarget(target);
 			program.setSpecificTargetId(target.getAsTargetId());
 			program.suspend(false);
@@ -155,6 +200,14 @@ public class AIUtils {
 		} catch(Exception exception) {
 			exception.printStackTrace();
 		}
+		// Clear any mining "docking target" avoidance bypass so the ship resumes avoiding the asteroid.
+		try {
+			Object ai = ship.getAiConfiguration().getAiEntityState();
+			if(ai instanceof ShipAIEntity) {
+				((ShipAIEntity) ai).setDockingTarget(null);
+			}
+		} catch(Exception ignored) {
+		}
 		if(ship.getNetworkObject() instanceof NetworkShip) {
 			((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
 			((NetworkShip) ship.getNetworkObject()).targetPosition.set(ship.getWorldTransform().origin);
@@ -165,6 +218,27 @@ public class AIUtils {
 		SegmentController ship = EntityUtils.getEntityById(shipId);
 		if(ship instanceof Ship) {
 			clearTarget((ManagedUsableSegmentController<?>) ship);
+		}
+	}
+
+	/**
+	 * Immediately brings a ship to rest (zeroes linear and angular velocity). In space a ship with no
+	 * order just coasts on its residual velocity, so issuing "idle" needs an explicit halt or the ship
+	 * keeps drifting/spinning.
+	 */
+	public static void haltShip(int shipId) {
+		SegmentController sc = EntityUtils.getEntityById(shipId);
+		if(sc == null) {
+			return;
+		}
+		try {
+			Object physics = sc.getPhysicsDataContainer().getObject();
+			if(physics instanceof RigidBody body) {
+				body.setLinearVelocity(new Vector3f(0, 0, 0));
+				body.setAngularVelocity(new Vector3f(0, 0, 0));
+			}
+		} catch(Exception exception) {
+			exception.printStackTrace();
 		}
 	}
 
@@ -183,28 +257,68 @@ public class AIUtils {
 	}
 
 	public static void setAttackTarget(SegmentController from, SegmentController to) {
-		if(from instanceof Ship) {
-			Ship ship = (Ship) from;
-			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
-			((TargetProgram<?>) ship.getAiConfiguration().getAiEntityState().getCurrentProgram()).setTarget(to);
-			ship.getAiConfiguration().getAiEntityState().getCurrentProgram().suspend(false);
-
-			if(from.getNetworkObject() instanceof NetworkShip) {
-				to.getPhysicsObject().getLinearVelocity(targetVelocityTmp);
-				((NetworkShip) from.getNetworkObject()).targetVelocity.set(targetVelocityTmp);
-				((NetworkShip) from.getNetworkObject()).targetPosition.set(to.getWorldTransform().origin);
+		if(from == null || to == null) {
+			return;
+		}
+		if(from instanceof Ship ship) {
+			if(ship.railController.isDocked()) {
+				// Docked turret: its own turret AI engages once a specific target is set.
+				setTurretAttackTarget(ship, to);
+			} else {
+				engageWithFleetShip(ship, to);
 			}
-		} else {
+		}
+		// Cascade the order to docked turrets so they engage the same target.
+		if(from.railController != null && from.railController.next != null) {
 			for(RailRelation child : from.railController.next) {
-				if(child.docked.getSegmentController() instanceof Ship) {
+				if(child.docked != null && child.docked.getSegmentController() instanceof Ship && !child.docked.getSegmentController().equals(from)) {
 					setAttackTarget(child.docked.getSegmentController(), to);
 				}
 			}
 		}
-		for(RailRelation child : from.railController.next) {
-			if(child.docked.getSegmentController() instanceof Ship) {
-				setAttackTarget(child.docked.getSegmentController(), to);
+	}
+
+	/**
+	 * Make a fleeted (non-turret) ship actually engage a specific target. Just setting the program's
+	 * target leaves a FleetControllable ship parked in its passive idle state; it must be driven
+	 * through the SEARCH_FOR_TARGET transition, and the target must be set as the SPECIFIC target id
+	 * (the search state nulls a plain target and would otherwise re-acquire a random enemy).
+	 */
+	private static void engageWithFleetShip(Ship ship, SegmentController to) {
+		try {
+			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
+			FleetControllableProgram program = ensureFleetProgram(ship);
+			if(program.getTarget() == to) {
+				return; // already attacking this target — don't re-transition and interrupt the engagement
 			}
+			program.setTarget(to);
+			program.setSpecificTargetId(to.getAsTargetId());
+			program.suspend(false);
+			program.getMachine().getFsm().stateTransition(Transition.SEARCH_FOR_TARGET);
+		} catch(FSMException e) {
+			// Not currently in a state that allows SEARCH_FOR_TARGET — reset to idle first, then retry.
+			try {
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_BREAKING);
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.SEARCH_FOR_TARGET);
+			} catch(FSMException exception) {
+				exception.printStackTrace();
+			}
+		} catch(Exception exception) {
+			exception.printStackTrace();
+		}
+	}
+
+	/** Point a docked turret's AI at a specific target; the turret's own AI handles the firing. */
+	private static void setTurretAttackTarget(Ship turret, SegmentController to) {
+		try {
+			((AIConfiguationElements<Boolean>) turret.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
+			if(turret.getAiConfiguration().getAiEntityState().getCurrentProgram() instanceof TargetProgram<?> tp) {
+				tp.setTarget(to);
+				tp.setSpecificTargetId(to.getAsTargetId());
+				tp.suspend(false);
+			}
+		} catch(Exception exception) {
+			exception.printStackTrace();
 		}
 	}
 
