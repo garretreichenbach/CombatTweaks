@@ -25,6 +25,7 @@ import videogoose.combattweaks.effect.ConfigGroupRegistry;
 import videogoose.combattweaks.gui.elements.AdvancedStructureStatsArmor;
 import videogoose.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
 import videogoose.combattweaks.listener.DamageReductionByArmorCalcListenerImpl;
+import videogoose.combattweaks.listener.MiningSalvageListener;
 import videogoose.combattweaks.listener.ShipAIShootListenerImpl;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
 
@@ -32,11 +33,13 @@ public class EventManager {
 
 	public static ShipAIShootListenerImpl shipAIShootListener;
 	public static DamageReductionByArmorCalcListenerImpl damageReductionByArmorCalcListener;
+	public static MiningSalvageListener miningSalvageListener;
 
 	public static void initialize(CombatTweaks instance) {
 
 		FastListenerCommon.shipAIEntityAttemptToShootListeners.add(shipAIShootListener = new ShipAIShootListenerImpl());
 		FastListenerCommon.damageReductionByArmorCalcListeners.add(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl());
+		FastListenerCommon.customAddOnUseListeners.add(miningSalvageListener = new MiningSalvageListener());
 
 		StarLoader.registerListener(HudCreateEvent.class, new Listener<HudCreateEvent>() {
 			@Override

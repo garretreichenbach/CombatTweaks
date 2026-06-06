@@ -40,6 +40,9 @@ public class SendMoveToPacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
+		if(!AIUtils.canReceiveOrders(shipId, playerState)) {
+			return;
+		}
 		AIUtils.setMoveToTarget(shipId, targetId);
 	}
 }

@@ -12,7 +12,7 @@ public class MainConfig extends SimpleConfigContainer {
 			new SimpleConfigBool(this, "debug_mode", false, "Enable debug logging");
 
 	public final SimpleConfigDouble tacticalMapViewDistance =
-			new SimpleConfigDouble(this, "tactical_map_view_distance", 1.2, "Tactical map visibility range (in sector radii)");
+			new SimpleConfigDouble(this, "tactical_map_view_distance", 4.0, "Tactical map range, in sector sizes. Governs how far entities are drawn/selectable AND how far the camera can pan, so any visible entity is always reachable.");
 
 	public final SimpleConfigString tacticalMapKeybind =
 			new SimpleConfigString(this, "tactical_map_keybind", "BACKSLASH", "Keyboard key name for toggling the tactical map");

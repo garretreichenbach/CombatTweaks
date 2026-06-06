@@ -45,6 +45,9 @@ public class SendAttackPacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
+		if(!AIUtils.canReceiveOrders(entityId, playerState)) {
+			return;
+		}
 		AIUtils.setAttackTarget(entityId, targetId);
 	}
 }

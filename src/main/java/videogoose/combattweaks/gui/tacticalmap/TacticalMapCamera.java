@@ -29,7 +29,8 @@ public class TacticalMapCamera extends Camera {
 				transform = (((SegmentController) GameClient.getCurrentControl()).getWorldTransform());
 			}
 			defaultTransform.set(transform);
-			defaultTransform.origin.add(new Vector3f(drawer.sectorSize, drawer.sectorSize, -drawer.sectorSize));
+			int sectorSize = drawer.getSectorSize();
+			defaultTransform.origin.add(new Vector3f(sectorSize, sectorSize, -sectorSize));
 			setLookAlgorithm(new TacticalCameraLook(this, transform));
 
 			Transform temp = new Transform(transform);

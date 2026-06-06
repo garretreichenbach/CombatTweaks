@@ -9,6 +9,7 @@ import org.schema.game.client.controller.manager.AbstractControlManager;
 import org.schema.game.client.controller.manager.ingame.PlayerInteractionControlManager;
 import org.schema.game.client.controller.manager.ingame.navigation.NavigationFilter;
 import org.schema.game.common.controller.SegmentController;
+import org.schema.game.common.controller.Ship;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.CameraMouseState;
 import org.schema.schine.graphicsengine.core.GLFrame;
@@ -30,9 +31,14 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	private static final int DOUBLE_CLICK_DISTANCE_PX = 10;
 	private static final int DRAG_THRESHOLD_PX = 6;
 	private boolean wasLeftMouseDown;
+	private boolean wasMiddleMouseDown;
 	public boolean turretTargetingMode;
 	private boolean wasADown;
 	private boolean wasSDown;
+	/** The currently open radial menu, if any. Tracked so a new one closes the old instead of stacking. */
+	private TacticalMapRadial activeRadial;
+	/** Set while/after a radial is open to swallow the dismiss-click so it doesn't reopen a radial. */
+	private boolean suppressClickUntilRelease;
 	private static final float FOCUS_DISTANCE = 300.0f;
 	private static final float FOCUS_ELEVATION_ANGLE = 0.3f; // ~23 degrees above horizontal
 	private int lastClickX;
@@ -63,7 +69,18 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	@Override
 	public void onSwitch(boolean active) {
 		guiDrawer.clearSelected();
-		if(!active) turretTargetingMode = false;
+		if(!active) {
+			// Leaving turret mode restores the main-ship view; clear turret state and the docked
+			// navigation filter so nothing carries over after the map is dismissed.
+			turretTargetingMode = false;
+			guiDrawer.clearSelectedTurrets();
+			getState().getGlobalGameControlManager().getIngameControlManager().getPlayerGameControlManager().getNavigationControlManager().getFilter().setFilter(false, NavigationFilter.POW_DOCKED);
+			// Close any open radial so it doesn't linger after the map is dismissed.
+			if(activeRadial != null && activeRadial.isActive()) {
+				activeRadial.deactivate();
+			}
+			activeRadial = null;
+		}
 		getInteractionManager().setActive(!active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().suspend(active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().suspend(active);
@@ -109,7 +126,10 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		}
 		Vector3f newPos = new Vector3f(guiDrawer.camera.getWorldTransform().origin);
 		newPos.add(move);
-		if(getDistanceFromControl(newPos) < (int) ServerConfig.SECTOR_SIZE.getCurrentState() * ConfigManager.getMainConfig().tacticalMapViewDistance.value) {
+		// Allow the camera to pan to anything that is drawn/selectable (same range as the draw cull),
+		// plus one sector of slack so entities at the very edge can still be centred and clicked.
+		float maxCameraDistance = guiDrawer.getMaxDrawDistance() + (int) ServerConfig.SECTOR_SIZE.getCurrentState();
+		if(getDistanceFromControl(newPos) < maxCameraDistance) {
 			guiDrawer.camera.getWorldTransform().origin.set(newPos);
 		}
 	}
@@ -129,6 +149,28 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	private int dragAnchorY;
 
 	private void handleInteraction(Timer timer) {
+		// While a radial menu (a PlayerInput) is open it handles its own mouse input. This method polls
+		// the mouse directly every frame, so without this guard the click that selects a radial item is
+		// ALSO read here as a click on the entity behind the radial, queuing a pending click that
+		// reopens a radial. Skip interaction while it's open, and keep swallowing input until the
+		// dismiss-click is fully released (the radial closes on mouse-press, before the release).
+		if(activeRadial != null && activeRadial.isActive()) {
+			suppressClickUntilRelease = true;
+			wasLeftMouseDown = Mouse.isButtonDown(0);
+			wasMiddleMouseDown = Mouse.isButtonDown(2);
+			pendingClickIndicator = null;
+			guiDrawer.isDragSelecting = false;
+			return;
+		}
+		if(suppressClickUntilRelease) {
+			wasLeftMouseDown = Mouse.isButtonDown(0);
+			wasMiddleMouseDown = Mouse.isButtonDown(2);
+			if(Mouse.isButtonDown(0) || Mouse.isButtonDown(2)) {
+				return; // still holding the button that dismissed the radial
+			}
+			suppressClickUntilRelease = false; // released — resume normal handling next frame
+			return;
+		}
 		if(!getState().getGlobalGameControlManager().getIngameControlManager().isAnyMenuOrChatActive()) {
 			Vector3f movement = new Vector3f();
 			int amount = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) ? 1000 : 100;
@@ -143,6 +185,12 @@ public class TacticalMapControlManager extends AbstractControlManager {
 					guiDrawer.toggleSelectAllFriendly();
 				} else if(sDown && !wasSDown) {
 					turretTargetingMode = !turretTargetingMode;
+					// Turret selection is meaningful only within turret mode — clear it whenever the
+					// mode is toggled so stale turret highlights don't linger over the main-ship view.
+					guiDrawer.clearSelectedTurrets();
+					// Swap the visible entities (main ships <-> turrets) immediately instead of waiting
+					// for the next periodic rebuild.
+					guiDrawer.requestEntityRefresh();
 					getState().getGlobalGameControlManager().getIngameControlManager().getPlayerGameControlManager().getNavigationControlManager().getFilter().setFilter(turretTargetingMode, NavigationFilter.POW_DOCKED);
 				}
 			}
@@ -220,19 +268,20 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				}
 			}
 
-			// Flush pending single-click if the double-click window has expired
+			// Expire a stale single-click once the double-click window has passed. A single left-click
+			// has no action of its own — it only exists to detect a double-click to focus the camera.
 			if(pendingClickIndicator != null && (System.currentTimeMillis() - pendingClickTime) >= DOUBLE_CLICK_TIME_MS) {
-				(new TacticalMapRadial(guiDrawer, pendingClickIndicator)).activate();
 				pendingClickIndicator = null;
 			}
 
-			// LMB released
+			// LMB released — selection and double-click-to-focus only. The radial is opened with the
+			// middle mouse button (below) so it no longer conflicts with selecting/focusing on left-click.
 			if(!isLeftDown && wasLeftMouseDown && !rightDown) {
 				if(guiDrawer.isDragSelecting) {
-					// Commit marquee selection
+					// Commit marquee selection (toggles entities in the box: selects unselected,
+					// deselects already-selected)
 					guiDrawer.applyDragSelection(guiDrawer.dragMinX, guiDrawer.dragMinY,
-							guiDrawer.dragMaxX, guiDrawer.dragMaxY,
-							Keyboard.isKeyDown(Keyboard.KEY_LSHIFT));
+							guiDrawer.dragMaxX, guiDrawer.dragMaxY);
 					guiDrawer.isDragSelecting = false;
 				} else {
 					TacticalMapEntityIndicator hit = guiDrawer.findIndicatorAtScreen(mouseX, mouseY, ENTITY_CLICK_THRESHOLD_PX);
@@ -240,47 +289,59 @@ public class TacticalMapControlManager extends AbstractControlManager {
 						if(turretTargetingMode) {
 							handleTurretTargeting(hit.getEntity());
 						} else if(pendingClickIndicator != null) {
-							// Second click arrived within the window — double-click
+							// Second click within the window — double-click to focus the camera
 							int deltaX = mouseX - lastClickX;
 							int deltaY = mouseY - lastClickY;
 							int distSq = deltaX * deltaX + deltaY * deltaY;
 							if(distSq < DOUBLE_CLICK_DISTANCE_PX * DOUBLE_CLICK_DISTANCE_PX) {
 								focusCameraOnEntity(hit.getEntity());
+								pendingClickIndicator = null;
 							} else {
-								// Too far from first click — treat as a new single click
-								(new TacticalMapRadial(guiDrawer, pendingClickIndicator)).activate();
+								// Too far from the first click — restart double-click detection
+								pendingClickIndicator = hit;
 								pendingClickTime = System.currentTimeMillis();
 								lastClickX = mouseX;
 								lastClickY = mouseY;
-								pendingClickIndicator = hit;
-								return;
 							}
-							pendingClickIndicator = null;
 						} else {
-							// First click — defer action until we know it's not a double-click
+							// First click — remember it so a second click can be read as a double-click
 							pendingClickIndicator = hit;
 							pendingClickTime = System.currentTimeMillis();
 							lastClickX = mouseX;
 							lastClickY = mouseY;
 						}
-					} else {
-						// Clicked empty space — flush any pending click and clear selection
-						if(pendingClickIndicator != null) {
-							(new TacticalMapRadial(guiDrawer, pendingClickIndicator)).activate();
-							pendingClickIndicator = null;
-						} else if(!hasModifierKeyPressed()) {
-							guiDrawer.clearSelected();
-						}
+					} else if(!hasModifierKeyPressed()) {
+						// Clicked empty space — clear selection
+						guiDrawer.clearSelected();
 					}
 				}
-			} else if(isMiddleDown && !rightDown) {
-				if(!guiDrawer.selectedEntities.isEmpty()) {
-					(new TacticalMapRadial(guiDrawer, null)).activate();
+			} else if(isMiddleDown && !wasMiddleMouseDown && !rightDown) {
+				// Middle-click opens the radial: targeting the entity under the cursor if there is one,
+				// otherwise the orders-only menu (idle, etc.) when a selection exists. Edge-triggered so
+				// it opens once per press rather than every frame the button is held.
+				TacticalMapEntityIndicator hit = guiDrawer.findIndicatorAtScreen(mouseX, mouseY, ENTITY_CLICK_THRESHOLD_PX);
+				if(hit != null) {
+					openRadial(hit);
+				} else if(!guiDrawer.selectedEntities.isEmpty()) {
+					openRadial(null);
 				}
 			}
 
 			wasLeftMouseDown = isLeftDown;
+			wasMiddleMouseDown = isMiddleDown;
 		}
+	}
+
+	/**
+	 * Opens a tactical-map radial for the given target (null = orders-only center menu),
+	 * closing any radial that is still open first so instances never stack.
+	 */
+	private void openRadial(TacticalMapEntityIndicator target) {
+		if(activeRadial != null && activeRadial.isActive()) {
+			activeRadial.deactivate();
+		}
+		activeRadial = new TacticalMapRadial(guiDrawer, target);
+		activeRadial.activate();
 	}
 
 	private boolean hasModifierKeyPressed() {
@@ -319,7 +380,18 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			return;
 		}
 
-		TacticalMapTurretSelector turretSelector = new TacticalMapTurretSelector(guiDrawer, entity);
-		turretSelector.activate();
+		// In turret mode the map shows turrets directly (docked AI ships), so clicking one toggles
+		// its selection — the same select/deselect-by-clicking flow used elsewhere.
+		if(entity instanceof Ship turret && entity.isDocked() && entity.isAIControlled()) {
+			if(guiDrawer.isTurretSelected(turret)) {
+				guiDrawer.removeTurretSelection(turret);
+			} else {
+				guiDrawer.addTurretSelection(turret);
+			}
+			return;
+		}
+
+		// Fallback: clicking a main ship selects the turrets docked on it.
+		new TacticalMapTurretSelector(guiDrawer, entity).activate();
 	}
 }

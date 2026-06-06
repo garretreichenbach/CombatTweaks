@@ -33,6 +33,9 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private static final long UPDATE_FREQUENCY = 1000;
 	private static final long REGEN_FREQUENCY = 1000;
 	private static final long SYNC_FREQUENCY = 500;
+	// Re-broadcast at least this often even when nothing changed, so clients that
+	// start tracking the entity later (or missed a packet) converge on the server value.
+	private static final long SYNC_HEARTBEAT = 2000;
 	// Delay after the last enqueued change before processing the batch (ms)
 	private static final long PROCESS_DELAY_MS = 500; // arbitrary time since last update
 	private static final Set<SegmentController> pending = Collections.synchronizedSet(new HashSet<SegmentController>());
@@ -52,6 +55,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private boolean regenEnabled;
 	private long lastSync;
 	private double lastSyncedHP = -1;
+	private double lastSyncedMaxHP = -1;
 
 	public ArmorHPCollection(SegmentController segmentController, VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager) {
 		super(ElementKeyMap.CORE_ID, segmentController, armorHPManager);
@@ -86,6 +90,12 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	 */
 	public static void enqueueRecalc(SegmentController controller) {
 		if(controller == null) {
+			return;
+		}
+		// Armor HP is simulated server-authoritatively. The client must never recalc
+		// locally (it would fight the synced value and make the HP jump up/down), and
+		// must never populate the static pending set (it would never be drained client-side).
+		if(!controller.isOnServer()) {
 			return;
 		}
 		synchronized(pending) {
@@ -124,6 +134,13 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	@Override
 	public void update(Timer timer) {
+		// The client is display-only: armor HP is authoritative on the server and delivered
+		// via SendArmorHPSyncPacket -> applySync(). Running recalc/regen here would fight the
+		// synced value and make the displayed HP jump up and down.
+		if(!isOnServer()) {
+			return;
+		}
+
 		try {
 			processPendingIfReady();
 		} catch(Exception e) {
@@ -145,10 +162,16 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 			doRegen();
 		}
 
-		if(isOnServer() && maxHP > 0 && System.currentTimeMillis() - lastSync >= SYNC_FREQUENCY && currentHP != lastSyncedHP) {
-			lastSync = System.currentTimeMillis();
-			lastSyncedHP = currentHP;
-			broadcastSync();
+		if(maxHP > 0) {
+			long now = System.currentTimeMillis();
+			boolean changed = currentHP != lastSyncedHP || maxHP != lastSyncedMaxHP;
+			boolean heartbeatDue = now - lastSync >= SYNC_HEARTBEAT;
+			if((changed && now - lastSync >= SYNC_FREQUENCY) || heartbeatDue) {
+				lastSync = now;
+				lastSyncedHP = currentHP;
+				lastSyncedMaxHP = maxHP;
+				broadcastSync();
+			}
 		}
 	}
 
@@ -176,8 +199,14 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	public void doRegen() {
 		if(regenEnabled) {
-			double regen = getSegmentController().getConfigManager().apply(StatusEffectType.ARMOR_HP_REGENERATION, 1.0f) * maxHP;
-			currentHP = Math.min(maxHP, currentHP + regen);
+			// apply() returns the base 1.0 scaled by active regen effects (e.g. 1.05 == +5%).
+			// Regen per tick is the fraction above 1.0, so a 1.05 multiplier restores 5% of maxHP,
+			// not a full maxHP (which would snap armor back to full in a single tick).
+			double regenFraction = getSegmentController().getConfigManager().apply(StatusEffectType.ARMOR_HP_REGENERATION, 1.0f) - 1.0;
+			if(regenFraction > 0) {
+				double regen = regenFraction * maxHP;
+				currentHP = Math.min(maxHP, currentHP + regen);
+			}
 		}
 	}
 

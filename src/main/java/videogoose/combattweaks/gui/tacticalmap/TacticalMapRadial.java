@@ -34,40 +34,7 @@ public class TacticalMapRadial extends RadialMenuDialog {
 
 		if(target == null) {
 			//Just show idle command
-			menu.setCenter(new RadialMenuCenter(getState(), menu, "Order Idle", new GUICallback() {
-				@Override
-				public void callback(GUIElement guiElement, MouseEvent mouseEvent) {
-					if(mouseEvent.pressedLeftMouse()) {
-						for(SegmentController selected : drawer.selectedEntities) {
-							if(selected instanceof Ship) {
-								PacketUtil.sendPacketToServer(new SendIdlePacket((Ship) selected));
-								TacticalMapEntityIndicator indicator = drawer.drawMap.get(selected.getId());
-								if(indicator != null) {
-									indicator.setDefendTarget(null);
-									indicator.setCurrentTarget(null);
-								}
-							}
-						}
-						drawer.clearSelected();
-						deactivate();
-					}
-				}
-
-				@Override
-				public boolean isOccluded() {
-					return false;
-				}
-			}, new GUIActivationCallback() {
-				@Override
-				public boolean isVisible(InputState inputState) {
-					return true;
-				}
-
-				@Override
-				public boolean isActive(InputState inputState) {
-					return true;
-				}
-			}));
+			setIdleCenter(menu);
 			menu.onInit();
 			return menu;
 		}
@@ -77,44 +44,15 @@ public class TacticalMapRadial extends RadialMenuDialog {
 		boolean hasSelection = !drawer.selectedEntities.isEmpty();
 		boolean isMinable = target.getEntity() instanceof FloatingRock;
 
+		// Idle is always available as the center option whenever ships are selected,
+		// regardless of the target's faction, so a move/attack order can always be cancelled.
+		if(hasSelection) {
+			setIdleCenter(menu);
+		}
+
 		if(isOwnFaction) {
 			// Only show action options if something is already selected
 			if(hasSelection) {
-				menu.setCenter(new RadialMenuCenter(getState(), menu, "Order Idle", new GUICallback() {
-					@Override
-					public void callback(GUIElement guiElement, MouseEvent mouseEvent) {
-						if(mouseEvent.pressedLeftMouse()) {
-							for(SegmentController selected : drawer.selectedEntities) {
-								if(selected instanceof Ship) {
-									PacketUtil.sendPacketToServer(new SendIdlePacket((Ship) selected));
-									TacticalMapEntityIndicator indicator = drawer.drawMap.get(selected.getId());
-									if(indicator != null) {
-										indicator.setDefendTarget(null);
-										indicator.setCurrentTarget(null);
-									}
-								}
-							}
-							drawer.clearSelected();
-							deactivate();
-						}
-					}
-
-					@Override
-					public boolean isOccluded() {
-						return false;
-					}
-				}, new GUIActivationCallback() {
-					@Override
-					public boolean isVisible(InputState inputState) {
-						return true;
-					}
-
-					@Override
-					public boolean isActive(InputState inputState) {
-						return true;
-					}
-				}));
-
 				menu.addItem("Order Defend", new GUICallback() {
 					@Override
 					public void callback(GUIElement callingGuiElement, MouseEvent event) {
@@ -253,5 +191,49 @@ public class TacticalMapRadial extends RadialMenuDialog {
 		}, null);
 		menu.onInit();
 		return menu;
+	}
+
+	/**
+	 * Sets the radial menu center to the "Order Idle" command, which clears all
+	 * standing orders (move/attack/defend/mine/repair) for every selected ship.
+	 */
+	private void setIdleCenter(RadialMenu menu) {
+		// A top-level RadialMenu only draws its center element when forceBackButton is set
+		// (otherwise the center is reserved for the "Back" button of sub-menus).
+		menu.setForceBackButton(true);
+		menu.setCenter(new RadialMenuCenter(getState(), menu, "Order Idle", new GUICallback() {
+			@Override
+			public void callback(GUIElement guiElement, MouseEvent mouseEvent) {
+				if(mouseEvent.pressedLeftMouse()) {
+					for(SegmentController selected : drawer.selectedEntities) {
+						if(selected instanceof Ship) {
+							PacketUtil.sendPacketToServer(new SendIdlePacket((Ship) selected));
+							TacticalMapEntityIndicator indicator = drawer.drawMap.get(selected.getId());
+							if(indicator != null) {
+								indicator.setDefendTarget(null);
+								indicator.setCurrentTarget(null);
+							}
+						}
+					}
+					drawer.clearSelected();
+					deactivate();
+				}
+			}
+
+			@Override
+			public boolean isOccluded() {
+				return false;
+			}
+		}, new GUIActivationCallback() {
+			@Override
+			public boolean isVisible(InputState inputState) {
+				return true;
+			}
+
+			@Override
+			public boolean isActive(InputState inputState) {
+				return true;
+			}
+		}));
 	}
 }

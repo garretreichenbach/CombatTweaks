@@ -33,7 +33,6 @@ import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.BoundingBox;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
-import org.schema.schine.graphicsengine.util.WorldToScreenConverter;
 import org.schema.schine.input.InputType;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
@@ -50,6 +49,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
+	/** Time for a path's dashes to march forward one full dash+gap cycle. Keeps scroll speed uniform across line lengths. */
+	private static final long SCROLL_PERIOD_MS = 1400;
 	private static final FloatBuffer GL_MODELVIEW = BufferUtils.createFloatBuffer(16);
 	private static final FloatBuffer GL_PROJECTION = BufferUtils.createFloatBuffer(16);
 	private static final IntBuffer GL_VIEWPORT = BufferUtils.createIntBuffer(16);
@@ -68,8 +69,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f OUTLINE_TURRET = new Vector4f(0.0f, 1.0f, 1.0f, 1.0f);     // cyan, solid
 	private static final Vector4f OUTLINE_TURRET_OCCLUDED = new Vector4f(0.0f, 1.0f, 1.0f, 0.15f);
 	private static TacticalMapGUIDrawer instance;
-	public final int sectorSize;
-	public final float maxDrawDistance;
 	public final Vector3f labelOffset;
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap = new ConcurrentHashMap<>();
 	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
@@ -100,10 +99,22 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		instance = this;
 		toggleDraw = false;
 		initialized = false;
-		sectorSize = (int) ServerConfig.SECTOR_SIZE.getCurrentState();
-		maxDrawDistance = sectorSize * 4.0f;
 		labelOffset = new Vector3f(0.0f, -20.0f, 0.0f);
 		updateTimer = 150;
+	}
+
+	/**
+	 * Maximum distance (from the controlled ship) at which entities are drawn/selectable.
+	 * Computed live from the current server sector size so it never freezes on a stale value,
+	 * and shared with the camera pan clamp so anything visible can always be reached.
+	 */
+	public float getMaxDrawDistance() {
+		return getSectorSize() * ConfigManager.getMainConfig().tacticalMapViewDistance.value.floatValue();
+	}
+
+	/** Current server sector size, read live so it always reflects the synced server config. */
+	public int getSectorSize() {
+		return (int) ServerConfig.SECTOR_SIZE.getCurrentState();
 	}
 
 	public static TacticalMapGUIDrawer getInstance() {
@@ -221,21 +232,32 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			indicator.update(timer);
 		}
 		if(updateTimer <= 0) {
-			boolean showDocked = controlManager.turretTargetingMode;
+			boolean turretMode = controlManager.turretTargetingMode;
+			java.util.HashSet<Integer> currentIds = new java.util.HashSet<>();
 			for(SimpleTransformableSendableObject<?> object : GameClient.getClientState().getCurrentSectorEntities().values()) {
-				if(object instanceof SegmentController && !drawMap.containsKey(object.getId())) {
+				if(object instanceof SegmentController) {
+					// Turret mode shows only turrets (docked entities) so main ships don't get in the
+					// way of selecting them; normal mode shows only main ships (non-docked).
 					boolean isDocked = ((SegmentController) object).isDocked();
-					if(!isDocked || showDocked) {
+					if(isDocked != turretMode) {
+						continue;
+					}
+					currentIds.add(object.getId());
+					if(!drawMap.containsKey(object.getId())) {
 						drawMap.put(object.getId(), new TacticalMapEntityIndicator((SegmentController) object));
 					}
 				}
 			}
-			// Remove docked entities from drawMap when turret targeting mode is disabled
-			if(!showDocked) {
-				drawMap.values().removeIf(indicator -> indicator.getEntity().isDocked());
-			}
+			// Drop indicators for entities that shouldn't currently be shown — those in another sector
+			// (after a sector change) or filtered out by turret mode — so stale entities aren't drawn.
+			drawMap.keySet().removeIf(id -> !currentIds.contains(id));
 			updateTimer = 150;
 		}
+	}
+
+	/** Forces the entity list to be rebuilt on the next update tick (e.g. when turret mode toggles). */
+	public void requestEntityRefresh() {
+		updateTimer = 0;
 	}
 
 	public boolean shouldDraw() {
@@ -383,7 +405,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		for(Map.Entry<Integer, TacticalMapEntityIndicator> entry : drawMap.entrySet()) {
 			try {
 				TacticalMapEntityIndicator indicator = entry.getValue();
-				if(indicator.getDistance() < maxDrawDistance && indicator.getEntity() != null) {
+				if(indicator.getDistance() < getMaxDrawDistance() && indicator.getEntity() != null) {
 					indicator.updateEntityTransform();
 				} else {
 					// schedule for removal after iteration
@@ -450,57 +472,29 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			hud.addHelper(InputType.KEYBOARD, ConfigManager.getTacticalMapKey(), "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.IMPORTANT);
 		}
 		if(toggleDraw) {
-			hud.addHelper(InputType.MOUSE, 0, "Select | Double-click: Focus | Shift+Click: Multi-select", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.MOUSE, 0, "Drag: Select / Deselect | Double-click: Focus", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.MOUSE, 2, "Open Orders (Radial)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Ctrl) Toggle Docked Entities", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Ctrl) Toggle Turret Mode", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Ctrl) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
 	}
 
 	/**
-	 * Renders entity labels at cached screen coordinates in orthogonal mode.
-	 * Manages a per-indicator GUITextOverlay cache.
+	 * Renders entity name labels under each ship in orthogonal mode, reusing the same
+	 * screen-space positions computed in {@link #computeScreenPositions()} that drive
+	 * click/hover detection — so labels always line up with their entities.
 	 */
 	private void drawLabels() {
-		WorldToScreenConverter worldToScreenConverter;
-		try {
-			worldToScreenConverter = GameClient.getClientState().getScene().getWorldToScreenConverter();
-		} catch(Exception ignored) {
-			return;
-		}
-		if(worldToScreenConverter == null) {
-			return;
-		}
-
-		// Mirror sector indicator setup: build tactical-map projection/view, then cache matrices in converter.
-		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
-		GlUtil.glPushMatrix();
-		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
-		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, 10, 25000, true);
-		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
-		GlUtil.glPushMatrix();
-		GlUtil.glLoadIdentity();
-		camera.lookAt(true);
-		worldToScreenConverter.storeCurrentModelviewProjection();
-		GlUtil.glPopMatrix();
-		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
-		GlUtil.glPopMatrix();
-		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
-
-		Vector3f posOnScreen = new Vector3f();
-
-		GlUtil.printGlError();
 		GUIElement.enableOrthogonal();
-		GlUtil.printGlError();
 
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(indicator.getEntity().isCloakedFor(getCurrentEntity())) {
+			if(!indicator.screenPosValid) {
 				continue;
 			}
-
-			worldToScreenConverter.convert(indicator.entityTransform.origin, posOnScreen, true);
-			if(posOnScreen.x < -200 || posOnScreen.x > GLFrame.getWidth() + 200 || posOnScreen.y < -200 || posOnScreen.y > GLFrame.getHeight() + 200) {
+			SegmentController entity = indicator.getEntity();
+			if(entity == null || entity.isCloakedFor(getCurrentEntity())) {
 				continue;
 			}
 
@@ -509,10 +503,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			overlay.setTextSimple(displayText);
 			overlay.updateTextSize();
 
-			float offsetY = -40.0f;
-			overlay.getPos().set((int) posOnScreen.x, (int) (posOnScreen.y + offsetY), 0);
+			// Centre horizontally on the entity and place the label just below its bounding
+			// box, so the name sits under the ship.
+			float x = indicator.screenX - overlay.getWidth() / 2.0f;
+			float y = indicator.screenMaxY + 6.0f;
+			overlay.getPos().set((int) x, (int) y, 0);
 			overlay.draw();
-			GlUtil.printGlError();
 
 			TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(overlay);
 		}
@@ -676,11 +672,15 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		float len = dottedDir.length();
 		Vector3f a = dottedA;
 		Vector3f b = dottedB;
-		float dottedSize = Math.min(Math.max(2, len * 0.1f), 40);
+		float dottedSize = Math.min(Math.max(8, len * 0.1f), 40);
 		float gap = dottedSize;
 		float cycle = dottedSize + gap;
-		// Phase advances forward along the line over time, so dashes march toward the target.
-		float phase = (System.currentTimeMillis() * 0.05f) % cycle;
+		// Advance exactly one dash-cycle per SCROLL_PERIOD_MS regardless of line length, so the
+		// marching speed looks the same up close as far away. (Previously phase advanced at a fixed
+		// world-units rate, so a short line — small cycle — wrapped many times per second and
+		// appeared to scroll frantically as a ship neared its target.)
+		float fraction = (System.currentTimeMillis() % SCROLL_PERIOD_MS) / (float) SCROLL_PERIOD_MS;
+		float phase = fraction * cycle;
 		GlUtil.glColor4f(color);
 		for(float f = phase - cycle; f < len; f += cycle) {
 			if(f + dottedSize <= 0) {
@@ -1027,15 +1027,19 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Selects all entities whose screen bbox overlaps the given screen-space rectangle.
 	 * If additive is false, the current selection is cleared first.
 	 */
-	public void applyDragSelection(float minX, float minY, float maxX, float maxY, boolean additive) {
-		if(!additive) clearSelected();
+	public void applyDragSelection(float minX, float minY, float maxX, float maxY) {
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid) continue;
-			if(canSelect(indicator.getEntity())) {
-				// Overlap test: two AABBs overlap if neither is fully outside the other
-				if(indicator.screenMaxX < minX || indicator.screenMinX > maxX || indicator.screenMaxY < minY || indicator.screenMinY > maxY) {
-					continue;
-				}
+			if(!canSelect(indicator.getEntity())) continue;
+			// Overlap test: two AABBs overlap if neither is fully outside the other
+			if(indicator.screenMaxX < minX || indicator.screenMinX > maxX || indicator.screenMaxY < minY || indicator.screenMinY > maxY) {
+				continue;
+			}
+			// Toggle: drag over unselected ships to select them, over already-selected ships to
+			// deselect them. Use empty-space click to clear the whole selection.
+			if(isSelected(indicator.getEntity())) {
+				removeSelection(indicator);
+			} else {
 				addSelection(indicator);
 			}
 		}

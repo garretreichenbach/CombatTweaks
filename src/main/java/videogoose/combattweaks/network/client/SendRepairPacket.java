@@ -7,6 +7,7 @@ import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
 import videogoose.combattweaks.manager.RepairManager;
+import videogoose.combattweaks.utils.AIUtils;
 
 import java.io.IOException;
 
@@ -45,6 +46,9 @@ public class SendRepairPacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
+		if(!AIUtils.canReceiveOrders(shipId, playerState)) {
+			return;
+		}
 		RepairManager.getInstance().addRepair(shipId, targetId);
 	}
 }

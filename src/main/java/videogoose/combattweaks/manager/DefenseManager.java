@@ -107,6 +107,9 @@ public class DefenseManager {
 		ManagedUsableSegmentController<?> defender = (ManagedUsableSegmentController<?>) defenderObj;
 		SegmentController protectedEntity = (SegmentController) protectedObj;
 
+		// Only fleeted ships obey our orders; drop the assignment if the defender left its fleet.
+		if(!defender.isInFleet()) return false;
+
 		SegmentController threat = findNearestThreat(protectedEntity, defender.getFactionId());
 		if(threat != null) {
 			// Attack the threat using the existing, proven mechanism
@@ -176,7 +179,11 @@ public class DefenseManager {
 			((NetworkShip) defender.getNetworkObject()).targetVelocity.set(tmpVec);
 			((NetworkShip) defender.getNetworkObject()).targetPosition.set(protPos);
 			ShipAIEntity aiEntity = (ShipAIEntity) defender.getAiConfiguration().getAiEntityState();
-			aiEntity.moveTo(GameServer.getServerState().getController().getTimer(), protPos, true);
+			// moveTo() expects a ship->destination direction vector (its length drives braking and
+			// feeds the engine's collision-avoidance calc), NOT an absolute world position. Passing
+			// the raw world position steered toward the world origin and disabled near-target braking.
+			tmpVec.sub(protPos, defPos);
+			aiEntity.moveTo(GameServer.getServerState().getController().getTimer(), tmpVec, true);
 		}
 	}
 }

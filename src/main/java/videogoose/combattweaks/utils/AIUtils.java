@@ -11,8 +11,10 @@ import org.schema.game.network.objects.NetworkShip;
 import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.game.server.ai.program.fleetcontrollable.FleetControllableProgram;
+import org.schema.game.common.data.player.PlayerState;
 import org.schema.schine.ai.stateMachines.FSMException;
 import org.schema.schine.ai.stateMachines.Transition;
+import api.utils.game.PlayerUtils;
 import videogoose.combattweaks.manager.MoveManager;
 
 import javax.vecmath.Vector3f;
@@ -20,6 +22,45 @@ import javax.vecmath.Vector3f;
 public class AIUtils {
 
 	private static final Vector3f targetVelocityTmp = new Vector3f();
+
+	/**
+	 * Whether a ship may be given tactical-map orders (move/attack/defend/mine/repair).
+	 * <p>StarMade forces an ACTIVE non-fleet ship onto the autonomous Search-and-Destroy
+	 * program every tick, which fights our per-tick targetPosition writes (causing the
+	 * spinning/random-firing). Only fleeted ships run the passive FleetControllable program
+	 * that actually obeys external orders, so we restrict commands to fleet members.</p>
+	 */
+	public static boolean canReceiveOrders(SegmentController entity) {
+		return entity instanceof Ship && entity.isInFleet();
+	}
+
+	/** Whether the entity has any salvage (mining) beam blocks — required to accept a mine order. */
+	public static boolean hasSalvageBeams(SegmentController entity) {
+		if(!(entity instanceof Ship)) {
+			return false;
+		}
+		try {
+			return ((Ship) entity).getManagerContainer().getSalvage().getElementManager().totalSize > 0;
+		} catch(Exception exception) {
+			return false;
+		}
+	}
+
+	/**
+	 * Guard for order packet handlers: returns true if the entity can be ordered, otherwise
+	 * notifies the issuing player (when known) and returns false.
+	 */
+	public static boolean canReceiveOrders(int entityId, PlayerState issuer) {
+		SegmentController entity = EntityUtils.getEntityById(entityId);
+		if(canReceiveOrders(entity)) {
+			return true;
+		}
+		if(issuer != null) {
+			String name = entity != null ? entity.getName() : "Ship";
+			PlayerUtils.sendMessage(issuer, name + " must be in a fleet to receive orders.");
+		}
+		return false;
+	}
 
 	/**
 	 * Ensures the ship is running FleetControllableProgram so fleet-state transitions work.

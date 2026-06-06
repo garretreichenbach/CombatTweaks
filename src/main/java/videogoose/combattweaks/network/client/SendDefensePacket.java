@@ -48,6 +48,9 @@ public class SendDefensePacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
+		if(!AIUtils.canReceiveOrders(defenderId, playerState)) {
+			return;
+		}
 		AIUtils.clearTarget(defenderId);
 		DefenseManager.getInstance().addDefense(defenderId, targetId);
 	}

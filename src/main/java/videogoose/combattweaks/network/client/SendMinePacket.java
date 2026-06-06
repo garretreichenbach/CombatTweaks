@@ -5,8 +5,11 @@ import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
+import api.utils.game.PlayerUtils;
 import org.schema.game.common.data.player.PlayerState;
 import videogoose.combattweaks.manager.MineManager;
+import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.utils.EntityUtils;
 
 import java.io.IOException;
 
@@ -45,6 +48,16 @@ public class SendMinePacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
+		if(!AIUtils.canReceiveOrders(shipId, playerState)) {
+			return;
+		}
+		SegmentController ship = EntityUtils.getEntityById(shipId);
+		if(!AIUtils.hasSalvageBeams(ship)) {
+			if(playerState != null) {
+				PlayerUtils.sendMessage(playerState, (ship != null ? ship.getName() : "Ship") + " has no salvage beams to mine with.");
+			}
+			return;
+		}
 		MineManager.getInstance().addMine(shipId, asteroidId);
 	}
 }

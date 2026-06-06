@@ -157,6 +157,8 @@ public class RepairManager {
 
 		Ship ship = (Ship) shipObj;
 		if(ship.getWorldTransform() == null) return false;
+		// Only fleeted ships obey our orders; drop the assignment if the ship left its fleet.
+		if(!ship.isInFleet()) return false;
 
 		SimpleGameObject targetObj = (SimpleGameObject) GameCommon.getGameObject(targetId);
 		if(targetObj == null) return false;

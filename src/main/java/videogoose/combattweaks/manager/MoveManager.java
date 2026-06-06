@@ -223,6 +223,9 @@ public class MoveManager {
 
 		ManagedUsableSegmentController<?> ship = (ManagedUsableSegmentController<?>) obj;
 		if(ship.getWorldTransform() == null) return false;
+		// Only fleeted ships run the passive program that obeys our orders; if the ship has
+		// left its fleet, drop the assignment so we stop driving it into the autonomous AI.
+		if(!ship.isInFleet()) return false;
 
 		Vector3f shipPos = ship.getWorldTransform().origin;
 		float dist = Vector3fTools.distance(shipPos.x, shipPos.y, shipPos.z, destination.x, destination.y, destination.z);
