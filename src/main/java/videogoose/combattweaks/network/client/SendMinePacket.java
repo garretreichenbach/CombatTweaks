@@ -58,6 +58,7 @@ public class SendMinePacket extends Packet {
 			}
 			return;
 		}
+		AIUtils.clearAllOrders(shipId);
 		MineManager.getInstance().addMine(shipId, asteroidId);
 	}
 }

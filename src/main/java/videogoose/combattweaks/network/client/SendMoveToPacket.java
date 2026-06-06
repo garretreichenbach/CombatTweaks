@@ -43,6 +43,7 @@ public class SendMoveToPacket extends Packet {
 		if(!AIUtils.canReceiveOrders(shipId, playerState)) {
 			return;
 		}
+		AIUtils.clearAllOrders(shipId);
 		AIUtils.setMoveToTarget(shipId, targetId);
 	}
 }

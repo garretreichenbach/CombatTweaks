@@ -48,6 +48,7 @@ public class SendAttackPacket extends Packet {
 		if(!AIUtils.canReceiveOrders(entityId, playerState)) {
 			return;
 		}
+		AIUtils.clearAllOrders(entityId);
 		AIUtils.setAttackTarget(entityId, targetId);
 	}
 }

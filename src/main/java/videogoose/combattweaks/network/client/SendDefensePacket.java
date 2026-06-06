@@ -51,7 +51,7 @@ public class SendDefensePacket extends Packet {
 		if(!AIUtils.canReceiveOrders(defenderId, playerState)) {
 			return;
 		}
-		AIUtils.clearTarget(defenderId);
+		AIUtils.clearAllOrders(defenderId);
 		DefenseManager.getInstance().addDefense(defenderId, targetId);
 	}
 }

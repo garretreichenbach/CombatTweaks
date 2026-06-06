@@ -15,7 +15,10 @@ import org.schema.game.common.data.player.PlayerState;
 import org.schema.schine.ai.stateMachines.FSMException;
 import org.schema.schine.ai.stateMachines.Transition;
 import api.utils.game.PlayerUtils;
+import videogoose.combattweaks.manager.DefenseManager;
+import videogoose.combattweaks.manager.MineManager;
 import videogoose.combattweaks.manager.MoveManager;
+import videogoose.combattweaks.manager.RepairManager;
 
 import javax.vecmath.Vector3f;
 
@@ -163,6 +166,20 @@ public class AIUtils {
 		if(ship instanceof Ship) {
 			clearTarget((ManagedUsableSegmentController<?>) ship);
 		}
+	}
+
+	/**
+	 * Clears every standing order for a ship — move, defend, mine, repair and any AI attack target.
+	 * Orders are mutually exclusive, so this must be called before assigning a new one; otherwise a
+	 * previous order's data lingers (e.g. a ship keeps firing salvage from a stale mine assignment
+	 * after being told to move).
+	 */
+	public static void clearAllOrders(int shipId) {
+		DefenseManager.getInstance().removeDefense(shipId);
+		MineManager.getInstance().removeMine(shipId);
+		RepairManager.getInstance().removeRepair(shipId);
+		MoveManager.getInstance().removeMove(shipId);
+		clearTarget(shipId);
 	}
 
 	public static void setAttackTarget(SegmentController from, SegmentController to) {

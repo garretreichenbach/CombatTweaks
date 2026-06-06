@@ -49,6 +49,7 @@ public class SendRepairPacket extends Packet {
 		if(!AIUtils.canReceiveOrders(shipId, playerState)) {
 			return;
 		}
+		AIUtils.clearAllOrders(shipId);
 		RepairManager.getInstance().addRepair(shipId, targetId);
 	}
 }
