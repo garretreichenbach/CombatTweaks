@@ -101,6 +101,13 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 			for(SalvageBeamCollectionManager group : managerContainer.getSalvage().getCollectionManagers()) {
 				group.setFireMode(FocusableUsableModule.FireMode.UNFOCUSED);
 			}
+			// Reset the AI mouse-button state exactly as vanilla mining does (doShooting does this for
+			// MINABLE targets); without it the salvage aim/fire path never engages and beams don't
+			// connect. Then fire ONLY the salvage element manager — we intentionally do NOT call
+			// doShooting(), which would also run the repair pass and the attempt-to-shoot listener hook.
+			// This guarantees no weapons, missiles or damage beams ever discharge during mining.
+			unit.timesBothMouseButtonsDown = 0;
+			unit.useBothMouseButtonsDown = false;
 			managerContainer.getSalvage().getElementManager().handle(unit, timer);
 			debug(entity, "firing salvage beams at " + asteroid.getName());
 		} catch(Exception e) {
