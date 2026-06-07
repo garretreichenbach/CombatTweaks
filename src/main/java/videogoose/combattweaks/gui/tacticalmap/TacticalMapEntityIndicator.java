@@ -32,6 +32,13 @@ public class TacticalMapEntityIndicator {
 	private SegmentController targetData;
 	private SegmentController defendTarget;
 	private float timer;
+	// Client-side velocity estimate (finite-difference of position), because the entity's RigidBody velocity
+	// is inactive/flickery on the client — the physics run server-side. Smoothed and sampled on a short
+	// interval so the readout is stable.
+	private final Vector3f prevPos = new Vector3f();
+	private long prevPosTime;
+	private boolean hasPrevPos;
+	private final Vector3f velEstimate = new Vector3f();
 
 	public TacticalMapEntityIndicator(SegmentController entity) {
 		this.entity = entity;
@@ -55,6 +62,50 @@ public class TacticalMapEntityIndicator {
 		Transform clientTransform = entity.getWorldTransformOnClient();
 		if(clientTransform == null) return;
 		entityTransform.set(clientTransform);
+		updateVelocityEstimate();
+	}
+
+	/**
+	 * Estimates velocity from how far {@link #entityTransform} moved since the last sample. The client's
+	 * physics body velocity is unreliable (server-authoritative), so we differentiate position instead, with
+	 * smoothing and a sanity cap that rejects the position jump a sector change produces.
+	 */
+	private void updateVelocityEstimate() {
+		long now = System.currentTimeMillis();
+		Vector3f cur = entityTransform.origin;
+		if(!hasPrevPos) {
+			prevPos.set(cur);
+			prevPosTime = now;
+			hasPrevPos = true;
+			return;
+		}
+		float dt = (now - prevPosTime) / 1000.0f;
+		if(dt < 0.02f) {
+			return; // sample at most ~50 Hz so dt is meaningful
+		}
+		float dx = cur.x - prevPos.x, dy = cur.y - prevPos.y, dz = cur.z - prevPos.z;
+		float instSpeed = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) / dt;
+		if(instSpeed <= 5000.0f) {
+			// Exponential smoothing toward the instantaneous velocity.
+			float alpha = 0.3f;
+			velEstimate.x += (dx / dt - velEstimate.x) * alpha;
+			velEstimate.y += (dy / dt - velEstimate.y) * alpha;
+			velEstimate.z += (dz / dt - velEstimate.z) * alpha;
+		} else {
+			velEstimate.set(0, 0, 0); // implausible (sector change / teleport) — drop it
+		}
+		prevPos.set(cur);
+		prevPosTime = now;
+	}
+
+	/** Smoothed client-side speed estimate (world units/sec). */
+	public float getEstimatedSpeed() {
+		return velEstimate.length();
+	}
+
+	/** Smoothed client-side velocity estimate into {@code out}. */
+	public void getEstimatedVelocity(Vector3f out) {
+		out.set(velEstimate);
 	}
 
 	private SegmentController getCurrentEntity() {
