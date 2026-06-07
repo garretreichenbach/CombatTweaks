@@ -39,6 +39,7 @@ import org.schema.schine.input.InputType;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
 import videogoose.combattweaks.manager.MoveManager;
+import videogoose.combattweaks.utils.AIUtils;
 
 import javax.vecmath.Vector3f;
 import javax.vecmath.Vector4f;
@@ -543,6 +544,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(toggleDraw) {
 			hud.addHelper(InputType.MOUSE, 0, "Drag: Select / Deselect | Double-click: Focus", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.MOUSE, 2, "Open Orders (Radial)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_LSHIFT, "(Hold) Queue Order", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Ctrl) Toggle Turret Mode", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Ctrl) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
@@ -599,11 +601,23 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			boolean isHovered = indicator == hoveredIndicator;
 			if(!isOwnShip && !isSelected && !isHovered) continue;
 
-			// Draw targeting path (red) if entity has a target
-			if(indicator.getCurrentTarget() != null) {
+			// Draw attack path (red). Prefer our stored attack target — the AI program's target isn't
+			// reliably readable client-side, so relying on it alone left commanded attacks with no line.
+			Integer attackTargetId = AIUtils.getAttackTarget(indicator.getEntity().getId());
+			SegmentController redTarget = null;
+			if(attackTargetId != null) {
+				SimpleGameObject obj = (SimpleGameObject) GameCommon.getGameObject(attackTargetId);
+				if(obj instanceof SegmentController) {
+					redTarget = (SegmentController) obj;
+				}
+			}
+			if(redTarget == null) {
+				redTarget = indicator.getCurrentTarget(); // fall back to engine AI target (autonomous engagements)
+			}
+			if(redTarget != null) {
 				Vector3f start = new Vector3f(indicator.entityTransform.origin);
-				Vector3f end = new Vector3f(indicator.getCurrentTarget().getWorldTransform().origin);
-				TacticalMapEntityIndicator targetIndicator = drawMap.get(indicator.getCurrentTarget().getId());
+				Vector3f end = new Vector3f(redTarget.getWorldTransform().origin);
+				TacticalMapEntityIndicator targetIndicator = drawMap.get(redTarget.getId());
 				if(targetIndicator != null) {
 					end.set(targetIndicator.entityTransform.origin);
 				}

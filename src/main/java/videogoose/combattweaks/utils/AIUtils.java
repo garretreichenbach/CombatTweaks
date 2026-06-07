@@ -28,13 +28,12 @@ import videogoose.combattweaks.manager.RepairManager;
 
 import javax.vecmath.Vector3f;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class AIUtils {
 
-	/** Ships currently ordered to attack (no manager tracks attack, unlike mine/defend/repair). */
-	private static final Set<Integer> attackOrders = ConcurrentHashMap.newKeySet();
+	/** Ships currently ordered to attack → their target entity id (no manager tracks attack, unlike mine/defend/repair). */
+	private static final Map<Integer, Integer> attackOrders = new ConcurrentHashMap<>();
 
 	/** Per-ship timestamp (ms) of when it was first seen without a fleet, for the drop grace period. */
 	private static final Map<Integer, Long> unfleetedSince = new ConcurrentHashMap<>();
@@ -73,7 +72,7 @@ public class AIUtils {
 	 * never breaks it.)
 	 */
 	public static boolean isUnderCommand(int shipId) {
-		return attackOrders.contains(shipId)
+		return attackOrders.containsKey(shipId)
 				|| MineManager.getInstance().getAssignedTarget(shipId) != null
 				|| RepairManager.getInstance().getAssignedTarget(shipId) != null
 				|| DefenseManager.getInstance().isDefending(shipId);
@@ -95,7 +94,12 @@ public class AIUtils {
 
 	/** Whether the ship is under an attack or defend order (it should fire weapons, not salvage). */
 	public static boolean isCombatOrder(int shipId) {
-		return attackOrders.contains(shipId) || DefenseManager.getInstance().isDefending(shipId);
+		return attackOrders.containsKey(shipId) || DefenseManager.getInstance().isDefending(shipId);
+	}
+
+	/** The entity this ship is ordered to attack, or null if it has no attack order. */
+	public static Integer getAttackTarget(int shipId) {
+		return attackOrders.get(shipId);
 	}
 
 	/**
@@ -358,6 +362,27 @@ public class AIUtils {
 	}
 
 	/**
+	 * Gently bleeds a ship's linear velocity by {@code factor} (e.g. 0.85 keeps 85% each tick). Unlike
+	 * {@link ShipAIEntity#stop()} (which slams velocity to 30% per tick — a visible jerk), applying a mild
+	 * factor every tick gives a smooth deceleration, used for coasting up to a mining stand-off without the
+	 * start/stop stutter.
+	 */
+	public static void brakeShip(SegmentController ship, float factor) {
+		if(ship == null) {
+			return;
+		}
+		try {
+			Object physics = ship.getPhysicsDataContainer().getObject();
+			if(physics instanceof RigidBody body) {
+				Vector3f v = body.getLinearVelocity(new Vector3f());
+				v.scale(factor);
+				body.setLinearVelocity(v);
+			}
+		} catch(Exception ignored) {
+		}
+	}
+
+	/**
 	 * Clears every standing order for a ship — move, defend, mine, repair and any AI attack target.
 	 * Orders are mutually exclusive, so this must be called before assigning a new one; otherwise a
 	 * previous order's data lingers (e.g. a ship keeps firing salvage from a stale mine assignment
@@ -400,7 +425,7 @@ public class AIUtils {
 	 * (the search state nulls a plain target and would otherwise re-acquire a random enemy).
 	 */
 	private static void engageWithFleetShip(Ship ship, SegmentController to) {
-		attackOrders.add(ship.getId()); // mark commanded so the idle fleet won't break it out of combat
+		attackOrders.put(ship.getId(), to.getId()); // mark commanded (with target) so the fleet won't break it out, and the map can draw the attack line
 		try {
 			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
 			FleetControllableProgram program = ensureFleetProgram(ship);

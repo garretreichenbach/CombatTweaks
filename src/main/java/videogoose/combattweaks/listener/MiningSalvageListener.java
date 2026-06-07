@@ -1,7 +1,9 @@
 package videogoose.combattweaks.listener;
 
 import api.common.GameCommon;
+import api.common.GameServer;
 import api.listener.fastevents.CustomAddOnUseListener;
+import api.utils.game.PlayerUtils;
 import com.bulletphysics.linearmath.Transform;
 import org.schema.common.util.linAlg.Vector3b;
 import org.schema.common.util.linAlg.Vector3fTools;
@@ -11,6 +13,7 @@ import org.schema.game.common.controller.Ship;
 import org.schema.game.common.controller.elements.ShipManagerContainer;
 import org.schema.game.common.data.SegmentPiece;
 import org.schema.game.common.data.element.ElementKeyMap;
+import org.schema.game.common.data.player.PlayerState;
 import org.schema.game.common.data.world.Segment;
 import org.schema.game.common.data.world.SegmentData;
 import org.schema.game.server.ai.ShipAIEntity;
@@ -39,10 +42,14 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class MiningSalvageListener implements CustomAddOnUseListener {
 
-	/** Within this distance of the enter range, throttle approach speed so the ship coasts to a stop. */
+	/** Distance from the stand-off over which the approach speed ramps down for a smooth arrival. */
 	private static final float APPROACH_SLOW_ZONE = 600.0f;
-	/** Max approach speed once inside the slow zone, so the ship doesn't overshoot. */
+	/** Speed cap at the top of the slow zone (full speed beyond it), tapering to {@link #MIN_APPROACH_SPEED}. */
 	private static final float MAX_APPROACH_SPEED = 60.0f;
+	/** Minimum creep speed at the bottom of the slow zone, so the ship keeps closing the last gap. */
+	private static final float MIN_APPROACH_SPEED = 8.0f;
+	/** Per-tick velocity retention while braking in the slow zone (gentle, smooth decel — not a hard stop). */
+	private static final float APPROACH_BRAKE_FACTOR = 0.85f;
 	/** How often to re-find the nearest block (ms) — used only as the approach target. */
 	private static final long BLOCK_REFRESH_MS = 2000;
 	/**
@@ -54,6 +61,14 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 	private static final float STANDOFF = 40.0f;
 	/** Dead-band around the stand-off so the ship doesn't constantly nudge in and out (jitter). */
 	private static final float STANDOFF_SLACK = 20.0f;
+	/**
+	 * Much wider dead-band used <em>while mining</em>. The salvage beam (aimed by the FleetMining mixin)
+	 * chews blocks from wherever the ship is parked, so the ship should hold still and let it work rather
+	 * than chasing every change in "nearest block" — otherwise it skips from block to block faster than it
+	 * can mine them. The ship only advances once the surface has genuinely receded past this margin (then
+	 * it follows inward a chunk), and the stall detector orbits it to a fresh face when the spot is spent.
+	 */
+	private static final float MINING_HOLD_SLACK = 120.0f;
 	/**
 	 * How far past the stand-off the ship must get before we LEAVE the mining state and fly over. A wide
 	 * hysteresis (much larger than the stand-off) so the nearest block changing as we mine — which makes
@@ -83,9 +98,13 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 	private static final float REPOSITION_ARRIVE = 80.0f;
 	/** Give up on a reposition waypoint after this long (e.g. blocked path) and just resume mining. */
 	private static final long REPOSITION_TIMEOUT_MS = 8000;
+	/** Minimum gap between "cargo full" warnings for a ship, so it isn't spammed every tick. */
+	private static final long CARGO_WARN_INTERVAL_MS = 30000;
 
 	/** Per-ship throttle for debug logging (entity id → last log time ms). */
 	private final Map<Integer, Long> lastDebugLog = new ConcurrentHashMap<>();
+	/** Per-ship throttle for the "cargo full" player warning (entity id → last warn time ms). */
+	private final Map<Integer, Long> lastCargoWarn = new ConcurrentHashMap<>();
 	/** Per-ship cached world position of the nearest asteroid block (approach target). */
 	private final Map<Integer, Vector3f> blockAim = new ConcurrentHashMap<>();
 	private final Map<Integer, Long> blockAimTime = new ConcurrentHashMap<>();
@@ -126,6 +145,14 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 			float radius = entity.getBoundingSphere().radius;
 			float speed = entity.getLinearVelocity(new Vector3f()).length();
 			long now = System.currentTimeMillis();
+
+			// Cargo full / no free storage — the ship has salvage beams (checked above) but can't store more,
+			// so it can't mine. Park it and tell the player (throttled) instead of silently sitting there.
+			if(!aiEntity.canSalvage()) {
+				notifyCannotStore(entity, now);
+				aiEntity.stop();
+				return;
+			}
 
 			// Track mining progress: refresh the "last progress" stamp whenever the asteroid loses blocks
 			// (or on first sighting). A stall (no block loss for STALL_MS while mining) means this spot is
@@ -198,20 +225,35 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 			// while mining, follows the surface inward as blocks are removed. While FleetMining is active it
 			// owns aiming, so our movement must not also orient the ship (or they fight and the beam drifts
 			// off-target) — hence orient only when not mining.
-			if(dist > standoff + STANDOFF_SLACK) {
-				if(dist < standoff + APPROACH_SLOW_ZONE && speed > MAX_APPROACH_SPEED) {
-					aiEntity.stop(); // coast to a stop near the stand-off instead of overshooting
-				} else {
-					Vector3f toBlock = new Vector3f();
-					toBlock.sub(target, shipPos);
+			// While mining, hold position with a wide dead-band so the ship doesn't chase each shifting
+			// nearest-block (which it can't keep up with); while approaching, use the tight band to arrive
+			// precisely at the stand-off.
+			float slack = mining ? MINING_HOLD_SLACK : STANDOFF_SLACK;
+			if(dist > standoff + slack) {
+				float remaining = dist - standoff;
+				Vector3f toBlock = new Vector3f();
+				toBlock.sub(target, shipPos);
+				if(remaining > APPROACH_SLOW_ZONE) {
+					// Far out — drive toward the rock at full speed.
 					aiEntity.moveTo(timer, toBlock, !mining);
+				} else {
+					// In the slow zone — hold a speed that tapers with the remaining distance so the ship
+					// decelerates smoothly to a near-stop at the stand-off. Gentle braking plus a coast band
+					// (no per-tick hard stop/full-thrust) avoids the start/stop stutter.
+					float cap = MIN_APPROACH_SPEED + (remaining / APPROACH_SLOW_ZONE) * (MAX_APPROACH_SPEED - MIN_APPROACH_SPEED);
+					if(speed > cap * 1.1f) {
+						AIUtils.brakeShip(entity, APPROACH_BRAKE_FACTOR); // bleed excess speed gently
+					} else if(speed < cap * 0.9f) {
+						aiEntity.moveTo(timer, toBlock, !mining); // a touch slow — ease forward
+					}
+					// else within the target speed band — coast.
 				}
-			} else if(dist < standoff - STANDOFF_SLACK) {
+			} else if(dist < standoff - slack) {
 				Vector3f away = new Vector3f();
 				away.sub(shipPos, target);
 				aiEntity.moveTo(timer, away, false); // too close — ease back so the hull never touches the rock
 			} else {
-				aiEntity.stop(); // at the stand-off — hold against drift/gravity
+				aiEntity.stop(); // within the hold band — sit still and let the beam mine
 			}
 
 			// Already mining? FleetMining aims + fires; we handled positioning above, so leave it.
@@ -294,6 +336,32 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 		repositionTarget.remove(id);
 		repositionStart.remove(id);
 		lastDebugLog.remove(id);
+		lastCargoWarn.remove(id);
+	}
+
+	/**
+	 * Tells the ship's faction (online members) that it can't mine because its cargo is full / it has no
+	 * free storage, throttled to once per {@link #CARGO_WARN_INTERVAL_MS} so it doesn't spam.
+	 */
+	private void notifyCannotStore(Ship entity, long now) {
+		try {
+			Long last = lastCargoWarn.get(entity.getId());
+			if(last != null && now - last < CARGO_WARN_INTERVAL_MS) {
+				return;
+			}
+			lastCargoWarn.put(entity.getId(), now);
+			int faction = entity.getFactionId();
+			if(faction == 0) {
+				return; // unfactioned — no obvious owner to notify
+			}
+			String msg = entity.getName() + " can't mine: cargo full (no free storage).";
+			for(PlayerState player : GameServer.getServerState().getPlayerStatesByName().values()) {
+				if(player.getFactionId() == faction) {
+					PlayerUtils.sendMessage(player, msg);
+				}
+			}
+		} catch(Exception ignored) {
+		}
 	}
 
 	/**
