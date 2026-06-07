@@ -80,6 +80,11 @@ public class IncomingSignatureManager {
 			if(!ConfigManager.getMainConfig().tacticalMapIncomingSignatures.getValue()) {
 				return;
 			}
+			// Detection is server-side only. On a pure client (connected to a dedicated server), and before the
+			// server starts / after it stops, there is no server state — nothing to scan, so skip quietly.
+			if(GameServer.getServerState() == null) {
+				return;
+			}
 			long now = System.currentTimeMillis();
 			// Prune stale jump records.
 			jumpRecords.entrySet().removeIf(e -> now - e.getValue().time > JUMP_RECORD_TTL_MS);
