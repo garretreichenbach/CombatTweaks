@@ -106,6 +106,26 @@ public class TacticalMapRadial extends RadialMenuDialog {
 						return false;
 					}
 				}, null);
+
+				menu.addItem("Order Repair", new GUICallback() {
+					@Override
+					public void callback(GUIElement callingGuiElement, MouseEvent event) {
+						if(event.pressedLeftMouse()) {
+							for(SegmentController selected : drawer.selectedEntities) {
+								if(selected instanceof Ship && !target.getEntity().equals(selected)) {
+									PacketUtil.sendPacketToServer(new SendRepairPacket((Ship) selected, target.getEntity(), isQueueModifier()));
+								}
+							}
+							if(!isQueueModifier()) drawer.clearSelected(); // shift-held = keep selection to queue more orders
+							deactivate();
+						}
+					}
+
+					@Override
+					public boolean isOccluded() {
+						return false;
+					}
+				}, null);
 			}
 		} else if(hasSelection) {
 			// Only show orders if something is selected

@@ -74,7 +74,10 @@ public class EventManager {
 			@Override
 			public void onEvent(KeyPressEvent event) {
 				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
-					if(PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> && event.isKeyDown()) {
+					// Allow the tactical map anywhere the player is controlling something — ship, station, or
+					// on foot as an astronaut — not just while piloting a ship. The camera anchors to the
+					// controlled object's position regardless of its type.
+					if(GameClient.getClientPlayerState().getFirstControlledTransformableWOExc() != null && event.isKeyDown()) {
 						int tacticalKey = ConfigManager.getTacticalMapKey();
 						boolean isTacticalKey = event.getKey() == tacticalKey;
 						if((event.getKey() == Keyboard.KEY_ESCAPE || isTacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {

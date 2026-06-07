@@ -1686,7 +1686,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			return;
 		}
 		int n = subsectorDivisions();
-		SegmentController player = getCurrentEntity();
+		// Anchor to whatever the player controls — ship, station, or astronaut character — so the readout
+		// works on foot too, not only while piloting a ship (getCurrentEntity() is ship-only).
+		SimpleTransformableSendableObject<?> player = GameClient.getClientPlayerState() != null ? GameClient.getClientPlayerState().getFirstControlledTransformableWOExc() : null;
 		String camLine, playerLine;
 		if(player != null && player.getWorldTransform() != null) {
 			Vector3i pSec = player.getSector(tmpEntitySector);

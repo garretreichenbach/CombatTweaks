@@ -11,6 +11,7 @@ import org.schema.game.client.controller.manager.AbstractControlManager;
 import org.schema.game.client.controller.manager.ingame.PlayerInteractionControlManager;
 import org.schema.game.client.controller.manager.ingame.navigation.NavigationFilter;
 import org.schema.game.common.controller.SegmentController;
+import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.server.data.GameServerState;
 import org.schema.game.server.data.ServerConfig;
@@ -84,7 +85,13 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			}
 			activeRadial = null;
 		}
+		// Mirror every suspend() that update() applies while the map is open, so closing the map fully
+		// restores control. Missing the interaction manager and build-tools manager here left build mode
+		// locked after exiting via a build block (update() suspends them every frame, but only these two
+		// flight/build controllers were being released on exit).
 		getInteractionManager().setActive(!active);
+		getInteractionManager().suspend(active);
+		getInteractionManager().getBuildToolsManager().suspend(active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().suspend(active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().suspend(active);
 		super.onSwitch(active);
@@ -343,8 +350,11 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	}
 
 	private float getDistanceFromControl(Vector3f newPos) {
-		if(GameClient.getCurrentControl() != null && GameClient.getCurrentControl() instanceof SegmentController) {
-			Vector3f controlPos = ((SegmentController) GameClient.getCurrentControl()).getWorldTransform().origin;
+		// Anchor to whatever the player controls — ship, station, or astronaut character — so panning limits
+		// work regardless of context, not only while piloting a ship.
+		SimpleTransformableSendableObject<?> control = GameClient.getClientPlayerState() != null ? GameClient.getClientPlayerState().getFirstControlledTransformableWOExc() : null;
+		if(control != null) {
+			Vector3f controlPos = control.getWorldTransform().origin;
 			return Math.abs(Vector3fTools.distance(newPos.x, newPos.y, newPos.z, controlPos.x, controlPos.y, controlPos.z));
 		}
 		return (int) ServerConfig.SECTOR_SIZE.getCurrentState();
