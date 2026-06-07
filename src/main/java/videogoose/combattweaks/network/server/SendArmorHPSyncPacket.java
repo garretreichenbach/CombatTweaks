@@ -1,13 +1,14 @@
 package videogoose.combattweaks.network.server;
 
+import api.common.GameClient;
 import api.network.Packet;
 import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.data.player.PlayerState;
+import org.schema.schine.network.objects.Sendable;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
-import videogoose.combattweaks.utils.EntityUtils;
 
 import java.io.IOException;
 
@@ -41,7 +42,20 @@ public class SendArmorHPSyncPacket extends Packet {
 
 	@Override
 	public void processPacketOnClient() {
-		SegmentController entity = EntityUtils.getEntityById(entityId);
+		// Resolve the entity from the CLIENT state explicitly. In single-player the client and server share
+		// one JVM; EntityUtils/GameCommon.getGameObject(id) resolves through getGameState() and returns the
+		// SERVER instance, whose armor collection has isOnServer()==true — so applySync() no-ops and the
+		// client HUD stays at 0. Looking it up in the client state's own object container guarantees we get
+		// the client-side collection. (On a real client connected to a dedicated server this is also the
+		// correct, unambiguous lookup.)
+		SegmentController entity = null;
+		try {
+			Sendable s = GameClient.getClientState().getLocalAndRemoteObjectContainer().getLocalObjects().get(entityId);
+			if(s instanceof SegmentController) {
+				entity = (SegmentController) s;
+			}
+		} catch(Exception ignored) {
+		}
 		if(entity instanceof ManagedUsableSegmentController<?>) {
 			ArmorHPCollection collection = ArmorHPCollection.getCollection(entity);
 			if(collection != null) {

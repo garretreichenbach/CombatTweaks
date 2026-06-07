@@ -903,6 +903,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawIndicators();
 			computeScreenPositions();
 			updateHovered();
+			drawSectorGrid();
 			drawBoundingBoxWireframes();
 			drawPaths();
 			drawLabels();
@@ -1051,6 +1052,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(entity.getFaction() != null) {
 			builder.append("[").append(entity.getFaction().getName()).append("]\n");
 		}
+		// Total mass (including docked turrets/entities), so the player can gauge a ship's size at a glance.
+		builder.append(StringTools.massFormat(entity.getMassWithDocks())).append("\n");
 		if(!entity.equals(playerEntity)) {
 			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
 				builder.append("???km\n");
@@ -1159,6 +1162,115 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glDisable(GL11.GL_BLEND);
 		GlUtil.glEnable(GL11.GL_LIGHTING);
 		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
+	}
+
+	/** Soft blue used for the sector-boundary grid; alpha is scaled per-vertex by distance for a fade-out. */
+	private static final Vector4f SECTOR_GRID_COLOR = new Vector4f(0.35f, 0.7f, 1.0f, 0.6f);
+
+	/**
+	 * Draws a faint wireframe grid on the sector boundaries so the player can see where sectors begin and end.
+	 *
+	 * <p>Sector centres lie at the local origin and at integer multiples of the sector size (the engine's
+	 * cross-sector transform offsets a neighbour by {@code dir * sectorSize}), so the sector faces fall on the
+	 * planes {@code (k ± 0.5) * sectorSize}. We build a small lattice of those boundary lines around the
+	 * sector the camera is currently over — the camera can pan well away from the player's home sector — and
+	 * draw it camera-relative for precision (the same trick the boxes and paths use: subtract the camera
+	 * position on the CPU so the GPU only sees small offsets). Each line is split into one-sector segments and
+	 * every vertex's alpha is faded with its distance to the camera, so the grid reads as a soft backdrop that
+	 * dissolves into the distance instead of a solid wall of lines.</p>
+	 */
+	private void drawSectorGrid() {
+		if(!ConfigManager.getMainConfig().tacticalMapSectorGrid.getValue()) {
+			return;
+		}
+		float s = getSectorSize();
+		if(s <= 0) {
+			return;
+		}
+		int range = (int) Math.round(ConfigManager.getMainConfig().tacticalMapSectorGridRange.getValue());
+		range = Math.max(0, Math.min(3, range));
+
+		GlUtil.glDisable(GL11.GL_LIGHTING);
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		GlUtil.glEnable(GL11.GL_COLOR_MATERIAL);
+		GlUtil.glEnable(GL11.GL_BLEND);
+		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPushMatrix();
+		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
+		GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glPushMatrix();
+		GlUtil.glLoadIdentity();
+		Vector3f camPos = loadCameraRelativeModelview();
+		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
+		GL11.glLineWidth(1.0f);
+
+		// Sector the camera currently sits in (centre-at-origin convention: index = round(coord / s)).
+		int csx = Math.round(camPos.x / s);
+		int csy = Math.round(camPos.y / s);
+		int csz = Math.round(camPos.z / s);
+
+		int faceCount = 2 * range + 2; // number of boundary planes per axis spanning the covered sectors
+		float[] fx = new float[faceCount];
+		float[] fy = new float[faceCount];
+		float[] fz = new float[faceCount];
+		for(int j = 0; j < faceCount; j++) {
+			fx[j] = (csx - range - 0.5f + j) * s;
+			fy[j] = (csy - range - 0.5f + j) * s;
+			fz[j] = (csz - range - 0.5f + j) * s;
+		}
+		float fadeDist = (range + 1.0f) * s; // vertices beyond this are fully transparent
+
+		GlUtil.glBegin(GL11.GL_LINES);
+		// Segments parallel to X, between adjacent x-faces, at every (y,z) boundary intersection.
+		for(int j = 0; j < faceCount; j++) {
+			for(int k = 0; k < faceCount; k++) {
+				for(int i = 0; i < faceCount - 1; i++) {
+					gridVertex(fx[i], fy[j], fz[k], camPos, fadeDist);
+					gridVertex(fx[i + 1], fy[j], fz[k], camPos, fadeDist);
+				}
+			}
+		}
+		// Segments parallel to Y.
+		for(int i = 0; i < faceCount; i++) {
+			for(int k = 0; k < faceCount; k++) {
+				for(int j = 0; j < faceCount - 1; j++) {
+					gridVertex(fx[i], fy[j], fz[k], camPos, fadeDist);
+					gridVertex(fx[i], fy[j + 1], fz[k], camPos, fadeDist);
+				}
+			}
+		}
+		// Segments parallel to Z.
+		for(int i = 0; i < faceCount; i++) {
+			for(int j = 0; j < faceCount; j++) {
+				for(int k = 0; k < faceCount - 1; k++) {
+					gridVertex(fx[i], fy[j], fz[k], camPos, fadeDist);
+					gridVertex(fx[i], fy[j], fz[k + 1], camPos, fadeDist);
+				}
+			}
+		}
+		GlUtil.glEnd();
+
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GlUtil.glPopMatrix(); // modelview
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPopMatrix();
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glDisable(GL11.GL_BLEND);
+		GlUtil.glEnable(GL11.GL_LIGHTING);
+		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
+	}
+
+	/** Emits one sector-grid vertex camera-relative, fading its alpha from {@link #SECTOR_GRID_COLOR} by distance. */
+	private void gridVertex(float x, float y, float z, Vector3f camPos, float fadeDist) {
+		float rx = x - camPos.x;
+		float ry = y - camPos.y;
+		float rz = z - camPos.z;
+		float dist = (float) Math.sqrt(rx * rx + ry * ry + rz * rz);
+		float t = fadeDist > 0 ? Math.max(0.0f, 1.0f - dist / fadeDist) : 1.0f;
+		GlUtil.glColor4fForced(SECTOR_GRID_COLOR.x, SECTOR_GRID_COLOR.y, SECTOR_GRID_COLOR.z, SECTOR_GRID_COLOR.w * t);
+		GL11.glVertex3f(rx, ry, rz);
 	}
 
 	/**

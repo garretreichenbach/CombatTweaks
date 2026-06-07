@@ -378,11 +378,14 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 			dir.sub(targetPos, shipPos);
 			aiEntity.moveTo(timer, dir, true);
 			debug(entity, "closing on attack target (" + (int) dist + " > " + (int) engageDist + ")");
-		} else {
-			// In range — make sure the engine is engaging this target, then let it drive/orient/fire.
+		} else if(!AIUtils.isInAttackCycle(entity.getId())) {
+			// In range but not currently in the attack cycle — kick it off once. We must NOT re-issue while
+			// it's already searching/engaging: the search state clears the target on entry, so re-issuing
+			// each tick restarts the search forever and the ship never actually engages.
 			AIUtils.setAttackTarget(entity.getId(), targetId);
-			debug(entity, "in range — engine engaging attack target");
+			debug(entity, "in range — starting engine engagement");
 		}
+		// else: in range and already in the attack cycle — let the engine drive/orient/fire uninterrupted.
 	}
 
 	/**

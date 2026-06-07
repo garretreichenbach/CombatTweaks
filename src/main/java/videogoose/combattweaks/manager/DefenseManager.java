@@ -103,11 +103,8 @@ public class DefenseManager {
 		SimpleGameObject defenderObj = (SimpleGameObject) GameCommon.getGameObject(defenderId);
 		SimpleGameObject protectedObj = (SimpleGameObject) GameCommon.getGameObject(protectedId);
 
-		if(!(defenderObj instanceof ManagedUsableSegmentController)) return false;
-		if(!(protectedObj instanceof SegmentController)) return false;
-
-		ManagedUsableSegmentController<?> defender = (ManagedUsableSegmentController<?>) defenderObj;
-		SegmentController protectedEntity = (SegmentController) protectedObj;
+		if(!(defenderObj instanceof ManagedUsableSegmentController<?> defender)) return false;
+		if(!(protectedObj instanceof SegmentController protectedEntity)) return false;
 
 		// Only fleeted ships obey our orders; drop only after a confirmed (non-transient) fleet loss, so a
 		// fleet edit's brief uncache/re-cache doesn't silently kill the defend order.
@@ -115,10 +112,19 @@ public class DefenseManager {
 
 		SegmentController threat = findNearestThreat(protectedEntity, defender.getFactionId());
 		if(threat != null) {
-			// Engage: hand off to the engine's combat FSM. Stop any escort movement so the two
-			// controllers don't fight over the ship.
+			// Engage: stop any escort movement so the two controllers don't fight over the ship, then mark
+			// the threat as the attack target. That populates the attack order, so the per-tick handleAttack
+			// driver (in MiningSalvageListener) flies the defender into weapon range and runs the engage
+			// cycle — defenders inherit the attack-command driver for free.
 			MoveManager.getInstance().removeMove(defender.getId());
-			AIUtils.setAttackTarget(defender, threat);
+			// Only (re)issue when the threat is new or has changed. Re-issuing the same target every tick
+			// re-fires SEARCH_FOR_TARGET, whose onEnter nulls the target — restarting the engagement forever
+			// (the same thrash that left the attack command motionless). Once the order is set, leave it:
+			// handleAttack keeps driving and the engine keeps engaging.
+			Integer current = AIUtils.getAttackTarget(defender.getId());
+			if(current == null || current != threat.getId()) {
+				AIUtils.setAttackTarget(defender, threat);
+			}
 		} else {
 			positionNearProtected(defender, protectedEntity);
 		}
@@ -168,7 +174,11 @@ public class DefenseManager {
 		AIUtils.clearTarget(defender.getId());
 
 		Vector3f defPos = defender.getWorldTransform().origin;
-		Vector3f protPos = protectedEntity.getWorldTransform().origin;
+		// World-transform origins are sector-local, so when defender and protected entity sit in different
+		// sectors a raw origin-to-origin distance is off by a whole sector — the escort gate would then think
+		// a sector-away ship is "close enough" (or vice versa). Rebase the protected entity into the
+		// defender's sector frame first, mirroring computeDestination, so the gate is cross-sector correct.
+		Vector3f protPos = new Vector3f(AIUtils.getTransformRelativeTo(defender, protectedEntity).origin);
 		float dist = Vector3fTools.distance(defPos.x, defPos.y, defPos.z, protPos.x, protPos.y, protPos.z);
 		if(dist <= ESCORT_DISTANCE) {
 			// Close enough — stop escorting and hold.

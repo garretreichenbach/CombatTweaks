@@ -114,7 +114,9 @@ public class TargetShipArmorHPBar extends FillableHorizontalBar {
 					maxHP += (float) armorHPCollection.getMaxHP();
 				}
 			}
-			return Math.max(0, Math.min(1, hp / maxHP));
+			// Guard the divide: maxHP is 0 for an unarmored target and on the client until its armor-HP sync
+			// arrives, so hp/maxHP would be 0/0 = NaN. The `> 0` test also rejects a NaN maxHP.
+			return maxHP > 0 ? Math.max(0, Math.min(1, hp / maxHP)) : 0;
 		} else {
 			return 0;
 		}

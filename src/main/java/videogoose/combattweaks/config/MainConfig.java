@@ -17,6 +17,12 @@ public class MainConfig extends SimpleConfigContainer {
 	public final SimpleConfigString tacticalMapKeybind =
 			new SimpleConfigString(this, "tactical_map_keybind", "BACKSLASH", "Keyboard key name for toggling the tactical map");
 
+	public final SimpleConfigBool tacticalMapSectorGrid =
+			new SimpleConfigBool(this, "tactical_map_sector_grid", true, "Draw a faint grid on the tactical map marking sector boundaries.");
+
+	public final SimpleConfigDouble tacticalMapSectorGridRange =
+			new SimpleConfigDouble(this, "tactical_map_sector_grid_range", 1.0, "How many sectors out from the camera the sector grid extends in each direction (clamped 0-3). Higher shows more boundaries but adds clutter.");
+
 	public MainConfig(StarMod mod) {
 		super(mod, "config", true);
 	}

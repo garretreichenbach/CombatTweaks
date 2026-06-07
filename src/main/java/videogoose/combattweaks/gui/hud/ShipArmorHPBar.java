@@ -67,7 +67,10 @@ public class ShipArmorHPBar extends FillableBarOne {
 					maxHP += (float) armorHPCollection.getMaxHP();
 				}
 			}
-			return Math.max(0, Math.min(1, hp / maxHP));
+			// Guard the divide: maxHP is 0 for an unarmored ship and on the client until the first armor-HP
+			// sync arrives, so hp/maxHP would be 0/0 = NaN (which renders as a NaN-wide / NaN%% bar). The
+			// `> 0` test also rejects a NaN maxHP. Empty/unsynced armor reads as an empty bar.
+			return maxHP > 0 ? Math.max(0, Math.min(1, hp / maxHP)) : 0;
 		} else {
 			return 0;
 		}
@@ -111,7 +114,10 @@ public class ShipArmorHPBar extends FillableBarOne {
 					maxHP += (float) armorHPCollection.getMaxHP();
 				}
 			}
-			return (hp / maxHP) * 100 + "%";
+			// Guard the divide (see getFilledOne): 0/0 would print "NaN%". Also round so the readout is a
+			// clean integer percent instead of a long fractional tail.
+			float pct = maxHP > 0 ? (hp / maxHP) * 100f : 0f;
+			return Math.round(pct) + "%";
 		} else {
 			return "0%";
 		}

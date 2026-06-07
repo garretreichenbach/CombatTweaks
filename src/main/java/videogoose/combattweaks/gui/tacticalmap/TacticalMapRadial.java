@@ -34,6 +34,29 @@ public class TacticalMapRadial extends RadialMenuDialog {
 		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
 	}
 
+	/** The attack-order action, reused for the direct (hostile) item and the neutral confirmation item. */
+	private GUICallback makeAttackCallback() {
+		return new GUICallback() {
+			@Override
+			public void callback(GUIElement callingGuiElement, MouseEvent event) {
+				if(event.pressedLeftMouse()) {
+					for(SegmentController selected : drawer.selectedEntities) {
+						if(selected instanceof Ship && !target.getEntity().equals(selected)) {
+							PacketUtil.sendPacketToServer(new SendAttackPacket((Ship) selected, target.getEntity(), isQueueModifier()));
+						}
+					}
+					if(!isQueueModifier()) drawer.clearSelected(); // shift-held = keep selection to queue more orders
+					deactivate();
+				}
+			}
+
+			@Override
+			public boolean isOccluded() {
+				return false;
+			}
+		};
+	}
+
 	@Override
 	public RadialMenu createMenu(RadialMenuDialog radialMenuDialog) {
 		RadialMenu menu = new RadialMenu(getState(), "TacticalMapRadial", radialMenuDialog, 800, 600, 130, FontLibrary.getBOLDBlender20());
@@ -108,26 +131,17 @@ public class TacticalMapRadial extends RadialMenuDialog {
 					}
 				}, null);
 			} else if(!isAlly) {
-				// Enemy — order attack
-				menu.addItem("Order Attack", new GUICallback() {
-					@Override
-					public void callback(GUIElement callingGuiElement, MouseEvent event) {
-						if(event.pressedLeftMouse()) {
-							for(SegmentController selected : drawer.selectedEntities) {
-								if(selected instanceof Ship && !target.getEntity().equals(selected)) {
-									PacketUtil.sendPacketToServer(new SendAttackPacket((Ship) selected, target.getEntity(), isQueueModifier()));
-								}
-							}
-							if(!isQueueModifier()) drawer.clearSelected(); // shift-held = keep selection to queue more orders
-							deactivate();
-						}
-					}
-
-					@Override
-					public boolean isOccluded() {
-						return false;
-					}
-				}, null);
+				boolean isEnemy = GameCommon.getGameState().getFactionManager().isEnemy(
+						GameClient.getClientPlayerState().getFactionId(), target.getEntity().getFactionId());
+				if(isEnemy) {
+					// Hostile — order attack directly.
+					menu.addItem("Order Attack", makeAttackCallback(), null);
+				} else {
+					// Neutral — attacking hurts your standing and can aggro them, so require a confirmation
+					// step via a sub-radial rather than firing on a stray click.
+					RadialMenu confirm = menu.addItemAsSubMenu("Order Attack", null);
+					confirm.addItem("Confirm: Attack Neutral", makeAttackCallback(), null);
+				}
 			} else {
 				// Ally/own faction ship — offer both defend and repair
 				menu.addItem("Order Defend", new GUICallback() {

@@ -16,9 +16,11 @@ import org.schema.game.network.objects.NetworkShip;
 import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.game.server.ai.program.fleetcontrollable.FleetControllableProgram;
+import org.schema.game.server.ai.program.fleetcontrollable.states.FleetAttackCycle;
 import org.schema.game.server.ai.program.fleetcontrollable.states.FleetMining;
 import org.schema.game.common.data.player.PlayerState;
 import org.schema.schine.ai.stateMachines.FSMException;
+import org.schema.schine.ai.stateMachines.State;
 import org.schema.schine.ai.stateMachines.Transition;
 import api.utils.game.PlayerUtils;
 import videogoose.combattweaks.manager.DefenseManager;
@@ -92,14 +94,44 @@ public class AIUtils {
 		return peaceful && !isCombatOrder(shipId);
 	}
 
-	/** Whether the ship is under an attack or defend order (it should fire weapons, not salvage). */
+	/**
+	 * Whether the ship is actively engaging a target (so it should fire weapons, not salvage, and must not
+	 * have its fire suppressed as a "peaceful" order would).
+	 *
+	 * <p>This is keyed on {@link #attackOrders} only — NOT on "is defending". A defender that is merely
+	 * escorting its protectee (no threat in range) has a move order but no attack target, and it must be
+	 * treated as peaceful so {@code shouldSuppressWeapons} cancels its fire — otherwise it shoots while in
+	 * transit toward the very ship it's protecting. The instant a threat appears, {@code DefenseManager}
+	 * calls {@code setAttackTarget}, which adds the defender to {@code attackOrders}; from then it counts as
+	 * in combat and fires normally. So engagement, not the standing defend assignment, gates weapons.</p>
+	 */
 	public static boolean isCombatOrder(int shipId) {
-		return attackOrders.containsKey(shipId) || DefenseManager.getInstance().isDefending(shipId);
+		return attackOrders.containsKey(shipId);
 	}
 
 	/** The entity this ship is ordered to attack, or null if it has no attack order. */
 	public static Integer getAttackTarget(int shipId) {
 		return attackOrders.get(shipId);
+	}
+
+	/**
+	 * Whether the ship is currently running its attack cycle (searching for / closing on / engaging a
+	 * target). We can't just check the program's target: the search state nulls the target on entry, so a
+	 * target-based check reads false mid-search and makes the caller re-issue the order, restarting the
+	 * search forever (the ship then just sits). The attack-cycle states all implement
+	 * {@link FleetAttackCycle}, so checking the FSM state tells us the engagement is in progress.
+	 */
+	public static boolean isInAttackCycle(int shipId) {
+		SegmentController ship = EntityUtils.getEntityById(shipId);
+		if(!(ship instanceof Ship s)) {
+			return false;
+		}
+		try {
+			State st = s.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().getCurrentState();
+			return st instanceof FleetAttackCycle;
+		} catch(Exception ignored) {
+		}
+		return false;
 	}
 
 	/**

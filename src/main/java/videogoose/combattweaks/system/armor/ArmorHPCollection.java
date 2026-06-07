@@ -33,9 +33,14 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 	private static final long UPDATE_FREQUENCY = 1000;
 	private static final long REGEN_FREQUENCY = 1000;
 	private static final long SYNC_FREQUENCY = 500;
-	// Re-broadcast at least this often even when nothing changed, so clients that
-	// start tracking the entity later (or missed a packet) converge on the server value.
-	private static final long SYNC_HEARTBEAT = 2000;
+	// Idle re-broadcast interval. Whenever armor HP actually changes (combat, regen) the change-driven path
+	// above syncs within SYNC_FREQUENCY, and a freshly-loaded ship syncs once immediately (maxHP jumps 0 ->
+	// value, which counts as a change). This heartbeat only exists as a safety net so a client that MISSED
+	// that change-driven sync — e.g. it entered a sector where the ships were already loaded server-side —
+	// still converges eventually. It does NOT need to be fast: a low value just re-sends unchanged values to
+	// every player for every armored entity, which is the bulk of armor-sync traffic. 10s keeps convergence
+	// reasonable while cutting idle broadcasts ~5x versus a 2s heartbeat.
+	private static final long SYNC_HEARTBEAT = 10000;
 	// Delay after the last enqueued change before processing the batch (ms)
 	private static final long PROCESS_DELAY_MS = 500; // arbitrary time since last update
 	private static final Set<SegmentController> pending = Collections.synchronizedSet(new HashSet<SegmentController>());
@@ -116,6 +121,17 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 
 	@Override
 	public boolean needsUpdate() {
+		// The engine only calls update() while this returns true (ManagerModuleSingle.update gates the call,
+		// and ManagerContainer keeps the module in its updateModules list via needsAnyUpdate, which AND-s in
+		// needsUpdate). On the SERVER we must keep ticking whenever there's armor HP to sync: after a recalc
+		// both flagCollectionChanged and the pending stamp clear, so without this update() would stop forever
+		// the instant the first recalc finishes. The server's sync burst fires within a few ms of the ship
+		// loading — before a client is tracking the entity — so that client misses it, and with update() dead
+		// the SYNC_HEARTBEAT re-broadcast never runs, leaving the client stuck showing 0 HP (empty bar). An
+		// armorless ship (maxHP==0) still settles; a later block event re-flags a change and revives it.
+		if(isOnServer() && maxHP > 0) {
+			return true;
+		}
 		return flagCollectionChanged || lastChangeTimestamp.containsKey(getSegmentController());
 	}
 

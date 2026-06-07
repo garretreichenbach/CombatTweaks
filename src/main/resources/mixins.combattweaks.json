@@ -1,6 +1,6 @@
 {
 	"required": true,
-	"minVersion": "0.8",
+	"minVersion": "0.8.7",
 	"package": "videogoose.combattweaks.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"target": "@env(DEFAULT)",
@@ -10,6 +10,9 @@
 	"mixins": [
 		"FleetStateMixin",
 		"ShipAIEntityMixin",
-		"FleetMiningMixin"
-	]
+		"FleetMiningMixin",
+		"FactionManagerMixin"
+	],
+	"client": [],
+	"server": []
 }
