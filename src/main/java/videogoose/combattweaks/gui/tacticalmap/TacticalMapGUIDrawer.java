@@ -170,6 +170,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private boolean firstTime = true;
 	private long updateTimer;
 	private TacticalMapShaderOverlay shaderOverlay;
+	/** The game camera that was active when the map was opened, restored verbatim on close. */
+	private Camera previousCamera;
 	private int lastKnownWidth = -1;
 	private int lastKnownHeight = -1;
 
@@ -404,6 +406,13 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		if(toggleDraw) {
 			if(camera != null) {
+				// Remember the actual game camera so we can restore it exactly on close. Deriving it on exit
+				// (getDefaultCamera) failed for stations — they're neither in flight nor build mode, so it fell
+				// through to the still-active tactical camera and left the player's view/control stuck.
+				Camera current = Controller.getCamera();
+				if(!(current instanceof TacticalMapCamera)) {
+					previousCamera = current;
+				}
 				Controller.setCamera(camera);
 			}
 			controlManager.onSwitch(true);
@@ -413,7 +422,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 		} else {
 			if(camera != null) {
-				Controller.setCamera(getDefaultCamera());
+				Camera restore = previousCamera != null && !(previousCamera instanceof TacticalMapCamera) ? previousCamera : getDefaultCamera();
+				Controller.setCamera(restore);
 			}
 			controlManager.onSwitch(false);
 		}
