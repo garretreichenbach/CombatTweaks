@@ -2,6 +2,7 @@ package videogoose.combattweaks.gui.tacticalmap;
 
 import api.common.GameClient;
 import api.common.GameCommon;
+import api.network.packets.PacketUtil;
 import api.utils.draw.ModWorldDrawer;
 import api.utils.game.PlayerUtils;
 import com.bulletphysics.linearmath.Transform;
@@ -20,6 +21,7 @@ import org.schema.game.client.view.gui.shiphud.newhud.BottomBarBuild;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelpManager;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelperContainer;
 import org.schema.game.common.controller.SegmentController;
+import org.schema.game.common.controller.SendableSegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.SimpleGameObject;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
@@ -35,7 +37,16 @@ import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
 import org.schema.schine.input.InputType;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
+import api.utils.game.SegmentControllerUtils;
+import org.schema.game.common.controller.elements.ElementCollectionManager;
+import org.schema.game.common.controller.elements.ShieldAddOn;
+import org.schema.game.common.controller.elements.ShieldContainerInterface;
+import org.schema.game.common.controller.elements.ShieldLocal;
+import org.schema.game.common.controller.elements.ShieldLocalAddOn;
+import org.schema.game.common.data.ManagedSegmentController;
 import videogoose.combattweaks.manager.MoveManager;
+import videogoose.combattweaks.network.client.RequestArmorSyncPacket;
+import videogoose.combattweaks.system.armor.ArmorHPCollection;
 import videogoose.combattweaks.system.signature.IncomingSignature;
 import videogoose.combattweaks.utils.AIUtils;
 
@@ -44,6 +55,8 @@ import javax.vecmath.Vector4f;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -350,13 +363,39 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	public void toggleSelectAllFriendly() {
-		clearSelected();
+		// Gather every eligible own-faction entity currently on the map. In turret mode the map shows
+		// turret units (docked), so those are eligible; in normal mode it is own non-docked ships,
+		// excluding the ship the player is currently piloting.
+		boolean turret = controlManager != null && controlManager.turretTargetingMode;
+		int myFac = GameClient.getClientPlayerState().getFactionId();
+		ArrayList<TacticalMapEntityIndicator> eligible = new ArrayList<>();
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(indicator.getEntity() != null && indicator.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId() && GameClient.getClientPlayerState().getFactionId() != 0 && !indicator.getEntity().isDocked() && !isOwnShip(indicator.getEntity())) {
-				if(isSelected(indicator.getEntity())) {
-					removeSelection(indicator);
-				} else {
-					addSelection(indicator);
+			SegmentController e = indicator.getEntity();
+			if(e == null || myFac == 0 || e.getFactionId() != myFac) {
+				continue;
+			}
+			if(turret ? !e.isDocked() : (e.isDocked() || isOwnShip(e))) {
+				continue;
+			}
+			eligible.add(indicator);
+		}
+		if(eligible.isEmpty()) {
+			return;
+		}
+		// If everything eligible is already selected, Ctrl+A acts as deselect-all; otherwise select all.
+		boolean allSelected = true;
+		for(TacticalMapEntityIndicator indicator : eligible) {
+			if(!isSelected(indicator.getEntity())) {
+				allSelected = false;
+				break;
+			}
+		}
+		clearSelected();
+		if(!allSelected) {
+			for(TacticalMapEntityIndicator indicator : eligible) {
+				addSelection(indicator);
+				if(turret && indicator.getEntity() instanceof Ship ts) {
+					addTurretSelection(ts);
 				}
 			}
 		}
@@ -456,8 +495,16 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				if(object instanceof SegmentController) {
 					// Turret mode shows only turrets (docked entities) so main ships don't get in the
 					// way of selecting them; normal mode shows only main ships (non-docked).
-					boolean isDocked = ((SegmentController) object).isDocked();
+					SegmentController sc = (SegmentController) object;
+					boolean isDocked = sc.isDocked();
 					if(isDocked != turretMode) {
+						continue;
+					}
+					if(turretMode && isSubTurretPart(sc)) {
+						// A turret is usually two entities (a rotating base + the gun docked to it). Show one
+						// marker per turret UNIT — the entity docked straight to the ship — and fold the barrel
+						// (docked to the base, not the ship) into it. A single "docked gun" turret is itself
+						// ship-docked, so it still shows on its own.
 						continue;
 					}
 					currentIds.add(object.getId());
@@ -478,6 +525,24 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 */
 	public void requestEntityRefresh() {
 		updateTimer = 0;
+	}
+
+	/**
+	 * Whether this docked entity is a sub-part of a turret rather than the turret unit itself — i.e. it is
+	 * docked to something that is in turn docked (a gun mounted on a rotating base). The turret unit (the
+	 * entity docked straight to the root ship) is what we draw; this folds the barrel into it. Returns false
+	 * for a single-entity "docked gun" turret, which is docked directly to the ship.
+	 */
+	private boolean isSubTurretPart(SegmentController entity) {
+		try {
+			if(entity.railController == null || entity.railController.previous == null || entity.railController.previous.rail == null) {
+				return false;
+			}
+			SegmentController parent = entity.railController.previous.rail.getSegmentController();
+			return parent != null && parent.isDocked();
+		} catch(Exception e) {
+			return false;
+		}
 	}
 
 	public boolean shouldDraw() {
@@ -617,6 +682,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(shaderOverlay != null) {
 			shaderOverlay.clearSelected();
 		}
+		clearSelectedTurrets(); // keep the turret highlight in lockstep with the order selection
 	}
 
 	private void drawIndicators() {
@@ -680,6 +746,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			if(entity == null || entity.isCloakedFor(getCurrentEntity())) {
 				continue;
 			}
+			if(!labelsAllowedFor(entity)) {
+				continue; // "Own Only" label filter
+			}
 
 			GUITextOverlay overlay = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
 			String displayText = getEntityDisplay(indicator, getCurrentEntity());
@@ -720,7 +789,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			Vector3f vel = new Vector3f();
 			indicator.getEstimatedVelocity(vel);
 			float speed = vel.length();
-			if(!isOwnShip && speed > 1.0f) {
+			if(cfgHeading && !isOwnShip && speed > 1.0f) {
 				float sec = getSectorSize();
 				float len = Math.max(sec * 0.05f, Math.min(sec * 0.5f, speed * 2.0f));
 				Vector3f hStart = new Vector3f(indicator.entityTransform.origin);
@@ -742,6 +811,21 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 			if(redTarget == null) {
 				redTarget = indicator.getCurrentTarget(); // fall back to engine AI target (autonomous engagements)
+			}
+			// Turret target line: in turret mode the rows are docked turrets, which engage their parent ship's
+			// target. The turret's own AI target isn't readable client-side, so read the parent's attack order.
+			SegmentController ent = indicator.getEntity();
+				if(redTarget == null && ent.isDocked() && ent.railController != null && ent.railController.getRoot() != null) {
+				SegmentController root = ent.railController.getRoot();
+				if(root.getId() != ent.getId()) {
+					Integer rootAtk = AIUtils.getAttackTarget(root.getId());
+					if(rootAtk != null) {
+						SimpleGameObject o = (SimpleGameObject) GameCommon.getGameObject(rootAtk);
+						if(o instanceof SegmentController) {
+							redTarget = (SegmentController) o;
+						}
+					}
+				}
 			}
 			if(redTarget != null) {
 				Vector3f start = new Vector3f(indicator.entityTransform.origin);
@@ -1039,6 +1123,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawLabels();
 			drawSectorGridLabels();
 			drawIncomingSignatureLabels();
+			drawSelectionPanel();
+			drawMarkerHpRings();
+			drawConfigPanel();
+			drawSectorReadout();
 			drawDragSelectRect();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		}
@@ -1174,45 +1262,89 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	/**
-	 * Builds the display text for an entity label.
-	 * Distance is shown from the tactical map camera position, matching sector indicator behaviour.
+	 * Builds the display text for an entity label, honouring the config panel's detail setting:
+	 * <ul>
+	 *   <li><b>Minimal</b> — name + faction.</li>
+	 *   <li><b>Normal</b> — + distance and current engagement.</li>
+	 *   <li><b>Full</b> — + mass, speed, and sector/subsector.</li>
+	 * </ul>
+	 * Distance is measured from the tactical-map camera, matching the sector indicators.
 	 */
 	private String getEntityDisplay(TacticalMapEntityIndicator indicator, SegmentController playerEntity) {
 		SegmentController entity = indicator.getEntity();
+		boolean normal = cfgDetail >= 1;
+		boolean full = cfgDetail >= 2;
 		StringBuilder builder = new StringBuilder();
 		builder.append(entity.getRealName()); // TODO: distort string for jammed/cloaked
 		builder.append("\n");
 		if(entity.getFaction() != null) {
 			builder.append("[").append(entity.getFaction().getName()).append("]\n");
 		}
-		// Total mass (including docked turrets/entities), so the player can gauge a ship's size at a glance.
-		builder.append(StringTools.massFormat(entity.getMassWithDocks())).append(" Mass\n");
-		// Current speed (client-side estimate; the RigidBody velocity flickers on the client). Shown for
-		// everything; a parked ship reads "0.0 m/s".
-		builder.append(StringTools.formatPointZero(indicator.getEstimatedSpeed())).append(" m/s\n");
-		if(!entity.equals(playerEntity)) {
+		if(controlManager != null && controlManager.turretTargetingMode) {
+			// Turret units are shown as one entity (base + barrel folded together): combined mass only,
+			// with HP and the other per-ship stats hidden — those belong to the parent ship.
+			builder.append(StringTools.massFormat(entity.getMassWithDocks())).append(" Mass\n");
+			return builder.toString().trim();
+		}
+		if(full) {
+			// Total mass (including docked turrets/entities) and current speed (client-side estimate).
+			builder.append(StringTools.massFormat(entity.getMassWithDocks())).append(" Mass\n");
+			builder.append(StringTools.formatPointZero(indicator.getEstimatedSpeed())).append(" m/s\n");
+		}
+		if(normal && !entity.equals(playerEntity)) {
 			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
 				builder.append("???km\n");
 			} else {
-				// Use tactical-map camera position as the reference, same way sector indicators do it.
 				Vector3f camPos = camera.getPos();
 				Vector3f entityPos = indicator.entityTransform.origin;
 				float camDist = Vector3fTools.distance(camPos.x, camPos.y, camPos.z, entityPos.x, entityPos.y, entityPos.z);
 				builder.append(StringTools.formatDistance(camDist)).append("\n");
 			}
 		}
-		// Absolute sector coords plus the subsector (e.g. "C3") the entity occupies within that sector.
-		Vector3i sec = entity.getSector(tmpEntitySector);
-		builder.append("Sector (").append(sec.x).append(", ").append(sec.y).append(", ").append(sec.z).append(")");
-		String sub = subsectorLabel(entity);
-		if(sub != null) {
-			builder.append(" [").append(sub);
+		if(full) {
+			// Absolute sector coords plus the subsector (e.g. "C3") the entity occupies within that sector.
+			Vector3i sec = entity.getSector(tmpEntitySector);
+			builder.append("Sector (").append(sec.x).append(", ").append(sec.y).append(", ").append(sec.z).append(")");
+			String sub = subsectorLabel(entity);
+			if(sub != null) {
+				builder.append(" [").append(sub).append("]");
+			}
+			builder.append("\n");
 		}
-		builder.append("]\n");
-		if(indicator.getCurrentTarget() != null) {
-			builder.append("Engaging ").append(indicator.getCurrentTarget().getName());
+		if(normal) {
+			builder.append(orderText(entity, indicator));
 		}
 		return builder.toString().trim();
+	}
+
+	/**
+	 * The entity's current order/activity for the stat block: a commanded order (Attacking/Mining/Repairing/
+	 * Defending/Moving) read from the order managers, else its engine target or motion ("Engaging X" / "Moving"
+	 * / "Idle"). Commanded orders are only known where the managers live (the integrated server / single-player).
+	 */
+	private String orderText(SegmentController e, TacticalMapEntityIndicator ind) {
+		int id = e.getId();
+		Integer atk = AIUtils.getAttackTarget(id);
+		if(atk != null) {
+			TacticalMapEntityIndicator t = drawMap.get(atk);
+			return t != null && t.getEntity() != null ? "Attacking " + t.getEntity().getName() : "Attacking";
+		}
+		if(videogoose.combattweaks.manager.MineManager.getInstance().getAssignedTarget(id) != null) {
+			return "Mining";
+		}
+		if(videogoose.combattweaks.manager.RepairManager.getInstance().getAssignedTarget(id) != null) {
+			return "Repairing";
+		}
+		if(videogoose.combattweaks.manager.DefenseManager.getInstance().isDefending(id)) {
+			return "Defending";
+		}
+		if(MoveManager.getInstance().getAssignedDestination(id) != null && !MoveManager.getInstance().isArrived(id)) {
+			return "Moving";
+		}
+		if(ind.getCurrentTarget() != null) {
+			return "Engaging " + ind.getCurrentTarget().getName();
+		}
+		return ind.getEstimatedSpeed() > 1.0f ? "Moving" : "Idle";
 	}
 
 	/**
@@ -1321,7 +1453,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * dissolves into the distance instead of a solid wall of lines.</p>
 	 */
 	private void drawSectorGrid() {
-		if(!ConfigManager.getMainConfig().tacticalMapSectorGrid.getValue()) {
+		if(!cfgGrid) {
 			return;
 		}
 		float s = getSectorSize();
@@ -1504,7 +1636,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Runs in the orthographic pass, reusing the matrices/camera captured by {@link #computeScreenPositions}.
 	 */
 	private void drawSectorGridLabels() {
-		if(!ConfigManager.getMainConfig().tacticalMapSectorGrid.getValue()) {
+		if(!cfgGrid) {
 			return;
 		}
 		int n = subsectorDivisions();
@@ -1536,6 +1668,56 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		for(int k = 0; k < n; k++) {
 			drawWorldLabel(farX, yMid, zLo + (k + 0.5f) * step, String.valueOf(k + 1));
 		}
+		GUIElement.disableOrthogonal();
+	}
+
+	/** "[C3]"-style subsector tag for a sector-local position (X column letter, Z row number); empty if off. */
+	private String subsectorTagLocal(float localX, float localZ, float s, int n) {
+		if(n < 2) {
+			return "";
+		}
+		return "[" + (char) ('A' + subsectorIndex(localX, s, n)) + (subsectorIndex(localZ, s, n) + 1) + "]";
+	}
+
+	/** Top-right readout of the camera's and the player's current sector + subsector. */
+	private void drawSectorReadout() {
+		float s = getSectorSize();
+		if(s <= 0) {
+			return;
+		}
+		int n = subsectorDivisions();
+		SegmentController player = getCurrentEntity();
+		String camLine, playerLine;
+		if(player != null && player.getWorldTransform() != null) {
+			Vector3i pSec = player.getSector(tmpEntitySector);
+			Vector3f po = player.getWorldTransform().origin;
+			playerLine = "Player (" + pSec.x + ", " + pSec.y + ", " + pSec.z + ") " + subsectorTagLocal(po.x, po.z, s, n);
+			// Camera position is in the player's sector frame (origin = player's sector centre).
+			Vector3f cam = lastCamPos;
+			int ox = Math.round(cam.x / s), oy = Math.round(cam.y / s), oz = Math.round(cam.z / s);
+			camLine = "Camera (" + (pSec.x + ox) + ", " + (pSec.y + oy) + ", " + (pSec.z + oz) + ") "
+					+ subsectorTagLocal(cam.x - ox * s, cam.z - oz * s, s, n);
+		} else {
+			camLine = "Camera —";
+			playerLine = "Player —";
+		}
+
+		GUIElement.enableOrthogonal();
+		begin2D();
+		GUITextOverlay o = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+		o.setTextSimple(camLine + "\n" + playerLine);
+		o.updateTextSize();
+		float pad = 8.0f, margin = 12.0f;
+		float panelW = o.getMaxLineWidth() + pad * 2.0f;
+		float panelH = o.getTextHeight() + pad * 2.0f;
+		float px = GLFrame.getWidth() - panelW - margin;
+		float py = margin;
+		drawRoundedRect(px, py, panelW, panelH, 8.0f, PANEL_BG);
+		strokeRoundedRect(px, py, panelW, panelH, 8.0f, PANEL_BORDER);
+		o.getPos().set((int) (px + pad), (int) (py + pad), 0);
+		o.draw();
+		TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(o);
+		GlUtil.glColor4f(1, 1, 1, 1);
 		GUIElement.disableOrthogonal();
 	}
 
@@ -1599,6 +1781,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * the normal indicator takes over once a contact is close enough to load.
 	 */
 	private void drawIncomingSignatureLines() {
+		if(!cfgSignatures) {
+			return;
+		}
 		java.util.List<IncomingSignature> sigs = incomingSignatures;
 		if(sigs.isEmpty()) {
 			return;
@@ -1632,7 +1817,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				continue;
 			}
 			Vector4f col = signatureColor(sig.relation);
-			float a = 0.35f + 0.55f * Math.max(0.0f, Math.min(1.0f, sig.fidelity));
+			float a = 0.35f + 0.55f * Math.clamp(sig.fidelity, 0.0f, 1.0f);
 			// Contact position (camera-relative) — the bright head of the streak. Extrapolated along velocity
 			// from the last update so it glides between the 1 Hz detector packets instead of stepping.
 			effectiveRelPos(sig, now, sigPosTmp);
@@ -1683,7 +1868,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * pile of overlapping labels. Detail still scales with fidelity for single contacts.
 	 */
 	private void drawIncomingSignatureLabels() {
-		java.util.List<IncomingSignature> all = incomingSignatures;
+		if(!cfgSignatures) {
+			return;
+		}
+		List<IncomingSignature> all = incomingSignatures;
 		if(all.isEmpty()) {
 			return;
 		}
@@ -1693,8 +1881,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		long now = System.currentTimeMillis();
 		// Visible contacts (not already shown as normal indicators) with their extrapolated positions.
-		java.util.List<IncomingSignature> vis = new java.util.ArrayList<>();
-		java.util.List<Vector3f> pos = new java.util.ArrayList<>();
+		List<IncomingSignature> vis = new ArrayList<>();
+		List<Vector3f> pos = new ArrayList<>();
 		for(IncomingSignature sig : all) {
 			if(drawMap.containsKey(sig.id)) {
 				continue;
@@ -1806,7 +1994,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		StringBuilder b = new StringBuilder();
 		for(int r : order) {
 			if(counts[r] > 0) {
-				if(b.length() > 0) {
+				if(!b.isEmpty()) {
 					b.append(", ");
 				}
 				b.append(counts[r]).append(' ').append(shortRelation(r));
@@ -1816,16 +2004,814 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	private static String shortRelation(int relation) {
-		switch(relation) {
-			case IncomingSignature.REL_FRIENDLY:
-				return "Friendly";
-			case IncomingSignature.REL_NEUTRAL:
-				return "Neutral";
-			case IncomingSignature.REL_HOSTILE:
-				return "Hostile";
-			default:
-				return "Unknown";
+		return switch(relation) {
+			case IncomingSignature.REL_FRIENDLY -> "Friendly";
+			case IncomingSignature.REL_NEUTRAL -> "Neutral";
+			case IncomingSignature.REL_HOSTILE -> "Hostile";
+			default -> "Unknown";
+		};
+	}
+
+	// ---- HP bars (reactor / armor / shield) — colours matched to StarMade's target-panel HUD bars ----
+	private static final Vector4f HP_SHIELD = new Vector4f(1.0f, 0.776f, 0.129f, 0.95f);    // amber (shields)
+	private static final Vector4f HP_ARMOR = new Vector4f(0.74f, 0.78f, 0.84f, 0.95f);      // grey (armor HP)
+	private static final Vector4f HP_REACTOR = new Vector4f(0.424f, 0.745f, 0.216f, 0.95f); // green (reactor HP)
+
+	/** Mutable holder for an entity's three HP readouts + recon-gated visibility. */
+	private static final class HpStats {
+		double shieldCur, shieldMax, armorCur, armorMax;
+		long reactorCur, reactorMax;
+		boolean visible; // any bars shown at all (recon gate)
+		boolean numbers; // exact values legible (recon beats stealth, or own/ally)
+	}
+
+	private final HpStats tmpHp = new HpStats();
+	/** Per-entity throttle (ms) for on-demand armor-sync requests, so we ask the server at most occasionally. */
+	private final Map<Integer, Long> lastArmorRequest = new ConcurrentHashMap<>();
+
+	// ---- In-map display settings (toggled via the config panel, top-left) ------------------------------
+	private boolean cfgInit;
+	private boolean cfgHpBars = true;       // HP rings + selection-panel bars
+	private boolean cfgHeading = true;      // velocity/heading lines
+	private boolean cfgGrid = true;         // sector grid (seeded from config)
+	private boolean cfgSignatures = true;   // incoming signatures (seeded from config)
+	private boolean cfgLabelsAll = true;    // true = label every entity; false = own/allied only
+	private int cfgDetail = 2;              // entity-label detail: 0 minimal, 1 normal, 2 full
+	private static final float CFG_X = 14.0f, CFG_Y = 14.0f, CFG_W = 200.0f, CFG_PAD = 8.0f, CFG_ROW_H = 20.0f;
+	private static final int CFG_ROWS = 6;
+
+	/** Seed the panel toggles from config once (so grid/signatures match their configured defaults). */
+	private void ensureCfgInit() {
+		if(cfgInit) {
+			return;
 		}
+		cfgInit = true;
+		try {
+			videogoose.combattweaks.config.MainConfig c = ConfigManager.getMainConfig();
+			cfgHpBars = c.tacticalMapShowHpBars.getValue();
+			cfgHeading = c.tacticalMapShowHeading.getValue();
+			cfgGrid = c.tacticalMapSectorGrid.getValue();
+			cfgSignatures = c.tacticalMapIncomingSignatures.getValue();
+			cfgLabelsAll = c.tacticalMapLabelsAll.getValue();
+			cfgDetail = Math.max(0, Math.min(2, (int) Math.round(c.tacticalMapLabelDetail.getValue())));
+		} catch(Exception ignored) {
+		}
+	}
+
+	/** Writes the current panel toggles to the config file so they persist across sessions. */
+	private void persistConfig() {
+		try {
+			videogoose.combattweaks.config.MainConfig c = ConfigManager.getMainConfig();
+			c.tacticalMapShowHpBars.setValue(cfgHpBars);
+			c.tacticalMapShowHeading.setValue(cfgHeading);
+			c.tacticalMapSectorGrid.setValue(cfgGrid);
+			c.tacticalMapIncomingSignatures.setValue(cfgSignatures);
+			c.tacticalMapLabelsAll.setValue(cfgLabelsAll);
+			c.tacticalMapLabelDetail.setValue((double) cfgDetail);
+			c.writeAllFields();
+		} catch(Exception ignored) {
+		}
+	}
+
+	/**
+	 * Fills {@code out} with the entity's shield/armor/reactor HP and the recon-gated visibility. Own/allied
+	 * ships are always fully legible; an enemy/neutral is only shown if you can currently detect it (not
+	 * cloaked/jammed against your scanner), and its exact numbers are legible only when your recon beats its
+	 * stealth — so reading a hostile's HP depends on out-scanning it.
+	 */
+	private boolean fillHpStats(SegmentController entity, HpStats out) {
+		out.shieldCur = out.shieldMax = out.armorCur = out.armorMax = 0;
+		out.reactorCur = out.reactorMax = 0;
+		out.visible = false;
+		out.numbers = false;
+		if(entity == null) {
+			return false;
+		}
+		SegmentController viewer = getCurrentEntity();
+		int myFac = GameClient.getClientPlayerState().getFactionId();
+		int fac = entity.getFactionId();
+		boolean ownOrAlly = (fac != 0 && fac == myFac) || (myFac != 0 && GameCommon.getGameState().getFactionManager().isFriend(fac, myFac));
+		boolean detectable;
+		try {
+			detectable = ownOrAlly || viewer == null || (!entity.isCloakedFor(viewer) && !entity.isJammingFor(viewer));
+		} catch(Exception e) {
+			detectable = true;
+		}
+		if(!detectable) {
+			return false;
+		}
+		out.visible = true;
+		float recon = safeRecon(viewer);
+		out.numbers = ownOrAlly || (viewer != null && recon > safeStealth(entity));
+		try {
+			if(entity instanceof SendableSegmentController ssc) {
+				out.reactorCur = ssc.getReactorHp();
+				out.reactorMax = ssc.getReactorHpMax();
+			}
+		} catch(Exception ignored) {
+		}
+		try {
+			if(entity instanceof ManagedSegmentController && ((ManagedSegmentController<?>) entity).getManagerContainer() instanceof ShieldContainerInterface sc) {
+				ShieldAddOn sa = sc.getShieldAddOn();
+				if(sa.isUsingLocalShields()) {
+					// Modern per-group shields: current and capacity must BOTH come from the local groups, or
+					// the percent is nonsense (legacy getShieldCapacity() doesn't match the local current sum).
+					ShieldLocalAddOn loc = sa.getShieldLocalAddOn();
+					out.shieldCur = loc.getTotalShields();
+					double cap = 0;
+					for(ShieldLocal l : loc.getAllShields()) {
+						cap += l.getShieldCapacity();
+					}
+					out.shieldMax = cap;
+				} else {
+					out.shieldCur = sa.getShields();
+					out.shieldMax = sa.getShieldCapacity();
+				}
+			}
+		} catch(Exception ignored) {
+		}
+		try {
+			if(entity instanceof ManagedSegmentController) {
+				for(ElementCollectionManager<?, ?, ?> c : SegmentControllerUtils.getCollectionManagers((ManagedSegmentController<?>) entity, ArmorHPCollection.class)) {
+					if(c instanceof ArmorHPCollection a) {
+						out.armorCur += a.getCurrentHP();
+						out.armorMax += a.getMaxHP();
+					}
+				}
+			}
+		} catch(Exception ignored) {
+		}
+		// Armor is synced on a slow heartbeat, so a just-shown entity may not have it yet — pull it on demand
+		// (throttled) so the armor ring/bar fills promptly instead of waiting up to a heartbeat interval.
+		if(out.armorMax <= 0) {
+			long now = System.currentTimeMillis();
+			Long last = lastArmorRequest.get(entity.getId());
+			if(last == null || now - last > 1500) {
+				lastArmorRequest.put(entity.getId(), now);
+				try {
+					PacketUtil.sendPacketToServer(new RequestArmorSyncPacket(entity.getId()));
+				} catch(Exception ignored) {
+				}
+			}
+		}
+		return true;
+	}
+
+	private static float safeRecon(SegmentController sc) {
+		try {
+			return sc == null ? 0 : sc.getReconStrength();
+		} catch(Exception e) {
+			return 0;
+		}
+	}
+
+	private static float safeStealth(SegmentController sc) {
+		try {
+			return sc == null ? 0 : sc.getStealthStrength();
+		} catch(Exception e) {
+			return 0;
+		}
+	}
+
+	/** A filled bar (background + fill) at screen coords; assumes orthographic mode with texturing off. */
+	private void drawHpBar(float x, float y, float w, float h, double frac, Vector4f col) {
+		float f = (float) Math.clamp(frac, 0.0, 1.0);
+		GlUtil.glColor4fForced(0.18f, 0.2f, 0.24f, 0.85f);
+		GL11.glBegin(GL11.GL_QUADS);
+		GL11.glVertex2f(x, y);
+		GL11.glVertex2f(x + w, y);
+		GL11.glVertex2f(x + w, y + h);
+		GL11.glVertex2f(x, y + h);
+		GL11.glEnd();
+		if(f > 0.0f) {
+			GlUtil.glColor4fForced(col.x, col.y, col.z, col.w);
+			GL11.glBegin(GL11.GL_QUADS);
+			GL11.glVertex2f(x, y);
+			GL11.glVertex2f(x + w * f, y);
+			GL11.glVertex2f(x + w * f, y + h);
+			GL11.glVertex2f(x, y + h);
+			GL11.glEnd();
+		}
+	}
+
+	private static final float SEL_BAR_H = 16.0f;
+	private static final float SEL_BAR_GAP = 4.0f;
+	/** Total vertical space the selection-panel bar set occupies. */
+	private static final float SEL_BARS_H = 3 * SEL_BAR_H + 2 * SEL_BAR_GAP;
+
+	private static float frac(double cur, double max) {
+		return max > 0 ? (float) (cur / max) : 0.0f;
+	}
+
+	/** Quad pass: the three filled shield/armor/reactor bars (taller, to hold their numeric labels). */
+	private void drawHpBars(float x, float y, float w, HpStats s) {
+		float cy = y;
+		drawHpBar(x, cy, w, SEL_BAR_H, frac(s.shieldCur, s.shieldMax), HP_SHIELD);
+		cy += SEL_BAR_H + SEL_BAR_GAP;
+		drawHpBar(x, cy, w, SEL_BAR_H, frac(s.armorCur, s.armorMax), HP_ARMOR);
+		cy += SEL_BAR_H + SEL_BAR_GAP;
+		drawHpBar(x, cy, w, SEL_BAR_H, frac(s.reactorCur, s.reactorMax), HP_REACTOR);
+	}
+
+	/** Outlined overlay for bar labels, so white text stays legible over the bright bar fills. */
+	private GUITextOverlay barLabelOverlay;
+
+	/** Text pass: a "name cur / max pct%" label over each bar (target-panel style). */
+	private void drawHpBarLabels(float x, float y, HpStats s) {
+		if(barLabelOverlay == null) {
+			barLabelOverlay = new GUITextOverlay(64, 64, FontLibrary.getBoldArial16White(), GameClient.getClientState());
+		}
+		GUITextOverlay o = barLabelOverlay;
+		float cy = y;
+		for(int i = 0; i < 3; i++) {
+			o.setTextSimple(barLabel(i, s));
+			o.updateTextSize();
+			o.getPos().set((int) (x + 4), (int) (cy + Math.max(0, (SEL_BAR_H - o.getTextHeight()) / 2.0f) - 1), 0);
+			o.draw();
+			cy += SEL_BAR_H + SEL_BAR_GAP;
+		}
+	}
+
+	private static String barLabel(int i, HpStats s) {
+		String name;
+		double cur, max;
+		switch(i) {
+			case 0:
+				name = "Shield";
+				cur = s.shieldCur;
+				max = s.shieldMax;
+				break;
+			case 1:
+				name = "Armor";
+				cur = s.armorCur;
+				max = s.armorMax;
+				break;
+			default:
+				name = "Reactor";
+				cur = s.reactorCur;
+				max = s.reactorMax;
+				break;
+		}
+		if(max <= 0) {
+			return name + " —";
+		}
+		int pct = (int) Math.round(100.0 * cur / max);
+		return name + " " + StringTools.massFormat((float) cur) + " / " + StringTools.massFormat((float) max) + "  " + pct + "%";
+	}
+
+	private static final Vector4f PANEL_BG = new Vector4f(0.06f, 0.08f, 0.12f, 0.80f);
+	private static final Vector4f PANEL_BORDER = new Vector4f(0.45f, 0.6f, 0.8f, 0.55f);
+	private static final Vector4f PIN_BTN = new Vector4f(0.18f, 0.20f, 0.26f, 0.92f);     // unpinned button
+	private static final Vector4f PIN_BTN_ON = new Vector4f(0.20f, 0.55f, 0.30f, 0.95f);  // pinned button (green)
+	/** Unique-ids of pinned entities — pins survive deselection AND restarts (runtime ids change; UIDs don't). */
+	private final LinkedHashSet<String> pinnedUIDs = new LinkedHashSet<>();
+	private boolean pinsLoaded;
+	private long pinLoadTime;
+	private long lastPinValidate;
+	/** Pinned UIDs that have resolved to a real entity at least once — used to prune pins that never appear. */
+	private final java.util.Set<String> pinsSeen = new java.util.HashSet<>();
+	/** Clickable pin-button rects {x, y, w, h, entityId}, rebuilt every panel draw for hit-testing. */
+	private final List<int[]> pinRects = new ArrayList<>();
+	/** Selection-panel scroll state (when it grows taller than the screen). */
+	private float panelScroll;
+	private float selPanelX, selPanelY, selPanelW, selPanelH, selPanelMaxScroll;
+	private boolean selPanelScrollable;
+	/** Scrollbar thumb/track geometry, for click-drag scrolling. */
+	private float selThumbX, selThumbY, selThumbW, selThumbH, selTrackTop, selTrackH;
+
+	/**
+	 * A corner panel listing the currently-selected ships with their shield/armor/reactor bars — a compact
+	 * fleet status readout that keeps the 3D view uncluttered. Selected ships are always own/allied, so
+	 * they're fully legible.
+	 *
+	 * <p>Drawn in three passes (background, then all bars, then all names) rather than interleaving quads
+	 * with text overlays — an overlay's own GL state changes were leaving the bar quads invisible.</p>
+	 */
+	private void drawSelectionPanel() {
+		pinRects.clear();
+		loadPins();
+		validatePins();
+		if(selectedEntities.isEmpty() && pinnedUIDs.isEmpty()) {
+			selPanelScrollable = false;
+			return;
+		}
+		// Turret units fold base+barrel into one row and intentionally show no HP — their stats belong to
+		// the parent ship — so the per-row bars are suppressed while turret mode is active.
+		boolean bars = cfgHpBars && !(controlManager != null && controlManager.turretTargetingMode);
+		int maxRows = 40;
+		SegmentController viewer = getCurrentEntity();
+
+		// Row entities = pinned (by UID, those currently in view) then selected, deduped. Each must have a live
+		// indicator (for its rebased transform/stats); pinned entities out of view are skipped this frame.
+		LinkedHashSet<Integer> order = new LinkedHashSet<>();
+		if(!pinnedUIDs.isEmpty()) {
+			for(TacticalMapEntityIndicator ind : drawMap.values()) {
+				SegmentController e = ind.getEntity();
+				if(e != null && pinnedUIDs.contains(e.getUniqueIdentifier())) {
+					order.add(e.getId());
+				}
+			}
+		}
+		for(SegmentController e : selectedEntities) {
+			order.add(e.getId());
+		}
+
+		// Collect rows with their full stat block (respecting Label Detail) plus measured text size, so the
+		// panel fits its content and rows stack cleanly.
+		List<SegmentController> ents = new ArrayList<>();
+		List<String> texts = new ArrayList<>();
+		List<Integer> heights = new ArrayList<>();
+		float contentW = 150.0f; // minimum (also the bar width)
+
+		// Keep only ids with a live indicator, then stable-sort own-faction ships first (allies below).
+		int myFac = GameClient.getClientPlayerState().getFactionId();
+		List<Integer> ids = new java.util.ArrayList<>();
+		for(int id : order) {
+			TacticalMapEntityIndicator ind = drawMap.get(id);
+			if(ind != null && ind.getEntity() != null) {
+				ids.add(id);
+			}
+		}
+		ids.sort((a, b) -> Integer.compare(rowGroup(a, myFac), rowGroup(b, myFac)));
+
+		GUIElement.enableOrthogonal();
+		for(int id : ids) {
+			if(ents.size() >= maxRows) {
+				break;
+			}
+			TacticalMapEntityIndicator ind = drawMap.get(id);
+			if(ind == null || ind.getEntity() == null) {
+				continue;
+			}
+			String text = getEntityDisplay(ind, viewer);
+			GUITextOverlay m = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+			m.setTextSimple(text);
+			m.updateTextSize();
+			contentW = Math.max(contentW, m.getMaxLineWidth()); // getWidth() is the box width, not the text width
+			int th = m.getTextHeight();
+			TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(m);
+			ents.add(ind.getEntity());
+			texts.add(text);
+			heights.add(th);
+		}
+		if(ents.isEmpty()) {
+			selPanelScrollable = false;
+			GUIElement.disableOrthogonal();
+			return;
+		}
+
+		float pad = 8.0f;
+		float x = 28.0f;
+		float y = 188.0f;
+		float barGap = 5.0f;          // gap between the stat text and the bars
+		float barsH = bars ? SEL_BARS_H : 0.0f; // height of the three labelled bars
+		float rowGap = 12.0f;         // gap between rows
+		float btnW = 54.0f;
+		float btnH = 16.0f;
+		float btnGap = 10.0f;
+		float btnX = x + contentW + btnGap;
+		float scrollbarW = 6.0f, scrollbarGap = 6.0f;
+
+		float totalH = 0.0f;
+		for(int th : heights) {
+			totalH += th + (bars ? barGap + barsH : 0.0f) + rowGap;
+		}
+		totalH -= rowGap; // no trailing gap
+
+		// Cap the panel to the screen; scroll the content past that.
+		float panelTop = y - pad;
+		float maxPanelH = GLFrame.getHeight() - panelTop - 16.0f;
+		boolean scrollable = totalH + pad * 2.0f > maxPanelH;
+		float visibleH = scrollable ? maxPanelH - pad * 2.0f : totalH;
+		selPanelScrollable = scrollable;
+		selPanelMaxScroll = Math.max(0.0f, totalH - visibleH);
+		panelScroll = Math.max(0.0f, Math.min(panelScroll, selPanelMaxScroll));
+		float panelH = visibleH + pad * 2.0f;
+		float panelW = contentW + btnGap + btnW + (scrollable ? scrollbarGap + scrollbarW : 0.0f) + pad * 2.0f;
+		selPanelX = x - pad;
+		selPanelY = panelTop;
+		selPanelW = panelW;
+		selPanelH = panelH;
+
+		begin2D();
+		drawRoundedRect(x - pad, panelTop, panelW, panelH, 10.0f, PANEL_BG);
+		strokeRoundedRect(x - pad, panelTop, panelW, panelH, 10.0f, PANEL_BORDER);
+
+		// Clip the scrolling rows to the panel so they don't spill past it.
+		if(scrollable) {
+			GL11.glEnable(GL11.GL_SCISSOR_TEST);
+			GL11.glScissor((int) (x - pad), (int) (GLFrame.getHeight() - (panelTop + panelH)), (int) panelW, (int) panelH);
+		}
+		float startY = y - panelScroll;
+
+		// Quad pass: HP bars + pin-button backgrounds (record click rects only for visible buttons).
+		float rowY = startY;
+		for(int i = 0; i < ents.size(); i++) {
+			if(bars) {
+				fillHpStats(ents.get(i), tmpHp);
+				drawHpBars(x, rowY + heights.get(i) + barGap, contentW, tmpHp);
+			}
+			boolean pinned = pinnedUIDs.contains(ents.get(i).getUniqueIdentifier());
+			drawRoundedRect(btnX, rowY, btnW, btnH, 4.0f, pinned ? PIN_BTN_ON : PIN_BTN);
+			if(rowY + btnH > panelTop && rowY < panelTop + panelH) {
+				pinRects.add(new int[]{(int) btnX, (int) rowY, (int) btnW, (int) btnH, ents.get(i).getId()});
+			}
+			rowY += heights.get(i) + (bars ? barGap + barsH : 0.0f) + rowGap;
+		}
+
+		// Text pass: stat blocks + pin-button labels (overlays manage their own texturing).
+		rowY = startY;
+		for(int i = 0; i < ents.size(); i++) {
+			GUITextOverlay overlay = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+			overlay.setTextSimple(texts.get(i));
+			overlay.updateTextSize();
+			overlay.getPos().set((int) x, (int) rowY, 0);
+			overlay.draw();
+			TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(overlay);
+
+			if(bars) {
+				fillHpStats(ents.get(i), tmpHp);
+				drawHpBarLabels(x, rowY + heights.get(i) + barGap, tmpHp);
+			}
+
+			boolean pinned = pinnedUIDs.contains(ents.get(i).getUniqueIdentifier());
+			GUITextOverlay b = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+			b.setTextSimple(pinned ? "Unpin" : "Pin");
+			b.updateTextSize();
+			b.getPos().set((int) (btnX + (btnW - b.getMaxLineWidth()) / 2.0f), (int) (rowY + 1), 0);
+			b.draw();
+			TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(b);
+
+			rowY += heights.get(i) + (bars ? barGap + barsH : 0.0f) + rowGap;
+		}
+
+		if(scrollable) {
+			GL11.glDisable(GL11.GL_SCISSOR_TEST);
+			// Scrollbar track + thumb on the right edge (geometry stored so the thumb can be dragged).
+			float sbX = (x - pad) + panelW - pad - scrollbarW;
+			float trackTop = panelTop + pad;
+			float trackH = visibleH;
+			drawRoundedRect(sbX, trackTop, scrollbarW, trackH, 3.0f, new Vector4f(0.15f, 0.17f, 0.22f, 0.85f));
+			float thumbH = Math.max(20.0f, trackH * (visibleH / totalH));
+			float thumbY = trackTop + (selPanelMaxScroll > 0 ? (panelScroll / selPanelMaxScroll) * (trackH - thumbH) : 0.0f);
+			drawRoundedRect(sbX, thumbY, scrollbarW, thumbH, 3.0f, new Vector4f(0.45f, 0.6f, 0.8f, 0.9f));
+			selThumbX = sbX;
+			selThumbY = thumbY;
+			selThumbW = scrollbarW;
+			selThumbH = thumbH;
+			selTrackTop = trackTop;
+			selTrackH = trackH;
+		}
+
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GUIElement.disableOrthogonal();
+	}
+
+	/** 0 for own-faction ships, 1 for allies/others — sorts own ships above allies in the panel. */
+	private int rowGroup(int id, int myFac) {
+		TacticalMapEntityIndicator ind = drawMap.get(id);
+		if(ind == null || ind.getEntity() == null) {
+			return 2;
+		}
+		return myFac != 0 && ind.getEntity().getFactionId() == myFac ? 0 : 1;
+	}
+
+	/** Whether a point is over the scrollbar thumb (so the control manager can start a drag). */
+	public boolean isOverScrollThumb(int mx, int my) {
+		return selPanelScrollable && mx >= selThumbX && mx <= selThumbX + selThumbW && my >= selThumbY && my <= selThumbY + selThumbH;
+	}
+
+	/** While dragging the thumb, maps a mouse-Y to a scroll offset. */
+	public void scrollPanelToThumbY(int my) {
+		if(!selPanelScrollable || selTrackH <= selThumbH) {
+			return;
+		}
+		float t = (my - selThumbH / 2.0f - selTrackTop) / (selTrackH - selThumbH);
+		panelScroll = Math.max(0.0f, Math.min(t, 1.0f)) * selPanelMaxScroll;
+	}
+
+	/** Whether a screen point is over the selection panel (for routing the scroll wheel). */
+	public boolean isOverSelectionPanel(int mx, int my) {
+		return selPanelScrollable && mx >= selPanelX && mx <= selPanelX + selPanelW && my >= selPanelY && my <= selPanelY + selPanelH;
+	}
+
+	/** Scroll the selection panel by {@code dy} pixels (clamped). */
+	public void scrollSelectionPanel(float dy) {
+		panelScroll = Math.max(0.0f, Math.min(panelScroll + dy, selPanelMaxScroll));
+	}
+
+	/** If the click hits a pin button, toggle that entity's pinned state and return true (consume the click). */
+	public boolean handlePanelClick(int mx, int my) {
+		for(int[] r : pinRects) {
+			if(mx >= r[0] && mx <= r[0] + r[2] && my >= r[1] && my <= r[1] + r[3]) {
+				TacticalMapEntityIndicator ind = drawMap.get(r[4]);
+				if(ind != null && ind.getEntity() != null) {
+					String uid = ind.getEntity().getUniqueIdentifier();
+					if(!pinnedUIDs.remove(uid)) {
+						pinnedUIDs.add(uid);
+						pinsSeen.add(uid); // freshly pinned from a live entity — never prune it as "not found"
+					} else {
+						pinsSeen.remove(uid);
+					}
+					savePins();
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Load pinned UIDs from config once (a newline-joined list — UIDs never contain newlines). */
+	private void loadPins() {
+		if(pinsLoaded) {
+			return;
+		}
+		pinsLoaded = true;
+		pinLoadTime = System.currentTimeMillis();
+		try {
+			String s = ConfigManager.getMainConfig().tacticalMapPinned.getValue();
+			if(s != null && !s.isEmpty()) {
+				for(String u : s.split("\n")) {
+					if(!u.isEmpty()) {
+						pinnedUIDs.add(u);
+					}
+				}
+			}
+		} catch(Exception ignored) {
+		}
+	}
+
+	/**
+	 * Drops pinned UIDs that resolve to no actual entity. A pin is kept while its ship exists anywhere the
+	 * client has loaded (not just the current sector), and only pruned once it's been continuously
+	 * unresolvable past a grace window after load — so a ship that's merely in an unloaded sector, or hasn't
+	 * streamed in yet right after a restart, isn't wrongly removed; a destroyed/gone one is.
+	 */
+	private void validatePins() {
+		if(pinnedUIDs.isEmpty()) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		if(now - lastPinValidate < 1500) {
+			return;
+		}
+		lastPinValidate = now;
+		java.util.Set<String> loadedUIDs = new java.util.HashSet<>();
+		try {
+			for(Object obj : GameClient.getClientState().getLocalAndRemoteObjectContainer().getLocalObjects().values()) {
+				if(obj instanceof SegmentController) {
+					loadedUIDs.add(((SegmentController) obj).getUniqueIdentifier());
+				}
+			}
+		} catch(Exception e) {
+			return; // can't tell right now — don't prune
+		}
+		for(String uid : pinnedUIDs) {
+			if(loadedUIDs.contains(uid)) {
+				pinsSeen.add(uid);
+			}
+		}
+		// Give the world time to stream in after a restart before pruning never-seen pins.
+		if(now - pinLoadTime > 15000) {
+			if(pinnedUIDs.removeIf(uid -> !pinsSeen.contains(uid))) {
+				savePins();
+			}
+		}
+	}
+
+	private void savePins() {
+		try {
+			StringBuilder sb = new StringBuilder();
+			for(String u : pinnedUIDs) {
+				if(u == null || u.indexOf('\n') >= 0) {
+					continue;
+				}
+				if(sb.length() > 0) {
+					sb.append('\n');
+				}
+				sb.append(u);
+			}
+			ConfigManager.getMainConfig().tacticalMapPinned.setValue(sb.toString());
+			ConfigManager.getMainConfig().writeAllFields();
+		} catch(Exception ignored) {
+		}
+	}
+
+	/** Common 2D overlay GL state for filled panel geometry: no cull/lighting/depth, alpha blend, colour material. */
+	private void begin2D() {
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		GlUtil.glDisable(GL11.GL_DEPTH_TEST);
+		GlUtil.glDisable(GL11.GL_LIGHTING);
+		GlUtil.glDisable(GL11.GL_CULL_FACE);
+		GlUtil.glEnable(GL11.GL_COLOR_MATERIAL);
+		GlUtil.glEnable(GL11.GL_BLEND);
+		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+	}
+
+	/** Filled rounded rectangle (triangle fan) in orthographic space; assumes {@link #begin2D()} state. */
+	private void drawRoundedRect(float x, float y, float w, float h, float r, Vector4f col) {
+		r = Math.min(r, Math.min(w, h) * 0.5f);
+		GlUtil.glColor4fForced(col.x, col.y, col.z, col.w);
+		GL11.glBegin(GL11.GL_TRIANGLE_FAN);
+		GL11.glVertex2f(x + w * 0.5f, y + h * 0.5f); // centre
+		final int cseg = 5;
+		// Trace the perimeter clockwise (screen y is down): TL, TR, BR, BL corner arcs.
+		roundedCorner(x + r, y + r, r, (float) Math.PI, (float) (1.5 * Math.PI), cseg);       // top-left
+		roundedCorner(x + w - r, y + r, r, (float) (1.5 * Math.PI), (float) (2.0 * Math.PI), cseg); // top-right
+		roundedCorner(x + w - r, y + h - r, r, 0.0f, (float) (0.5 * Math.PI), cseg);            // bottom-right
+		roundedCorner(x + r, y + h - r, r, (float) (0.5 * Math.PI), (float) Math.PI, cseg);     // bottom-left
+		GL11.glVertex2f(x, y + r); // close back to the top-left arc start
+		GL11.glEnd();
+	}
+
+	private void roundedCorner(float cx, float cy, float r, float a0, float a1, int seg) {
+		for(int i = 0; i <= seg; i++) {
+			float a = a0 + (a1 - a0) * i / seg;
+			GL11.glVertex2f(cx + (float) Math.cos(a) * r, cy + (float) Math.sin(a) * r);
+		}
+	}
+
+	/** Outline of a rounded rectangle (line loop); assumes {@link #begin2D()} state. */
+	private void strokeRoundedRect(float x, float y, float w, float h, float r, Vector4f col) {
+		r = Math.min(r, Math.min(w, h) * 0.5f);
+		GlUtil.glColor4fForced(col.x, col.y, col.z, col.w);
+		GL11.glLineWidth(1.5f);
+		GL11.glBegin(GL11.GL_LINE_LOOP);
+		final int cseg = 5;
+		roundedCorner(x + r, y + r, r, (float) Math.PI, (float) (1.5 * Math.PI), cseg);
+		roundedCorner(x + w - r, y + r, r, (float) (1.5 * Math.PI), (float) (2.0 * Math.PI), cseg);
+		roundedCorner(x + w - r, y + h - r, r, 0.0f, (float) (0.5 * Math.PI), cseg);
+		roundedCorner(x + r, y + h - r, r, (float) (0.5 * Math.PI), (float) Math.PI, cseg);
+		GL11.glEnd();
+		GL11.glLineWidth(1.0f);
+	}
+
+	/** Label for a config row, including its current value. */
+	private String configRowText(int i) {
+		switch(i) {
+			case 0:
+				return "HP Bars: " + (cfgHpBars ? "On" : "Off");
+			case 1:
+				return "Heading Lines: " + (cfgHeading ? "On" : "Off");
+			case 2:
+				return "Sector Grid: " + (cfgGrid ? "On" : "Off");
+			case 3:
+				return "Signatures: " + (cfgSignatures ? "On" : "Off");
+			case 4:
+				return "Labels: " + (cfgLabelsAll ? "All" : "Own Only");
+			case 5:
+				return "Label Detail: " + (cfgDetail == 0 ? "Minimal" : cfgDetail == 1 ? "Normal" : "Full");
+			default:
+				return "";
+		}
+	}
+
+	/**
+	 * Draws the small settings panel in the top-left (above the selection panel). Rows are click-toggled via
+	 * {@link #handleConfigClick}. Background first, then text, so the two GL states don't fight.
+	 */
+	private void drawConfigPanel() {
+		ensureCfgInit();
+		float panelH = CFG_ROWS * CFG_ROW_H + CFG_PAD * 2.0f;
+		GUIElement.enableOrthogonal();
+		begin2D();
+		drawRoundedRect(CFG_X, CFG_Y, CFG_W, panelH, 10.0f, PANEL_BG);
+		strokeRoundedRect(CFG_X, CFG_Y, CFG_W, panelH, 10.0f, PANEL_BORDER);
+		for(int i = 0; i < CFG_ROWS; i++) {
+			GUITextOverlay overlay = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+			overlay.setTextSimple(configRowText(i));
+			overlay.updateTextSize();
+			overlay.getPos().set((int) (CFG_X + CFG_PAD), (int) (CFG_Y + CFG_PAD + i * CFG_ROW_H), 0);
+			overlay.draw();
+			TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(overlay);
+		}
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GUIElement.disableOrthogonal();
+	}
+
+	/** Whether a screen point (top-left origin) is over the config panel. */
+	public boolean isInConfigPanel(int mx, int my) {
+		float panelH = CFG_ROWS * CFG_ROW_H + CFG_PAD * 2.0f;
+		return mx >= CFG_X && mx <= CFG_X + CFG_W && my >= CFG_Y && my <= CFG_Y + panelH;
+	}
+
+	/** If the click is on a config row, toggle/cycle that setting and return true (consume the click). */
+	public boolean handleConfigClick(int mx, int my) {
+		ensureCfgInit();
+		if(!isInConfigPanel(mx, my)) {
+			return false;
+		}
+		int i = (int) ((my - (CFG_Y + CFG_PAD)) / CFG_ROW_H);
+		switch(i) {
+			case 0:
+				cfgHpBars = !cfgHpBars;
+				break;
+			case 1:
+				cfgHeading = !cfgHeading;
+				break;
+			case 2:
+				cfgGrid = !cfgGrid;
+				break;
+			case 3:
+				cfgSignatures = !cfgSignatures;
+				break;
+			case 4:
+				cfgLabelsAll = !cfgLabelsAll;
+				break;
+			case 5:
+				cfgDetail = (cfgDetail + 1) % 3;
+				break;
+			default:
+				break;
+		}
+		persistConfig();
+		return true; // consume clicks anywhere in the panel (incl. padding) so they don't fall through to selection
+	}
+
+	/** Whether labels/info should be shown for {@code entity} given the All/Own-only setting. */
+	private boolean labelsAllowedFor(SegmentController entity) {
+		if(cfgLabelsAll) {
+			return true;
+		}
+		int myFac = GameClient.getClientPlayerState().getFactionId();
+		int fac = entity.getFactionId();
+		return (fac != 0 && fac == myFac) || (myFac != 0 && GameCommon.getGameState().getFactionManager().isFriend(fac, myFac));
+	}
+
+	/** Radii (px) of the three concentric HP rings around a marker: reactor inner, armor mid, shield outer. */
+	private static final float HP_RING_REACTOR_R = 24.0f;
+	private static final float HP_RING_ARMOR_R = 30.0f;
+	private static final float HP_RING_SHIELD_R = 36.0f;
+
+	/**
+	 * Draws ring-shaped HP gauges around hovered and selected markers: three concentric arcs (shield outer,
+	 * armor middle, reactor inner) that fill clockwise from the top with each system's fraction. Recon-gated
+	 * exactly like the panel — friendly always, enemy/neutral only while detectable.
+	 */
+	private void drawMarkerHpRings() {
+		if(!cfgHpBars || drawMap.isEmpty() || (controlManager != null && controlManager.turretTargetingMode)) {
+			return; // turret units fold base+barrel into one marker and intentionally show no HP
+		}
+		GUIElement.enableOrthogonal();
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		GlUtil.glDisable(GL11.GL_DEPTH_TEST);
+		GlUtil.glEnable(GL11.GL_BLEND);
+		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		GL11.glLineWidth(3.0f);
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(!indicator.screenPosValid || indicator.getEntity() == null) {
+				continue;
+			}
+			// Own-faction ships always show their rings; every other ship only while hovered.
+			int myFac = GameClient.getClientPlayerState().getFactionId();
+			boolean isOwn = myFac != 0 && indicator.getEntity().getFactionId() == myFac;
+			boolean show = isOwn || indicator == hoveredIndicator;
+			if(!show) {
+				continue;
+			}
+			if(!fillHpStats(indicator.getEntity(), tmpHp) || !tmpHp.visible) {
+				continue;
+			}
+			float cx = indicator.screenX;
+			float cy = indicator.screenY;
+			drawHpRing(cx, cy, HP_RING_REACTOR_R, tmpHp.reactorMax > 0 ? (double) tmpHp.reactorCur / tmpHp.reactorMax : 0, HP_REACTOR);
+			drawHpRing(cx, cy, HP_RING_ARMOR_R, tmpHp.armorMax > 0 ? tmpHp.armorCur / tmpHp.armorMax : 0, HP_ARMOR);
+			drawHpRing(cx, cy, HP_RING_SHIELD_R, tmpHp.shieldMax > 0 ? tmpHp.shieldCur / tmpHp.shieldMax : 0, HP_SHIELD);
+		}
+		GL11.glLineWidth(1.0f);
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GUIElement.disableOrthogonal();
+	}
+
+	/**
+	 * Draws one HP ring at (cx,cy): a faint full background circle plus a coloured arc that sweeps clockwise
+	 * from the top (12 o'clock) for {@code frac} of the circle. Orthographic, texturing off.
+	 */
+	private void drawHpRing(float cx, float cy, float radius, double frac, Vector4f col) {
+		final int seg = 48;
+		final float tau = (float) (Math.PI * 2.0);
+		final float start = (float) (-Math.PI / 2.0); // 12 o'clock
+		// Background ring.
+		GlUtil.glColor4f(0.08f, 0.09f, 0.11f, 0.5f);
+		GL11.glBegin(GL11.GL_LINE_LOOP);
+		for(int i = 0; i < seg; i++) {
+			float a = start + tau * i / seg;
+			GL11.glVertex2f(cx + (float) Math.cos(a) * radius, cy + (float) Math.sin(a) * radius);
+		}
+		GL11.glEnd();
+		// Filled arc.
+		float f = (float) Math.max(0.0, Math.min(1.0, frac));
+		if(f <= 0.0f) {
+			return;
+		}
+		int fillSeg = Math.max(1, Math.round(seg * f));
+		GlUtil.glColor4f(col.x, col.y, col.z, col.w);
+		GL11.glBegin(GL11.GL_LINE_STRIP);
+		for(int i = 0; i <= fillSeg; i++) {
+			float a = start + tau * i / seg;
+			GL11.glVertex2f(cx + (float) Math.cos(a) * radius, cy + (float) Math.sin(a) * radius);
+		}
+		GL11.glEnd();
 	}
 
 	/**
@@ -1870,7 +2856,16 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Selects all entities whose screen bbox overlaps the given screen-space rectangle.
 	 * If additive is false, the current selection is cleared first.
 	 */
-	public void applyDragSelection(float minX, float minY, float maxX, float maxY) {
+	/**
+	 * Commit a marquee selection. A plain drag <em>replaces</em> the current selection (standard RTS
+	 * behaviour); an {@code additive} drag (a modifier held) toggles the boxed entities into/out of the
+	 * existing selection. Replacing is what makes "select all, then box two ships" actually leave just those
+	 * two selected — the old toggle-only behaviour left the rest selected, so subsequent orders hit everyone.
+	 */
+	public void applyDragSelection(float minX, float minY, float maxX, float maxY, boolean additive) {
+		if(!additive) {
+			clearSelected(); // fresh selection replaces the old one
+		}
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid) continue;
 			if(!canSelect(indicator.getEntity())) continue;
@@ -1878,12 +2873,15 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			if(indicator.screenMaxX < minX || indicator.screenMinX > maxX || indicator.screenMaxY < minY || indicator.screenMinY > maxY) {
 				continue;
 			}
-			// Toggle: drag over unselected ships to select them, over already-selected ships to
-			// deselect them. Use empty-space click to clear the whole selection.
-			if(isSelected(indicator.getEntity())) {
-				removeSelection(indicator);
+			if(additive) {
+				// Toggle: over unselected ships select them, over already-selected ships deselect them.
+				if(isSelected(indicator.getEntity())) {
+					removeSelection(indicator);
+				} else {
+					addSelection(indicator);
+				}
 			} else {
-				addSelection(indicator);
+				addSelection(indicator); // replace mode: everything in the box becomes the new selection
 			}
 		}
 	}

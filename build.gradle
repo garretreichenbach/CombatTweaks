@@ -7,7 +7,7 @@ def starmadeDirectory = project.property("starmade_root")
 def modName = project.property("mod_name")
 group = project.property('mod_org_id')
 version = project.property('mod_version')
-mainClassName = group + modName
+def mainClassName = group + modName
 
 repositories {
     mavenCentral()
@@ -41,6 +41,12 @@ jar {
     destinationDirectory.set(file(starmadeDirectory + "mods"))
     archiveFileName = modName + 'v' + getVersion() + '.jar'
     manifest.attributes('Main-Class': mainClassName)
+    // Ship the docs as in-game guide resources. The same markdown files power both the GitHub docs and
+    // StarMade's in-game guides viewer; onRegisterGuides() registers each page from "guides/<path>.md".
+    from('docs') {
+        into 'guides'
+        include '**/*.md'
+    }
     from {
         configurations.runtimeClasspath.collect {
             if(!it.getPath().contains("StarMade") && it.getName().endsWith(".jar")) {

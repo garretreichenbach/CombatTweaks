@@ -19,10 +19,8 @@ The bleed-through mechanic ensures that armor is most effective when intact and 
 
 **Armor HP Absorption Chambers** can be installed to improve armor effectiveness by lowering the bleed-through rate:
 
-| Chamber | Effect | Config Key |
-|---------|--------|------------|
-| Chamber 1 | Base bleed-through reduction | `armor_hp_absorption_effect_1_sub` (default `-7.5`) |
-| Chamber 2 | Stacking bleed-through reduction | `armor_hp_absorption_effect_2_sub` (default `-7.5`) |
+- **Chamber 1** — base bleed-through reduction (config `armor_hp_absorption_effect_1_sub`, default `-7.5`).
+- **Chamber 2** — stacking bleed-through reduction (config `armor_hp_absorption_effect_2_sub`, default `-7.5`).
 
 Both chambers stack additively, providing a significant improvement to armor durability when combined.
 

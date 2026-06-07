@@ -83,14 +83,22 @@ public class AIUtils {
 	/**
 	 * Whether weapon/beam/missile fire should be suppressed for the ship with this order id.
 	 *
-	 * <p>True when the ship is on a <em>peaceful</em> order (mining or moving) and NOT on a combat order
-	 * (attack/defend). Mining ships should only fire their salvage beams; ships executing a move should
-	 * just move. Attacking/defending ships must still shoot, so those override. Pass the order-bearing
-	 * ship id — for a turret, that's its rail root, since turrets fire on behalf of the ship they're on.</p>
+	 * <p>True when the ship is on a <em>peaceful</em> order (mining, moving, or defending without a live
+	 * threat) and NOT actively engaging a target. Mining ships should only fire their salvage beams; ships
+	 * executing a move should just move; a defender holding station should not shoot the friendly it's
+	 * protecting. The instant a defender engages a threat it's added to {@code attackOrders} ({@link
+	 * #isCombatOrder}), which overrides this and lets it fire. Pass the order-bearing ship id — for a turret,
+	 * that's its rail root, since turrets fire on behalf of the ship they're on.</p>
+	 *
+	 * <p>Defending is included here (not just mining/moving): a defender <em>escorting</em> its protectee has
+	 * a move order so it was already covered, but once it <em>arrives and holds</em> the escort move is
+	 * dropped — leaving it un-suppressed and shooting the friendly it guards. Treating any non-engaging
+	 * defender as peaceful closes that gap.</p>
 	 */
 	public static boolean shouldSuppressWeapons(int shipId) {
 		boolean peaceful = MineManager.getInstance().getAssignedTarget(shipId) != null
-				|| MoveManager.getInstance().getAssignedDestination(shipId) != null;
+				|| MoveManager.getInstance().getAssignedDestination(shipId) != null
+				|| DefenseManager.getInstance().isDefending(shipId);
 		return peaceful && !isCombatOrder(shipId);
 	}
 
@@ -140,9 +148,12 @@ public class AIUtils {
 	 * program every tick, which fights our per-tick targetPosition writes (causing the
 	 * spinning/random-firing). Only fleeted ships run the passive FleetControllable program
 	 * that actually obeys external orders, so we restrict commands to fleet members.</p>
+	 * <p><b>Docked turrets are exempt:</b> a turret runs its own "Turret" AI program (TurretProgram),
+	 * not Search-and-Destroy, and engages a set target on its own — so it can be commanded without being
+	 * in a fleet. This lets turret-mode orders work as long as the parent ship is commandable.</p>
 	 */
 	public static boolean canReceiveOrders(SegmentController entity) {
-		return entity instanceof Ship && entity.isInFleet();
+		return entity instanceof Ship && (entity.isDocked() || entity.isInFleet());
 	}
 
 	/**

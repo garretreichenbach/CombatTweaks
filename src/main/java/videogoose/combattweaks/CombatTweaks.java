@@ -3,6 +3,7 @@ package videogoose.combattweaks;
 import api.config.BlockConfig;
 import api.mod.StarMod;
 import api.network.packets.PacketUtil;
+import org.schema.game.client.view.mainmenu.GuidesRegistry;
 import org.schema.schine.resource.ResourceLoader;
 import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.manager.*;
@@ -47,6 +48,21 @@ public class CombatTweaks extends StarMod {
 	}
 
 	@Override
+	public void onRegisterGuides(GuidesRegistry.ModGuideRegistrar registrar) {
+		// Contribute our docs to StarMade's in-game guides viewer. The markdown is packaged into the jar
+		// under guides/ (see build.gradle) straight from the docs/ folder, so there's a single source.
+		String key = "combattweaks";
+		String label = "CombatTweaks";
+		registrar.registerFromResource(key, label, "Overview", "guides/index.md", this);
+		registrar.registerFromResource(key, label, "Installation", "guides/getting-started/installation.md", this);
+		registrar.registerFromResource(key, label, "Configuration", "guides/getting-started/configuration.md", this);
+		registrar.registerFromResource(key, label, "Tactical Map", "guides/features/tactical-map.md", this);
+		registrar.registerFromResource(key, label, "Fleet Orders", "guides/features/fleet-orders.md", this);
+		registrar.registerFromResource(key, label, "Incoming Signatures", "guides/features/incoming-signatures.md", this);
+		registrar.registerFromResource(key, label, "Armor HP System", "guides/features/armor-hp.md", this);
+	}
+
+	@Override
 	public void onBlockConfigLoad(BlockConfig config) {
 		BlockRegistry.registerBlocks();
 	}
@@ -60,5 +76,6 @@ public class CombatTweaks extends StarMod {
 		PacketUtil.registerPacket(SendMoveToPacket.class);
 		PacketUtil.registerPacket(SendArmorHPSyncPacket.class);
 		PacketUtil.registerPacket(SendIncomingSignaturesPacket.class);
+		PacketUtil.registerPacket(videogoose.combattweaks.network.client.RequestArmorSyncPacket.class);
 	}
 }

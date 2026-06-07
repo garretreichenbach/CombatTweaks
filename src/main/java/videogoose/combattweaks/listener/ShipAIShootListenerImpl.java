@@ -21,6 +21,9 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 
 	@Override
 	public void doShooting(ShipAIEntity shipAIEntity, AIControllerStateUnit<?> aiControllerStateUnit, Timer timer) {
+		if(!shipAIEntity.isOnServer()) {
+			return;
+		}
 		try {
 			RepairElementManager elementManager = SegmentControllerUtils.getElementManager(shipAIEntity.getEntity(), RepairElementManager.class);
 			if(elementManager != null && elementManager.totalSize > 0) {
@@ -41,11 +44,13 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 	}
 
 	private void changeTarget(ShipAIEntity shipAIEntity) {
+		if(!shipAIEntity.isOnServer()) {
+			return;
+		}
 		try {
 			Sector sector = GameServer.getUniverse().getSector(shipAIEntity.getEntity().getSectorId());
 			for(SimpleGameObject simpleGameObject : sector.getEntities()) {
-				if(simpleGameObject instanceof SegmentController) {
-					SegmentController segmentController = (SegmentController) simpleGameObject;
+				if(simpleGameObject instanceof SegmentController segmentController) {
 					if((GameCommon.getGameState().getFactionManager().isFriend(shipAIEntity.getEntity().getFactionId(), segmentController.getFactionId()) || shipAIEntity.getEntity().getFactionId() == segmentController.getFactionId()) && shipAIEntity.getEntity().getId() != segmentController.getId()) {
 						if(((ManagedSegmentController<?>) segmentController).getManagerContainer().getPowerInterface().getCurrentHp() < ((ManagedSegmentController<?>) segmentController).getManagerContainer().getPowerInterface().getCurrentMaxHp()) {
 							((TargetProgram<?>) ((shipAIEntity.getEntity()).getAiConfiguration().getAiEntityState().getCurrentProgram())).setTarget(segmentController);
@@ -65,11 +70,13 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 	}
 
 	private boolean isValidTarget(ShipAIEntity shipAIEntity) {
+		if(!shipAIEntity.isOnServer()) {
+			return false;
+		}
 		try {
 			if(shipAIEntity == null || shipAIEntity.getCurrentProgram() == null) return false;
 			SimpleGameObject target = ((TargetProgram<?>) ((shipAIEntity.getEntity()).getAiConfiguration().getAiEntityState().getCurrentProgram())).getTarget();
-			if(target instanceof SegmentController) {
-				SegmentController segmentController = (SegmentController) target;
+			if(target instanceof SegmentController segmentController) {
 				if(segmentController.getFactionId() > 0 && shipAIEntity.getEntity().getFactionId() > 0 && segmentController.getFactionId() != shipAIEntity.getEntity().getFactionId()) {
 					if(GameCommon.getGameState().getFactionManager().isFriend(shipAIEntity.getEntity().getFactionId(), segmentController.getFactionId())) {
 						return ((ManagedSegmentController<?>) segmentController).getManagerContainer().getPowerInterface().getCurrentHp() < ((ManagedSegmentController<?>) segmentController).getManagerContainer().getPowerInterface().getCurrentMaxHp();

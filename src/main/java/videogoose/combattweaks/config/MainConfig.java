@@ -30,7 +30,23 @@ public class MainConfig extends SimpleConfigContainer {
 			new SimpleConfigDouble(this, "tactical_map_signature_range", 2.0, "How many sectors out (clamped 1-4) to detect incoming signatures. Larger = earlier warning, more server scanning.");
 
 	public final SimpleConfigDouble tacticalMapSubsectorDivisions =
-			new SimpleConfigDouble(this, "tactical_map_subsector_divisions", 8.0, "Subsector divisions per axis within each sector (clamped 1-8; 1 = off). Drives the dotted sub-grid, the A1/B2 axis labels on the camera's sector, and the subsector shown in entity labels.");
+			new SimpleConfigDouble(this, "tactical_map_subsector_divisions", 4.0, "Subsector divisions per axis within each sector (clamped 1-8; 1 = off). Drives the dotted sub-grid, the A1/B2 axis labels on the camera's sector, and the subsector shown in entity labels.");
+
+	// Tactical-map display toggles, persisted via the in-map settings panel.
+	public final SimpleConfigBool tacticalMapShowHpBars =
+			new SimpleConfigBool(this, "tactical_map_show_hp_bars", true, "Show HP ring gauges and the selection panel's HP bars.");
+
+	public final SimpleConfigBool tacticalMapShowHeading =
+			new SimpleConfigBool(this, "tactical_map_show_heading", true, "Show velocity/heading lines for entities.");
+
+	public final SimpleConfigBool tacticalMapLabelsAll =
+			new SimpleConfigBool(this, "tactical_map_labels_all", true, "Show entity name labels for all entities (true) or only own/allied ones (false).");
+
+	public final SimpleConfigDouble tacticalMapLabelDetail =
+			new SimpleConfigDouble(this, "tactical_map_label_detail", 2.0, "Entity label detail: 0 minimal (name+faction), 1 normal (+distance/engagement), 2 full (+mass/speed/sector).");
+
+	public final SimpleConfigString tacticalMapPinned =
+			new SimpleConfigString(this, "tactical_map_pinned", "", "Pinned entity unique-ids for the selection panel (newline-separated); managed via the map's Pin buttons.");
 
 	public MainConfig(StarMod mod) {
 		super(mod, "config", true);

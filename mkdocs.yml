@@ -16,6 +16,7 @@ nav:
   - Features:
     - Tactical Map: features/tactical-map.md
     - Fleet AI Orders: features/fleet-orders.md
+    - Incoming Signatures: features/incoming-signatures.md
     - Armor HP System: features/armor-hp.md
   - Development:
     - Building from Source: development/building.md

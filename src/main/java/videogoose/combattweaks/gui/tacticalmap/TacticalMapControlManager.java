@@ -1,6 +1,8 @@
 package videogoose.combattweaks.gui.tacticalmap;
 
 import api.common.GameClient;
+import api.common.GameCommon;
+import com.bulletphysics.linearmath.Transform;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.Display;
@@ -10,6 +12,7 @@ import org.schema.game.client.controller.manager.ingame.PlayerInteractionControl
 import org.schema.game.client.controller.manager.ingame.navigation.NavigationFilter;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
+import org.schema.game.server.data.GameServerState;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.CameraMouseState;
 import org.schema.schine.graphicsengine.core.GLFrame;
@@ -103,9 +106,214 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		getInteractionManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().suspend(true);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().suspend(true);
 		handleInteraction(timer);
-
 	}
 	private int dragAnchorX;
+	/** Entity the camera is tracking after a double-click focus (-1 = not tracking). Cleared on WASD pan. */
+	private int focusedEntityId = -1;
+	private final Vector3f lastTrackPos = new Vector3f();
+	private boolean hasTrackPos;
+	/** Entity the camera is animating its rotation toward (to face it), or -1 when not animating. */
+	private int faceAnimId = -1;
+	/** True while the player is dragging the selection-panel scrollbar thumb. */
+	private boolean draggingThumb;
+
+	// Double-tap-to-jump state, one slot per movement direction (forward/back/left/right/up/down).
+	private static final long DOUBLE_TAP_MS = 280;
+	private final long[] lastTapTime = new long[6];
+	private final boolean[] tapKeyWasDown = new boolean[6];
+
+	private static int tapKeyMapping(int i) {
+		switch(i) {
+			case 0:
+				return KeyboardMappings.FORWARD.getMapping();
+			case 1:
+				return KeyboardMappings.BACKWARDS.getMapping();
+			case 2:
+				return KeyboardMappings.STRAFE_LEFT.getMapping();
+			case 3:
+				return KeyboardMappings.STRAFE_RIGHT.getMapping();
+			case 4:
+				return KeyboardMappings.UP.getMapping();
+			default:
+				return KeyboardMappings.DOWN.getMapping();
+		}
+	}
+
+	/**
+	 * Detects a quick double-tap of a movement key and jumps the camera a discrete step in that direction:
+	 * one subsector normally, a full sector with Shift held. Continuous holding still pans as before.
+	 */
+	private void handleMovementTaps() {
+		// Don't fire while a modifier owns the movement keys (Ctrl+A etc.), but keep edge state fresh.
+		boolean modifier = Keyboard.isKeyDown(Keyboard.KEY_LMETA) || Keyboard.isKeyDown(Keyboard.KEY_LCONTROL);
+		boolean shift = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT);
+		float s = guiDrawer.getSectorSize();
+		int div = Math.max(1, Math.min(8, (int) Math.round(ConfigManager.getMainConfig().tacticalMapSubsectorDivisions.getValue())));
+		float jumpDist = shift ? s : s / div;
+		long now = System.currentTimeMillis();
+		for(int i = 0; i < 6; i++) {
+			boolean down = Keyboard.isKeyDown(tapKeyMapping(i));
+			if(!modifier && down && !tapKeyWasDown[i]) {
+				if(now - lastTapTime[i] <= DOUBLE_TAP_MS) {
+					jumpCamera(i, jumpDist);
+					lastTapTime[i] = 0; // consume so a third tap needs a fresh pair
+				} else {
+					lastTapTime[i] = now;
+				}
+			}
+			tapKeyWasDown[i] = down;
+		}
+	}
+
+	/** Instantly shifts the camera {@code dist} in movement-direction {@code i} (matching the WASD axes). */
+	private void jumpCamera(int i, float dist) {
+		Vector3f m = new Vector3f();
+		switch(i) {
+			case 0:
+				m.z = dist;
+				break; // forward
+			case 1:
+				m.z = -dist;
+				break; // back
+			case 2:
+				m.x = dist;
+				break; // strafe left
+			case 3:
+				m.x = -dist;
+				break; // strafe right
+			case 4:
+				m.y = dist;
+				break; // up
+			default:
+				m.y = -dist;
+				break; // down
+		}
+		focusedEntityId = -1; // a manual jump releases entity tracking
+		faceAnimId = -1;
+		hasTrackPos = false;
+		move(m);
+	}
+
+	/**
+	 * While focused on an entity, translate the camera by the entity's movement each frame so it stays framed
+	 * — the camera follows it. Rotation (right-drag) is unaffected; a WASD pan clears the focus (handled in
+	 * {@link #handleInteraction}).
+	 */
+	private void updateFocusTracking() {
+		if(focusedEntityId == -1 || guiDrawer.camera == null) {
+			return;
+		}
+		// Resolve the CLIENT entity (not via GameCommon, which returns the SERVER instance in single-player —
+		// calling getWorldTransformOnClient() on a server entity casts its state to GameClientState and throws).
+		SegmentController e = null;
+		try {
+			org.schema.schine.network.objects.Sendable s = GameClient.getClientState().getLocalAndRemoteObjectContainer().getLocalObjects().get(focusedEntityId);
+			if(s instanceof SegmentController) {
+				e = (SegmentController) s;
+			}
+		} catch(Exception ignored) {
+		}
+		if(e == null) {
+			focusedEntityId = -1;
+			hasTrackPos = false;
+			return;
+		}
+		// Use the rebased client transform — the SAME frame the camera and focusCameraOnEntity use. The raw
+		// world transform is sector-local, so for an other-sector ship its origin is in a different frame and
+		// the first tracking delta would be a whole-sector jump (tracking would "not work" across sectors).
+		Transform ct = e.getWorldTransformOnClient();
+		if(ct == null) {
+			return;
+		}
+		Vector3f cur = ct.origin;
+		if(hasTrackPos) {
+			Vector3f cam = guiDrawer.camera.getWorldTransform().origin;
+			cam.x += cur.x - lastTrackPos.x;
+			cam.y += cur.y - lastTrackPos.y;
+			cam.z += cur.z - lastTrackPos.z;
+		}
+		lastTrackPos.set(cur);
+		hasTrackPos = true;
+	}
+
+	/** Resolves the client-side entity for an id (server instance would throw in getWorldTransformOnClient). */
+	private SegmentController resolveClientEntity(int id) {
+		try {
+			org.schema.schine.network.objects.Sendable s = GameClient.getClientState().getLocalAndRemoteObjectContainer().getLocalObjects().get(id);
+			if(s instanceof SegmentController) {
+				return (SegmentController) s;
+			}
+		} catch(Exception ignored) {
+		}
+		return null;
+	}
+
+	/**
+	 * Eases the camera's orientation toward looking at the focused entity (shortest-arc quaternion slerp).
+	 * Recomputed each frame so it still ends up facing the entity even if it moved during the turn. A manual
+	 * right-drag rotation cancels it.
+	 */
+	private void updateFaceRotation(float dt) {
+		if(faceAnimId == -1 || guiDrawer.camera == null) {
+			return;
+		}
+		if(Mouse.isButtonDown(1)) {
+			faceAnimId = -1; // player is rotating the camera by hand — stop fighting them
+			return;
+		}
+		SegmentController e = resolveClientEntity(faceAnimId);
+		if(e == null) {
+			faceAnimId = -1;
+			return;
+		}
+		Transform ct = e.getWorldTransformOnClient();
+		if(ct == null) {
+			return;
+		}
+		Vector3f camPos = guiDrawer.camera.getWorldTransform().origin;
+		Vector3f fwd = new Vector3f();
+		fwd.sub(ct.origin, camPos);
+		if(fwd.lengthSquared() < 1.0e-6f) {
+			faceAnimId = -1;
+			return;
+		}
+		fwd.normalize();
+		Vector3f worldUp = new Vector3f(0, 1, 0);
+		if(Math.abs(fwd.dot(worldUp)) > 0.99f) {
+			worldUp.set(0, 0, 1);
+		}
+		// Build a PROPER right-handed basis matching the camera's column convention (col0=right, col1=up,
+		// col2=forward, with right x up = forward). right = worldUp x forward (NOT forward x worldUp) keeps the
+		// determinant at +1; an improper (det -1) basis converts to a garbage quaternion and rolls the whole view.
+		Vector3f right = new Vector3f();
+		right.cross(worldUp, fwd);
+		if(right.lengthSquared() < 1.0e-6f) {
+			right.set(1, 0, 0);
+		} else {
+			right.normalize();
+		}
+		Vector3f up = new Vector3f();
+		up.cross(fwd, right);
+		up.normalize();
+
+		// Build the target orientation via the camera's own vector setters (so it matches the basis convention).
+		Transform tmp = new Transform();
+		tmp.setIdentity();
+		org.schema.schine.graphicsengine.core.GlUtil.setForwardVector(fwd, tmp);
+		org.schema.schine.graphicsengine.core.GlUtil.setRightVector(right, tmp);
+		org.schema.schine.graphicsengine.core.GlUtil.setUpVector(up, tmp);
+		javax.vecmath.Quat4f tgtQ = new javax.vecmath.Quat4f();
+		tgtQ.set(tmp.basis);
+		javax.vecmath.Quat4f curQ = new javax.vecmath.Quat4f();
+		curQ.set(guiDrawer.camera.getWorldTransform().basis);
+		float alpha = Math.min(1.0f, dt * 8.0f);
+		curQ.interpolate(tgtQ, alpha); // vecmath slerp, shortest path
+		guiDrawer.camera.getWorldTransform().basis.set(curQ);
+		float dot = Math.abs(curQ.x * tgtQ.x + curQ.y * tgtQ.y + curQ.z * tgtQ.z + curQ.w * tgtQ.w);
+		if(dot > 0.99995f) {
+			faceAnimId = -1; // aligned — done
+		}
+	}
 
 	private void move(Vector3f movement) {
 		Vector3f move = new Vector3f();
@@ -172,10 +380,16 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			return;
 		}
 		if(!getState().getGlobalGameControlManager().getIngameControlManager().isAnyMenuOrChatActive()) {
+			// Follow a focused entity (camera translates with it); rotation doesn't disturb this.
+			updateFocusTracking();
+			updateFaceRotation(timer.getDelta());
 			Vector3f movement = new Vector3f();
 			int amount = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) ? 1000 : 100;
 			if(Keyboard.isKeyDown(Keyboard.KEY_X)) {
 				guiDrawer.camera.reset();
+				focusedEntityId = -1; // reset camera also stops tracking
+				faceAnimId = -1;
+				hasTrackPos = false;
 			}
 			// Edge-detected Ctrl+A / Ctrl+S commands
 			boolean aDown = Keyboard.isKeyDown(Keyboard.KEY_A);
@@ -185,9 +399,10 @@ public class TacticalMapControlManager extends AbstractControlManager {
 					guiDrawer.toggleSelectAllFriendly();
 				} else if(sDown && !wasSDown) {
 					turretTargetingMode = !turretTargetingMode;
-					// Turret selection is meaningful only within turret mode — clear it whenever the
-					// mode is toggled so stale turret highlights don't linger over the main-ship view.
-					guiDrawer.clearSelectedTurrets();
+					// Keep the selection across the toggle. Targets (enemy main ships) are only visible in
+					// normal mode, so the flow is: enter turret mode, pick turrets, leave turret mode, then
+					// middle-click the target to order the attack — clearing here would drop the turrets
+					// before you could command them. The selected turrets stay highlighted in both views.
 					// Swap the visible entities (main ships <-> turrets) immediately instead of waiting
 					// for the next periodic rebuild.
 					guiDrawer.requestEntityRefresh();
@@ -218,9 +433,19 @@ public class TacticalMapControlManager extends AbstractControlManager {
 					movement.add(new Vector3f(0, -amount, 0));
 				}
 			}
+			if(movement.lengthSquared() > 0.0f) {
+				focusedEntityId = -1; // a manual WASD pan releases entity tracking
+				faceAnimId = -1;
+				hasTrackPos = false;
+			}
 			movement.scale(timer.getDelta());
 			move(movement);
-			if(Mouse.hasWheel() && Mouse.getEventDWheel() != 0) {
+			// Double-tap-to-jump is disabled — it triggered too easily during normal panning.
+			// handleMovementTaps();
+			if(Mouse.hasWheel() && Mouse.getEventDWheel() != 0 && guiDrawer.isOverSelectionPanel(Mouse.getX(), GLFrame.getHeight() - Mouse.getY())) {
+				// Hovering the selection panel: scroll it instead of zooming the map.
+				guiDrawer.scrollSelectionPanel(Mouse.getEventDWheel() > 0 ? -48.0f : 48.0f);
+			} else if(Mouse.hasWheel() && Mouse.getEventDWheel() != 0) {
 				float wheelAmount = (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) ? 1000 : 100;
 				if(Mouse.getEventDWheel() == 0) {
 					wheelAmount = 0;
@@ -247,24 +472,33 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				guiDrawer.isDragSelecting = false;
 			}
 
-			// LMB just pressed: record anchor for potential drag
+			// LMB just pressed: grab the scrollbar thumb if it's under the cursor, else record a drag anchor.
 			if(isLeftDown && !wasLeftMouseDown && !rightDown) {
-				dragAnchorX = mouseX;
-				dragAnchorY = mouseY;
+				if(guiDrawer.isOverScrollThumb(mouseX, mouseY)) {
+					draggingThumb = true;
+				} else {
+					dragAnchorX = mouseX;
+					dragAnchorY = mouseY;
+				}
 			}
 
-			// LMB held: update drag rect once threshold is exceeded
+			// LMB held: update drag rect once threshold is exceeded (but never start a drag from inside the
+			// config panel — that's a click target, not a selection region).
 			if(isLeftDown && !rightDown) {
-				int dx = mouseX - dragAnchorX;
-				int dy = mouseY - dragAnchorY;
-				if(!guiDrawer.isDragSelecting && (dx * dx + dy * dy) > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
-					guiDrawer.isDragSelecting = true;
-				}
-				if(guiDrawer.isDragSelecting) {
-					guiDrawer.dragMinX = Math.min(dragAnchorX, mouseX);
-					guiDrawer.dragMaxX = Math.max(dragAnchorX, mouseX);
-					guiDrawer.dragMinY = Math.min(dragAnchorY, mouseY);
-					guiDrawer.dragMaxY = Math.max(dragAnchorY, mouseY);
+				if(draggingThumb) {
+					guiDrawer.scrollPanelToThumbY(mouseY);
+				} else {
+					int dx = mouseX - dragAnchorX;
+					int dy = mouseY - dragAnchorY;
+					if(!guiDrawer.isDragSelecting && (dx * dx + dy * dy) > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX && !guiDrawer.isInConfigPanel(dragAnchorX, dragAnchorY)) {
+						guiDrawer.isDragSelecting = true;
+					}
+					if(guiDrawer.isDragSelecting) {
+						guiDrawer.dragMinX = Math.min(dragAnchorX, mouseX);
+						guiDrawer.dragMaxX = Math.max(dragAnchorX, mouseX);
+						guiDrawer.dragMinY = Math.min(dragAnchorY, mouseY);
+						guiDrawer.dragMaxY = Math.max(dragAnchorY, mouseY);
+					}
 				}
 			}
 
@@ -277,12 +511,17 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			// LMB released — selection and double-click-to-focus only. The radial is opened with the
 			// middle mouse button (below) so it no longer conflicts with selecting/focusing on left-click.
 			if(!isLeftDown && wasLeftMouseDown && !rightDown) {
-				if(guiDrawer.isDragSelecting) {
+				if(draggingThumb) {
+					draggingThumb = false; // released the scrollbar thumb — don't select/focus
+				} else if(guiDrawer.isDragSelecting) {
 					// Commit marquee selection (toggles entities in the box: selects unselected,
 					// deselects already-selected)
+					// Plain drag replaces the selection; hold a modifier (Shift/Ctrl) to add/toggle.
 					guiDrawer.applyDragSelection(guiDrawer.dragMinX, guiDrawer.dragMinY,
-							guiDrawer.dragMaxX, guiDrawer.dragMaxY);
+							guiDrawer.dragMaxX, guiDrawer.dragMaxY, hasModifierKeyPressed());
 					guiDrawer.isDragSelecting = false;
+				} else if(guiDrawer.handleConfigClick(mouseX, mouseY) || guiDrawer.handlePanelClick(mouseX, mouseY)) {
+					// Click consumed by the settings panel or a pin button — don't select/focus/clear.
 				} else {
 					TacticalMapEntityIndicator hit = guiDrawer.findIndicatorAtScreen(mouseX, mouseY, ENTITY_CLICK_THRESHOLD_PX);
 					if(hit != null) {
@@ -375,6 +614,16 @@ public class TacticalMapControlManager extends AbstractControlManager {
 
 		Vector3f newPos = new Vector3f(target.x + (float) Math.sin(yaw) * hDist, target.y + vDist, target.z + (float) Math.cos(yaw) * hDist);
 		guiDrawer.camera.getWorldTransform().origin.set(newPos);
+
+		// Camera auto-rotation on focus is disabled: building a look-at orientation and slerping the camera's
+		// (view-convention) basis rolls the whole view. We only reposition + track; the camera keeps its
+		// existing heading. (updateFaceRotation is left in place but never armed.)
+		// faceAnimId = entity.getId();
+
+		// Begin tracking: the camera will follow this entity until the player pans (WASD).
+		focusedEntityId = entity.getId();
+		lastTrackPos.set(target);
+		hasTrackPos = true;
 	}
 
 	/**
@@ -385,13 +634,19 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			return;
 		}
 
-		// In turret mode the map shows turrets directly (docked AI ships), so clicking one toggles
-		// its selection — the same select/deselect-by-clicking flow used elsewhere.
-		if(entity instanceof Ship turret && entity.isDocked() && entity.isAIControlled()) {
+		// The map shows one marker per turret unit (the entity docked to the ship); clicking it toggles
+		// selection. It also goes into the normal selection set so the order radial can command it — the
+		// attack order then cascades to the unit's weapon entity (the barrel), which runs its own turret AI
+		// and engages with no need for the turret itself to be in a fleet.
+		if(entity instanceof Ship turret && entity.isDocked()) {
 			if(guiDrawer.isTurretSelected(turret)) {
 				guiDrawer.removeTurretSelection(turret);
+				guiDrawer.selectedEntities.remove(turret);
 			} else {
 				guiDrawer.addTurretSelection(turret);
+				if(!guiDrawer.selectedEntities.contains(turret)) {
+					guiDrawer.selectedEntities.add(turret);
+				}
 			}
 			return;
 		}
