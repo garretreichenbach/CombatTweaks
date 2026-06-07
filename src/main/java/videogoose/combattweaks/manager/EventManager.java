@@ -6,6 +6,7 @@ import api.listener.events.block.SegmentPieceAddByMetadataEvent;
 import api.listener.events.block.SegmentPieceAddEvent;
 import api.listener.events.block.SegmentPieceRemoveEvent;
 import api.listener.events.draw.RegisterWorldDrawersEvent;
+import api.listener.events.entity.ShipJumpEngageEvent;
 import api.listener.events.gui.HudCreateEvent;
 import api.listener.events.gui.StructureStatsGroupsAddEvent;
 import api.listener.events.gui.TargetPanelCreateEvent;
@@ -45,6 +46,20 @@ public class EventManager {
 			@Override
 			public void onEvent(HudCreateEvent event) {
 				HudManager.initializeHud(event);
+			}
+		}, instance);
+
+		// Record FTL arrivals so the incoming-signature detector can flag a freshly jumped-in ship even if
+		// it's sitting still afterwards (and tag it as a JUMP contact for the dramatic "FTL inbound" label).
+		StarLoader.registerListener(ShipJumpEngageEvent.class, new Listener<ShipJumpEngageEvent>() {
+			@Override
+			public void onEvent(ShipJumpEngageEvent event) {
+				try {
+					if(event.getController() != null && event.getNewSector() != null) {
+						IncomingSignatureManager.getInstance().recordJump(event.getController().getId(), event.getNewSector());
+					}
+				} catch(Exception ignored) {
+				}
 			}
 		}, instance);
 

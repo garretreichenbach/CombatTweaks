@@ -25,11 +25,7 @@ import org.schema.game.common.data.SimpleGameObject;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.Camera;
-import org.schema.schine.graphicsengine.core.AbstractScene;
-import org.schema.schine.graphicsengine.core.Controller;
-import org.schema.schine.graphicsengine.core.GLFrame;
-import org.schema.schine.graphicsengine.core.GlUtil;
-import org.schema.schine.graphicsengine.core.Timer;
+import org.schema.schine.graphicsengine.core.*;
 import org.schema.schine.graphicsengine.core.settings.ContextFilter;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.BoundingBox;
@@ -40,6 +36,7 @@ import org.schema.schine.input.InputType;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
 import videogoose.combattweaks.manager.MoveManager;
+import videogoose.combattweaks.system.signature.IncomingSignature;
 import videogoose.combattweaks.utils.AIUtils;
 
 import javax.vecmath.Vector3f;
@@ -53,7 +50,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
-	/** Time for a path's dashes to march forward one full dash+gap cycle. Keeps scroll speed uniform across line lengths. */
+	/**
+	 * Time for a path's dashes to march forward one full dash+gap cycle. Keeps scroll speed uniform across line lengths.
+	 */
 	private static final long SCROLL_PERIOD_MS = 1400;
 	private static final FloatBuffer GL_MODELVIEW = BufferUtils.createFloatBuffer(16);
 	private static final FloatBuffer GL_PROJECTION = BufferUtils.createFloatBuffer(16);
@@ -66,6 +65,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f PATH_ORANGE = new Vector4f(1.0f, 0.6f, 0.0f, 1.0f);  // orange for mining
 	private static final Vector4f PATH_MAGENTA = new Vector4f(1.0f, 0.2f, 0.8f, 1.0f); // magenta for repair
 	private static final Vector4f PATH_QUEUED = new Vector4f(0.7f, 0.7f, 0.75f, 0.45f); // faint grey for queued orders
+	private static final Vector4f PATH_HEADING = new Vector4f(0.85f, 0.9f, 1.0f, 0.7f); // pale blue for actual heading/velocity
 	// Bounding box wireframe colors — solid pass (depth tested) and occluded pass (through geometry)
 	/**
 	 * Near/far planes for the map's 3D passes. These MUST match the planes the engine renders the sector
@@ -74,6 +74,193 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * geometry that should occlude them). Far is computed live from the sector size.
 	 */
 	private static final float SCENE_NEAR_PLANE = 0.05f;
+	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f);   // yellow, solid
+	private static final Vector4f OUTLINE_SELECTED_OCCLUDED = new Vector4f(1.0f, 1.0f, 0.0f, 0.15f);
+	private static final Vector4f OUTLINE_HOVERED = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f);    // white, slightly transparent
+	private static final Vector4f OUTLINE_HOVERED_OCCLUDED = new Vector4f(1.0f, 1.0f, 1.0f, 0.08f);
+	private static final Vector4f OUTLINE_TURRET = new Vector4f(0.0f, 1.0f, 1.0f, 1.0f);     // cyan, solid
+	private static final Vector4f OUTLINE_TURRET_OCCLUDED = new Vector4f(0.0f, 1.0f, 1.0f, 0.15f);
+	// Temporary storage for bbox corner projection
+	private static final float[] BBOX_XS = {0, 0, 0, 0, 1, 1, 1, 1};
+	private static final float[] BBOX_YS = {0, 0, 1, 1, 0, 0, 1, 1};
+	private static final float[] BBOX_ZS = {0, 1, 0, 1, 0, 1, 0, 1};
+	private static final Vector4f DRAG_FILL = new Vector4f(0.3f, 0.6f, 1.0f, 0.15f);
+	private static final Vector4f DRAG_BORDER = new Vector4f(0.3f, 0.6f, 1.0f, 0.8f);
+
+	/**
+	 * Loads a <em>camera-relative</em> modelview matrix (the camera's rotation only, eye at the origin)
+	 * and returns the camera's world position.
+	 *
+	 * <p>StarMade world coordinates are large, and the engine renders the sector camera-relative for
+	 * precision. If we instead load the full view (rotation + large eye translation) and then multiply by
+	 * an entity's large world transform, the GPU computes {@code basis*entityPos − basis*camPos} — a
+	 * subtraction of two large floats that loses precision the farther the entity is, so our overlays
+	 * (boxes, paths) visibly drift off the ship at 1km+. By loading rotation-only here and subtracting the
+	 * camera position from each entity position on the CPU first, the GPU only ever sees small relative
+	 * offsets, so overlays stay locked to the engine-rendered geometry at any distance.</p>
+	 */
+	/**
+	 * Soft blue used for the sector-boundary grid; alpha is scaled per-vertex by distance for a fade-out.
+	 */
+	private static final Vector4f SECTOR_GRID_COLOR = new Vector4f(0.35f, 0.7f, 1.0f, 0.6f);
+	/**
+	 * Soft, dimmer blue for the dotted subsector grid drawn inside the camera's current sector.
+	 */
+	private static final Vector4f SECTOR_SUBGRID_COLOR = new Vector4f(0.4f, 0.65f, 0.95f, 0.3f);
+	// Incoming-signature colours, keyed by relation (friendly/neutral/hostile/unknown).
+	private static final Vector4f SIG_FRIENDLY = new Vector4f(0.3f, 1.0f, 0.4f, 1.0f);
+	private static final Vector4f SIG_NEUTRAL = new Vector4f(1.0f, 0.85f, 0.2f, 1.0f);
+	private static final Vector4f SIG_HOSTILE = new Vector4f(1.0f, 0.25f, 0.25f, 1.0f);
+	private static final Vector4f SIG_UNKNOWN = new Vector4f(0.7f, 0.75f, 0.85f, 1.0f);
+	private static TacticalMapGUIDrawer instance;
+	public final Vector3f labelOffset;
+	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap = new ConcurrentHashMap<>();
+	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
+	public final ConcurrentHashMap<Integer, Ship> selectedTurrets = new ConcurrentHashMap<>(); // entity ID → turret Ship
+	// Camera-relative rendering temporaries (see loadCameraRelativeModelview).
+	private final Transform crView = new Transform();
+	private final javax.vecmath.Matrix3f crBasisT = new javax.vecmath.Matrix3f();
+	private final Vector3f crCamPos = new Vector3f();
+	private final Transform relTransform = new Transform();
+	/**
+	 * Camera world position captured for the current dotted-line batch.
+	 */
+	private final Vector3f pathCamPos = new Vector3f();
+	/**
+	 * Camera world position from the last {@link #computeScreenPositions} pass; reused to project grid labels.
+	 */
+	private final Vector3f lastCamPos = new Vector3f();
+	/**
+	 * Reusable scratch for reading an entity's sector coords in {@link #getEntityDisplay}.
+	 */
+	private final Vector3i tmpEntitySector = new Vector3i();
+	// Reusable temporaries for dotted line math
+	private final Vector3f dottedDir = new Vector3f();
+	private final Vector3f dottedDirN = new Vector3f();
+	private final Vector3f dottedA = new Vector3f();
+	private final Vector3f dottedB = new Vector3f();
+	private final Vector3f tmpBboxCorner = new Vector3f();
+	public float selectedRange;
+	public TacticalMapControlManager controlManager;
+	public TacticalMapCamera camera;
+	public boolean toggleDraw;
+	/**
+	 * The indicator currently under the mouse cursor, updated each frame. May be null.
+	 */
+	public TacticalMapEntityIndicator hoveredIndicator;
+	/**
+	 * Drag-select rectangle in screen space. Only valid when isDragSelecting == true.
+	 */
+	public boolean isDragSelecting;
+	public float dragMinX, dragMaxX, dragMinY, dragMaxY;
+	/**
+	 * Dedicated large-font overlay for the sector-grid wall labels (kept separate from the entity-label pool).
+	 */
+	private GUITextOverlay gridLabelOverlay;
+	/**
+	 * Latest incoming-signature contacts from the server (replaced wholesale each detector packet).
+	 */
+	private volatile java.util.List<IncomingSignature> incomingSignatures = new java.util.ArrayList<>();
+	/** Reusable scratch for the extrapolated contact position. */
+	private final Vector3f sigPosTmp = new Vector3f();
+	/** Cap (seconds) on how far a contact is extrapolated past its last update, so it can't run away if packets stop. */
+	private static final float SIG_EXTRAPOLATE_CAP_S = 1.5f;
+	private HudContextHelpManager hud;
+	private boolean initialized;
+	private boolean firstTime = true;
+	private long updateTimer;
+	private TacticalMapShaderOverlay shaderOverlay;
+	private int lastKnownWidth = -1;
+	private int lastKnownHeight = -1;
+
+	public TacticalMapGUIDrawer() {
+		instance = this;
+		toggleDraw = false;
+		initialized = false;
+		labelOffset = new Vector3f(0.0f, -20.0f, 0.0f);
+		updateTimer = 150;
+	}
+
+	public static TacticalMapGUIDrawer getInstance() {
+		return instance;
+	}
+
+	/**
+	 * Emits 12 GL_LINES edges of an axis-aligned bounding box. Must be called inside a GL_LINES begin/end or standalone.
+	 */
+	private static void drawAABBLines(float x0, float y0, float z0, float x1, float y1, float z1) {
+		GL11.glBegin(GL11.GL_LINES);
+		// Bottom face
+		GL11.glVertex3f(x0, y0, z0);
+		GL11.glVertex3f(x1, y0, z0);
+		GL11.glVertex3f(x1, y0, z0);
+		GL11.glVertex3f(x1, y0, z1);
+		GL11.glVertex3f(x1, y0, z1);
+		GL11.glVertex3f(x0, y0, z1);
+		GL11.glVertex3f(x0, y0, z1);
+		GL11.glVertex3f(x0, y0, z0);
+		// Top face
+		GL11.glVertex3f(x0, y1, z0);
+		GL11.glVertex3f(x1, y1, z0);
+		GL11.glVertex3f(x1, y1, z0);
+		GL11.glVertex3f(x1, y1, z1);
+		GL11.glVertex3f(x1, y1, z1);
+		GL11.glVertex3f(x0, y1, z1);
+		GL11.glVertex3f(x0, y1, z1);
+		GL11.glVertex3f(x0, y1, z0);
+		// Vertical edges
+		GL11.glVertex3f(x0, y0, z0);
+		GL11.glVertex3f(x0, y1, z0);
+		GL11.glVertex3f(x1, y0, z0);
+		GL11.glVertex3f(x1, y1, z0);
+		GL11.glVertex3f(x1, y0, z1);
+		GL11.glVertex3f(x1, y1, z1);
+		GL11.glVertex3f(x0, y0, z1);
+		GL11.glVertex3f(x0, y1, z1);
+		GL11.glEnd();
+	}
+
+	private static Vector4f signatureColor(int relation) {
+		switch(relation) {
+			case IncomingSignature.REL_FRIENDLY:
+				return SIG_FRIENDLY;
+			case IncomingSignature.REL_NEUTRAL:
+				return SIG_NEUTRAL;
+			case IncomingSignature.REL_HOSTILE:
+				return SIG_HOSTILE;
+			default:
+				return SIG_UNKNOWN;
+		}
+	}
+
+	private static String relationText(int relation) {
+		return switch(relation) {
+			case IncomingSignature.REL_FRIENDLY -> "Friendly";
+			case IncomingSignature.REL_NEUTRAL -> "Neutral";
+			case IncomingSignature.REL_HOSTILE -> "Hostile";
+			default -> "Unknown contact";
+		};
+	}
+
+	private static String massText(IncomingSignature sig) {
+		if(sig.massDetail == IncomingSignature.MASS_EXACT) {
+			return StringTools.massFormat(sig.mass) + " Mass";
+		}
+		if(sig.massDetail == IncomingSignature.MASS_BUCKET) {
+			String bucket;
+			if(sig.mass < 30000.0f) {
+				bucket = "Light";
+			} else if(sig.mass < 100000.0f) {
+				bucket = "Medium";
+			} else if(sig.mass < 300000.0f) {
+				bucket = "Heavy";
+			} else {
+				bucket = "Capital";
+			}
+			return "~" + bucket + " mass";
+		}
+		return "Mass: unknown";
+	}
 
 	private float sceneFarPlane() {
 		return getSectorSize() * 7.0f;
@@ -92,33 +279,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		return (Float) EngineSettings.G_FOV.getCurrentState() * AbstractScene.getZoomFactorForRender(true);
 	}
 
-	// Camera-relative rendering temporaries (see loadCameraRelativeModelview).
-	private final Transform crView = new Transform();
-	private final javax.vecmath.Matrix3f crBasisT = new javax.vecmath.Matrix3f();
-	private final Vector3f crCamPos = new Vector3f();
-	private final Transform relTransform = new Transform();
-	/** Camera world position captured for the current dotted-line batch. */
-	private final Vector3f pathCamPos = new Vector3f();
-	/** Camera world position from the last {@link #computeScreenPositions} pass; reused to project grid labels. */
-	private final Vector3f lastCamPos = new Vector3f();
-	/** Reusable scratch for reading an entity's sector coords in {@link #getEntityDisplay}. */
-	private final Vector3i tmpEntitySector = new Vector3i();
-	/** Dedicated large-font overlay for the sector-grid wall labels (kept separate from the entity-label pool). */
-	private GUITextOverlay gridLabelOverlay;
-
 	/**
-	 * Loads a <em>camera-relative</em> modelview matrix (the camera's rotation only, eye at the origin)
-	 * and returns the camera's world position.
-	 *
-	 * <p>StarMade world coordinates are large, and the engine renders the sector camera-relative for
-	 * precision. If we instead load the full view (rotation + large eye translation) and then multiply by
-	 * an entity's large world transform, the GPU computes {@code basis*entityPos − basis*camPos} — a
-	 * subtraction of two large floats that loses precision the farther the entity is, so our overlays
-	 * (boxes, paths) visibly drift off the ship at 1km+. By loading rotation-only here and subtracting the
-	 * camera position from each entity position on the CPU first, the GPU only ever sees small relative
-	 * offsets, so overlays stay locked to the engine-rendered geometry at any distance.</p>
+	 * Multiplies the current (camera-relative) modelview by {@code worldTransform} shifted by {@code camPos}.
 	 */
-	/** Multiplies the current (camera-relative) modelview by {@code worldTransform} shifted by {@code camPos}. */
 	private void multCameraRelative(Transform worldTransform, Vector3f camPos) {
 		relTransform.basis.set(worldTransform.basis);
 		relTransform.origin.set(worldTransform.origin);
@@ -139,47 +302,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		return crCamPos;
 	}
 
-	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f);   // yellow, solid
-	private static final Vector4f OUTLINE_SELECTED_OCCLUDED = new Vector4f(1.0f, 1.0f, 0.0f, 0.15f);
-	private static final Vector4f OUTLINE_HOVERED = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f);    // white, slightly transparent
-	private static final Vector4f OUTLINE_HOVERED_OCCLUDED = new Vector4f(1.0f, 1.0f, 1.0f, 0.08f);
-	private static final Vector4f OUTLINE_TURRET = new Vector4f(0.0f, 1.0f, 1.0f, 1.0f);     // cyan, solid
-	private static final Vector4f OUTLINE_TURRET_OCCLUDED = new Vector4f(0.0f, 1.0f, 1.0f, 0.15f);
-	private static TacticalMapGUIDrawer instance;
-	public final Vector3f labelOffset;
-	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap = new ConcurrentHashMap<>();
-	public final ConcurrentLinkedQueue<SegmentController> selectedEntities = new ConcurrentLinkedQueue<>();
-	public final ConcurrentHashMap<Integer, Ship> selectedTurrets = new ConcurrentHashMap<>(); // entity ID → turret Ship
-	// Reusable temporaries for dotted line math
-	private final Vector3f dottedDir = new Vector3f();
-	private final Vector3f dottedDirN = new Vector3f();
-	private final Vector3f dottedA = new Vector3f();
-	private final Vector3f dottedB = new Vector3f();
-	public float selectedRange;
-	public TacticalMapControlManager controlManager;
-	public TacticalMapCamera camera;
-	public boolean toggleDraw;
-	/** The indicator currently under the mouse cursor, updated each frame. May be null. */
-	public TacticalMapEntityIndicator hoveredIndicator;
-	// Temporary storage for bbox corner projection
-	private static final float[] BBOX_XS = {0, 0, 0, 0, 1, 1, 1, 1};
-	private static final float[] BBOX_YS = {0, 0, 1, 1, 0, 0, 1, 1};
-	private HudContextHelpManager hud;
-	private boolean initialized;
-	private boolean firstTime = true;
-	private long updateTimer;
-	private TacticalMapShaderOverlay shaderOverlay;
-	private int lastKnownWidth = -1;
-	private int lastKnownHeight = -1;
-
-	public TacticalMapGUIDrawer() {
-		instance = this;
-		toggleDraw = false;
-		initialized = false;
-		labelOffset = new Vector3f(0.0f, -20.0f, 0.0f);
-		updateTimer = 150;
-	}
-
 	/**
 	 * Maximum distance (from the controlled ship) at which entities are drawn/selectable.
 	 * Computed live from the current server sector size so it never freezes on a stale value,
@@ -189,13 +311,22 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		return getSectorSize() * ConfigManager.getMainConfig().tacticalMapViewDistance.value.floatValue();
 	}
 
-	/** Current server sector size, read live so it always reflects the synced server config. */
+	/**
+	 * Current server sector size, read live so it always reflects the synced server config.
+	 */
 	public int getSectorSize() {
 		return (int) ServerConfig.SECTOR_SIZE.getCurrentState();
 	}
 
-	public static TacticalMapGUIDrawer getInstance() {
-		return instance;
+	/**
+	 * Replace the incoming-signature contact set (called from the detector packet on the client).
+	 */
+	public void setIncomingSignatures(java.util.List<IncomingSignature> signatures) {
+		long now = System.currentTimeMillis();
+		for(IncomingSignature s : signatures) {
+			s.clientReceived = now;
+		}
+		incomingSignatures = signatures;
 	}
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
@@ -332,7 +463,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 	}
 
-	/** Forces the entity list to be rebuilt on the next update tick (e.g. when turret mode toggles). */
+	/**
+	 * Forces the entity list to be rebuilt on the next update tick (e.g. when turret mode toggles).
+	 */
 	public void requestEntityRefresh() {
 		updateTimer = 0;
 	}
@@ -340,7 +473,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	public boolean shouldDraw() {
 		return (GameClient.getClientState().getPlayerInputs().isEmpty() || GameClient.getClientState().getController().isChatActive() || GameClient.getClientState().isInAnyStructureBuildMode() || GameClient.getClientState().isInFlightMode()) && !GameClient.getClientState().getWorldDrawer().getGameMapDrawer().isMapActive();
 	}
-	private static final float[] BBOX_ZS = {0, 1, 0, 1, 0, 1, 0, 1};
 
 	private void drawGrid(float start, float spacing) {
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
@@ -445,9 +577,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		hud = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
 		initialized = true;
 	}
-	private static final Vector4f DRAG_FILL = new Vector4f(0.3f, 0.6f, 1.0f, 0.15f);
 
-	/** Updates hoveredIndicator based on the current mouse position. Called each draw frame. */
+	/**
+	 * Updates hoveredIndicator based on the current mouse position. Called each draw frame.
+	 */
 	private void updateHovered() {
 		int mouseX = Mouse.getX();
 		int mouseY = GLFrame.getHeight() - Mouse.getY();
@@ -475,7 +608,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			shaderOverlay.clearSelected();
 		}
 	}
-	private static final Vector4f DRAG_BORDER = new Vector4f(0.3f, 0.6f, 1.0f, 0.8f);
 
 	private void drawIndicators() {
 		ArrayList<Integer> toRemove = null;
@@ -505,43 +637,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				drawMap.remove(id);
 			}
 		}
-	}
-	private final Vector3f tmpBboxCorner = new Vector3f();
-	/** Drag-select rectangle in screen space. Only valid when isDragSelecting == true. */
-	public boolean isDragSelecting;
-	public float dragMinX, dragMaxX, dragMinY, dragMaxY;
-
-	/** Emits 12 GL_LINES edges of an axis-aligned bounding box. Must be called inside a GL_LINES begin/end or standalone. */
-	private static void drawAABBLines(float x0, float y0, float z0, float x1, float y1, float z1) {
-		GL11.glBegin(GL11.GL_LINES);
-		// Bottom face
-		GL11.glVertex3f(x0, y0, z0);
-		GL11.glVertex3f(x1, y0, z0);
-		GL11.glVertex3f(x1, y0, z0);
-		GL11.glVertex3f(x1, y0, z1);
-		GL11.glVertex3f(x1, y0, z1);
-		GL11.glVertex3f(x0, y0, z1);
-		GL11.glVertex3f(x0, y0, z1);
-		GL11.glVertex3f(x0, y0, z0);
-		// Top face
-		GL11.glVertex3f(x0, y1, z0);
-		GL11.glVertex3f(x1, y1, z0);
-		GL11.glVertex3f(x1, y1, z0);
-		GL11.glVertex3f(x1, y1, z1);
-		GL11.glVertex3f(x1, y1, z1);
-		GL11.glVertex3f(x0, y1, z1);
-		GL11.glVertex3f(x0, y1, z1);
-		GL11.glVertex3f(x0, y1, z0);
-		// Vertical edges
-		GL11.glVertex3f(x0, y0, z0);
-		GL11.glVertex3f(x0, y1, z0);
-		GL11.glVertex3f(x1, y0, z0);
-		GL11.glVertex3f(x1, y1, z0);
-		GL11.glVertex3f(x1, y0, z1);
-		GL11.glVertex3f(x1, y1, z1);
-		GL11.glVertex3f(x0, y0, z1);
-		GL11.glVertex3f(x0, y1, z1);
-		GL11.glEnd();
 	}
 
 	private void drawHudIndicators() {
@@ -602,11 +697,26 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid) continue;
 
-			// Only show paths for: own ships, selected entities, or hovered entity
+			// Only show paths for: own ships, selected entities, or hovered entity. (Own-faction entities
+			// always show; other/neutral/hostile factions only when selected or hovered.)
 			boolean isOwnShip = indicator.getEntity().getFactionId() == GameClient.getClientPlayerState().getFactionId();
 			boolean isSelected = selectedEntities.contains(indicator.getEntity());
 			boolean isHovered = indicator == hoveredIndicator;
 			if(!isOwnShip && !isSelected && !isHovered) continue;
+
+			// Heading line (pale blue): the entity's actual velocity vector — where it's really moving right
+			// now, independent of any order. Length scales with speed (clamped to a fraction of a sector).
+			Vector3f vel = indicator.getEntity().getLinearVelocity(new Vector3f());
+			float speed = vel.length();
+			if(speed > 1.0f) {
+				float sec = getSectorSize();
+				float len = Math.max(sec * 0.05f, Math.min(sec * 0.5f, speed * 2.0f));
+				Vector3f hStart = new Vector3f(indicator.entityTransform.origin);
+				Vector3f hEnd = new Vector3f(hStart.x + vel.x / speed * len, hStart.y + vel.y / speed * len, hStart.z + vel.z / speed * len);
+				startDrawDottedLine();
+				drawDottedLine(hStart, hEnd, PATH_HEADING);
+				endDrawDottedLine();
+			}
 
 			// Draw attack path (red). Prefer our stored attack target — the AI program's target isn't
 			// reliably readable client-side, so relying on it alone left commanded attacks with no line.
@@ -706,8 +816,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				}
 				if(assignedAsteroid != null) {
 					SimpleGameObject obj = (SimpleGameObject) GameCommon.getGameObject(assignedAsteroid);
-					if(obj instanceof SegmentController) {
-						SegmentController asteroid = (SegmentController) obj;
+					if(obj instanceof SegmentController asteroid) {
 						Vector3f start = new Vector3f(indicator.entityTransform.origin);
 						Vector3f end = new Vector3f(asteroid.getWorldTransform().origin);
 						TacticalMapEntityIndicator targetIndicator = drawMap.get(asteroid.getId());
@@ -732,8 +841,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				}
 				if(assignedTarget != null) {
 					SimpleGameObject obj = (SimpleGameObject) GameCommon.getGameObject(assignedTarget);
-					if(obj instanceof SegmentController) {
-						SegmentController target = (SegmentController) obj;
+					if(obj instanceof SegmentController target) {
 						Vector3f start = new Vector3f(indicator.entityTransform.origin);
 						Vector3f end = new Vector3f(target.getWorldTransform().origin);
 						TacticalMapEntityIndicator targetIndicator = drawMap.get(target.getId());
@@ -782,7 +890,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 	}
 
-	/** Client-frame world position of an order's target entity, or null if it can't be resolved. */
+	/**
+	 * Client-frame world position of an order's target entity, or null if it can't be resolved.
+	 */
 	private Vector3f orderTargetPos(int targetId) {
 		TacticalMapEntityIndicator indicator = drawMap.get(targetId);
 		if(indicator != null) {
@@ -911,10 +1021,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			computeScreenPositions();
 			updateHovered();
 			drawSectorGrid();
+			drawIncomingSignatureLines();
 			drawBoundingBoxWireframes();
 			drawPaths();
 			drawLabels();
 			drawSectorGridLabels();
+			drawIncomingSignatureLabels();
 			drawDragSelectRect();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		}
@@ -1063,6 +1175,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		// Total mass (including docked turrets/entities), so the player can gauge a ship's size at a glance.
 		builder.append(StringTools.massFormat(entity.getMassWithDocks())).append(" Mass\n");
+		// Current speed (velocity magnitude). Shown for everything; a parked ship reads "0.0 m/s".
+		float speed = entity.getLinearVelocity(new Vector3f()).length();
+		builder.append(StringTools.formatPointZero(speed)).append(" m/s\n");
 		if(!entity.equals(playerEntity)) {
 			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
 				builder.append("???km\n");
@@ -1181,9 +1296,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
 	}
 
-	/** Soft blue used for the sector-boundary grid; alpha is scaled per-vertex by distance for a fade-out. */
-	private static final Vector4f SECTOR_GRID_COLOR = new Vector4f(0.35f, 0.7f, 1.0f, 0.6f);
-
 	/**
 	 * Draws a faint wireframe grid on the sector boundaries so the player can see where sectors begin and end.
 	 *
@@ -1284,10 +1396,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
 	}
 
-	/** Soft, dimmer blue for the dotted subsector grid drawn inside the camera's current sector. */
-	private static final Vector4f SECTOR_SUBGRID_COLOR = new Vector4f(0.4f, 0.65f, 0.95f, 0.3f);
-
-	/** Subsector divisions per axis (config), clamped to a sane 1-8. */
+	/**
+	 * Subsector divisions per axis (config), clamped to a sane 1-8.
+	 */
 	private int subsectorDivisions() {
 		int n = (int) Math.round(ConfigManager.getMainConfig().tacticalMapSubsectorDivisions.getValue());
 		return Math.max(1, Math.min(8, n));
@@ -1339,7 +1450,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GL11.glDisable(GL11.GL_LINE_STIPPLE);
 	}
 
-	/** Emits a sub-grid line split into {@code seg} pieces so the per-vertex distance fade is smooth. */
+	/**
+	 * Emits a sub-grid line split into {@code seg} pieces so the per-vertex distance fade is smooth.
+	 */
 	private void subGridLine(float x0, float y0, float z0, float x1, float y1, float z1, int seg, Vector3f camPos, float fadeDist) {
 		for(int m = 0; m < seg; m++) {
 			float t0 = (float) m / seg;
@@ -1349,12 +1462,16 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 	}
 
-	/** Emits one sector-grid vertex camera-relative, fading its alpha from {@link #SECTOR_GRID_COLOR} by distance. */
+	/**
+	 * Emits one sector-grid vertex camera-relative, fading its alpha from {@link #SECTOR_GRID_COLOR} by distance.
+	 */
 	private void gridVertex(float x, float y, float z, Vector3f camPos, float fadeDist) {
 		gridVertex(x, y, z, camPos, fadeDist, SECTOR_GRID_COLOR);
 	}
 
-	/** Emits one grid vertex camera-relative in {@code col}, fading its alpha by distance to the camera. */
+	/**
+	 * Emits one grid vertex camera-relative in {@code col}, fading its alpha by distance to the camera.
+	 */
 	private void gridVertex(float x, float y, float z, Vector3f camPos, float fadeDist, Vector4f col) {
 		float rx = x - camPos.x;
 		float ry = y - camPos.y;
@@ -1410,7 +1527,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GUIElement.disableOrthogonal();
 	}
 
-	/** Projects a world point (camera-relative, via the captured matrices) and draws centred text there. */
+	/**
+	 * Projects a world point (camera-relative, via the captured matrices) and draws centred text there.
+	 */
 	private void drawWorldLabel(float wx, float wy, float wz, String text) {
 		GL_WIN_COORDS.clear();
 		boolean ok = Project.gluProject(wx - lastCamPos.x, wy - lastCamPos.y, wz - lastCamPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
@@ -1436,7 +1555,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		overlay.draw();
 	}
 
-	/** Subsector index 0..n-1 for a sector-local coordinate (range -s/2..+s/2). */
+	/**
+	 * Subsector index 0..n-1 for a sector-local coordinate (range -s/2..+s/2).
+	 */
 	private int subsectorIndex(float local, float s, int n) {
 		int idx = (int) Math.floor(((local + s * 0.5f) / s) * n);
 		return Math.max(0, Math.min(n - 1, idx));
@@ -1457,6 +1578,242 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		Vector3f o = entity.getWorldTransform().origin; // sector-local position
 		return "" + (char) ('A' + subsectorIndex(o.x, s, n)) + (subsectorIndex(o.z, s, n) + 1);
+	}
+
+	/**
+	 * Draws the approach line for each incoming signature: a dotted segment from just outside the player's
+	 * sector boundary out toward the contact, coloured by (fidelity-masked) relation. Runs in the 3D pass,
+	 * camera-relative. Signatures whose entity is already locally visible (in {@link #drawMap}) are skipped —
+	 * the normal indicator takes over once a contact is close enough to load.
+	 */
+	private void drawIncomingSignatureLines() {
+		java.util.List<IncomingSignature> sigs = incomingSignatures;
+		if(sigs.isEmpty()) {
+			return;
+		}
+		float s = getSectorSize();
+		if(s <= 0) {
+			return;
+		}
+		GlUtil.glDisable(GL11.GL_LIGHTING);
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		GlUtil.glEnable(GL11.GL_COLOR_MATERIAL);
+		GlUtil.glEnable(GL11.GL_BLEND);
+		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPushMatrix();
+		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
+		GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glPushMatrix();
+		GlUtil.glLoadIdentity();
+		Vector3f camPos = loadCameraRelativeModelview();
+		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
+		GL11.glLineWidth(2.0f);
+		GL11.glEnable(GL11.GL_LINE_STIPPLE);
+		GL11.glLineStipple(3, (short) 0x7777);
+
+		long now = System.currentTimeMillis();
+		GlUtil.glBegin(GL11.GL_LINES);
+		for(IncomingSignature sig : sigs) {
+			if(drawMap.containsKey(sig.id)) {
+				continue;
+			}
+			Vector4f col = signatureColor(sig.relation);
+			float a = 0.35f + 0.55f * Math.max(0.0f, Math.min(1.0f, sig.fidelity));
+			// Contact position (camera-relative) — the bright head of the streak. Extrapolated along velocity
+			// from the last update so it glides between the 1 Hz detector packets instead of stepping.
+			effectiveRelPos(sig, now, sigPosTmp);
+			float cx = sigPosTmp.x - camPos.x;
+			float cy = sigPosTmp.y - camPos.y;
+			float cz = sigPosTmp.z - camPos.z;
+			float speed = sig.vel.length();
+			if(speed > 0.5f) {
+				// Moving contact: a comet tail trailing back along where it came from. Length scales with
+				// speed (clamped to a fraction of a sector), so faster contacts read as longer streaks and the
+				// bright head sits at the live position, sweeping forward as the contact advances.
+				float ux = sig.vel.x / speed, uy = sig.vel.y / speed, uz = sig.vel.z / speed;
+				float streak = Math.max(s * 0.2f, Math.min(s * 1.2f, speed * 6.0f));
+				GlUtil.glColor4fForced(col.x, col.y, col.z, a * 0.06f); // faint tail toward origin
+				GL11.glVertex3f(cx - ux * streak, cy - uy * streak, cz - uz * streak);
+				GlUtil.glColor4fForced(col.x, col.y, col.z, a); // bright head at current position
+				GL11.glVertex3f(cx, cy, cz);
+			} else {
+				// Stationary contact (e.g. freshly jumped in): a faint bearing line toward your sector centre.
+				float len = sig.relPos.length();
+				if(len < 1.0e-3f) {
+					continue;
+				}
+				float ux = sig.relPos.x / len, uy = sig.relPos.y / len, uz = sig.relPos.z / len;
+				float seg = Math.min(len, s * 0.4f);
+				GlUtil.glColor4fForced(col.x, col.y, col.z, a);
+				GL11.glVertex3f(cx, cy, cz);
+				GlUtil.glColor4fForced(col.x, col.y, col.z, a * 0.06f);
+				GL11.glVertex3f(cx - ux * seg, cy - uy * seg, cz - uz * seg);
+			}
+		}
+		GlUtil.glEnd();
+		GL11.glDisable(GL11.GL_LINE_STIPPLE);
+		GL11.glLineWidth(1.0f);
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GlUtil.glPopMatrix(); // modelview
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPopMatrix();
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glDisable(GL11.GL_BLEND);
+		GlUtil.glEnable(GL11.GL_LIGHTING);
+		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
+	}
+
+	/**
+	 * Draws the "Incoming Signature" labels (orthographic). Co-located contacts (a fleet) are merged into a
+	 * single "N Contacts" label with a relation breakdown so a cluster reads cleanly instead of stacking a
+	 * pile of overlapping labels. Detail still scales with fidelity for single contacts.
+	 */
+	private void drawIncomingSignatureLabels() {
+		java.util.List<IncomingSignature> all = incomingSignatures;
+		if(all.isEmpty()) {
+			return;
+		}
+		float s = getSectorSize();
+		if(s <= 0) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		// Visible contacts (not already shown as normal indicators) with their extrapolated positions.
+		java.util.List<IncomingSignature> vis = new java.util.ArrayList<>();
+		java.util.List<Vector3f> pos = new java.util.ArrayList<>();
+		for(IncomingSignature sig : all) {
+			if(drawMap.containsKey(sig.id)) {
+				continue;
+			}
+			Vector3f p = new Vector3f();
+			effectiveRelPos(sig, now, p);
+			vis.add(sig);
+			pos.add(p);
+		}
+		if(vis.isEmpty()) {
+			return;
+		}
+		// Greedy clustering by world distance (contacts within ~1/8 of a sector merge into one label).
+		float cd = s * 0.12f;
+		float cd2 = cd * cd;
+		boolean[] used = new boolean[vis.size()];
+
+		GUIElement.enableOrthogonal();
+		for(int i = 0; i < vis.size(); i++) {
+			if(used[i]) {
+				continue;
+			}
+			used[i] = true;
+			java.util.List<IncomingSignature> group = new java.util.ArrayList<>();
+			group.add(vis.get(i));
+			Vector3f centroid = new Vector3f(pos.get(i));
+			for(int j = i + 1; j < vis.size(); j++) {
+				if(used[j]) {
+					continue;
+				}
+				if(Vector3fTools.distanceSquared(pos.get(i), pos.get(j)) <= cd2) {
+					used[j] = true;
+					group.add(vis.get(j));
+					centroid.add(pos.get(j));
+				}
+			}
+			centroid.scale(1.0f / group.size());
+			drawSignatureGroupLabel(group, centroid);
+		}
+		GUIElement.disableOrthogonal();
+	}
+
+	/** Projects {@code relPos} and draws the label for a contact group (single contact or merged cluster). */
+	private void drawSignatureGroupLabel(java.util.List<IncomingSignature> group, Vector3f relPos) {
+		GL_WIN_COORDS.clear();
+		boolean ok = Project.gluProject(relPos.x - lastCamPos.x, relPos.y - lastCamPos.y, relPos.z - lastCamPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+		if(!ok) {
+			return;
+		}
+		float depth = GL_WIN_COORDS.get(2);
+		if(depth <= 0.0f || depth >= 1.0f) {
+			return;
+		}
+		int vpH = GL_VIEWPORT.get(3);
+		float sx = GL_WIN_COORDS.get(0);
+		float sy = vpH - GL_WIN_COORDS.get(1);
+
+		String text;
+		if(group.size() == 1) {
+			IncomingSignature sig = group.get(0);
+			text = (sig.kind == IncomingSignature.KIND_JUMP ? "! FTL Signature" : "Incoming Signature") + "\n" + relationText(sig.relation) + "\n" + massText(sig);
+		} else {
+			boolean anyJump = false;
+			for(IncomingSignature sig : group) {
+				if(sig.kind == IncomingSignature.KIND_JUMP) {
+					anyJump = true;
+					break;
+				}
+			}
+			text = group.size() + " Contacts" + (anyJump ? " (FTL)" : "") + "\n" + relationSummary(group);
+		}
+
+		GUITextOverlay overlay = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+		overlay.setTextSimple(text);
+		overlay.updateTextSize();
+		overlay.getPos().set((int) (sx - overlay.getWidth() / 2.0f), (int) (sy - overlay.getHeight() / 2.0f), 0);
+		overlay.draw();
+		TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(overlay);
+	}
+
+	/** Extrapolates a contact's position along its velocity from the last update (capped), for smooth motion. */
+	private void effectiveRelPos(IncomingSignature sig, long now, Vector3f out) {
+		float dt = Math.max(0.0f, Math.min(SIG_EXTRAPOLATE_CAP_S, (now - sig.clientReceived) / 1000.0f));
+		out.set(sig.relPos.x + sig.vel.x * dt, sig.relPos.y + sig.vel.y * dt, sig.relPos.z + sig.vel.z * dt);
+	}
+
+	/** A relation breakdown for a merged cluster, e.g. "2 Hostile, 3 Neutral", or just "Hostile" when uniform. */
+	private static String relationSummary(java.util.List<IncomingSignature> group) {
+		int[] counts = new int[4];
+		for(IncomingSignature sig : group) {
+			int r = sig.relation;
+			counts[r >= 0 && r < 4 ? r : IncomingSignature.REL_UNKNOWN]++;
+		}
+		int distinct = 0;
+		for(int c : counts) {
+			if(c > 0) {
+				distinct++;
+			}
+		}
+		// Order hostile-first so the most relevant standing leads.
+		int[] order = {IncomingSignature.REL_HOSTILE, IncomingSignature.REL_NEUTRAL, IncomingSignature.REL_FRIENDLY, IncomingSignature.REL_UNKNOWN};
+		if(distinct == 1) {
+			for(int r : order) {
+				if(counts[r] > 0) {
+					return shortRelation(r);
+				}
+			}
+		}
+		StringBuilder b = new StringBuilder();
+		for(int r : order) {
+			if(counts[r] > 0) {
+				if(b.length() > 0) {
+					b.append(", ");
+				}
+				b.append(counts[r]).append(' ').append(shortRelation(r));
+			}
+		}
+		return b.toString();
+	}
+
+	private static String shortRelation(int relation) {
+		switch(relation) {
+			case IncomingSignature.REL_FRIENDLY:
+				return "Friendly";
+			case IncomingSignature.REL_NEUTRAL:
+				return "Neutral";
+			case IncomingSignature.REL_HOSTILE:
+				return "Hostile";
+			default:
+				return "Unknown";
+		}
 	}
 
 	/**

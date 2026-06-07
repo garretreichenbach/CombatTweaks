@@ -8,6 +8,7 @@ import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.manager.*;
 import videogoose.combattweaks.network.client.*;
 import videogoose.combattweaks.network.server.SendArmorHPSyncPacket;
+import videogoose.combattweaks.network.server.SendIncomingSignaturesPacket;
 
 import java.util.Collections;
 import java.util.List;
@@ -36,6 +37,7 @@ public class CombatTweaks extends StarMod {
 		MoveManager.getInstance(); // Initialize move manager
 		MineManager.getInstance(); // Initialize mine manager
 		RepairManager.getInstance(); // Initialize repair manager
+		IncomingSignatureManager.getInstance(); // Initialize incoming-signature detector
 		registerPackets();
 	}
 
@@ -57,5 +59,6 @@ public class CombatTweaks extends StarMod {
 		PacketUtil.registerPacket(SendRepairPacket.class);
 		PacketUtil.registerPacket(SendMoveToPacket.class);
 		PacketUtil.registerPacket(SendArmorHPSyncPacket.class);
+		PacketUtil.registerPacket(SendIncomingSignaturesPacket.class);
 	}
 }
