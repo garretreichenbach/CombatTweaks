@@ -9,6 +9,7 @@ import org.schema.common.util.linAlg.Vector3b;
 import org.schema.common.util.linAlg.Vector3fTools;
 import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.SegmentBufferIteratorInterface;
+import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.controller.elements.ShipManagerContainer;
 import org.schema.game.common.data.SegmentPiece;
@@ -347,6 +348,41 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 		repositionStart.remove(id);
 		lastDebugLog.remove(id);
 		lastCargoWarn.remove(id);
+	}
+
+	/**
+	 * Drives an attack-ordered ship toward its target until it's comfortably within shooting range, then
+	 * hands movement back to the engine's engage cycle (which orients and fires).
+	 *
+	 * <p>The engine's fleet AI won't fly a lone ship to a distant target — its target search rejects
+	 * anything beyond {@code getShootingRange()} — so without this the ship just sits. We close the gap;
+	 * once in range we (re)assert the attack target so the engine acquires it, and stop steering so the
+	 * engine's own engage/orient/fire logic can take over without us fighting it.</p>
+	 */
+	private void handleAttack(Ship entity, int targetId, Timer timer) {
+		Object obj = GameCommon.getGameObject(targetId);
+		if(!(obj instanceof SegmentController target) || target.getWorldTransform() == null) {
+			return; // target gone — OrderQueueManager will retire the order
+		}
+		ShipAIEntity aiEntity = entity.getAiConfiguration().getAiEntityState();
+		float shootRange = aiEntity.getShootingRange();
+		Vector3f shipPos = entity.getWorldTransform().origin;
+		Vector3f targetPos = AIUtils.getTransformRelativeTo(entity, target).origin; // cross-sector aware
+		float dist = Vector3fTools.distance(shipPos.x, shipPos.y, shipPos.z, targetPos.x, targetPos.y, targetPos.z);
+
+		// Close to ~70% of weapon range so we're solidly inside the engine's engagement threshold.
+		float engageDist = Math.max(50.0f, shootRange * 0.7f);
+		if(dist > engageDist) {
+			aiEntity.setDockingTarget(null); // keep collision avoidance on while flying in
+			Vector3f dir = new Vector3f();
+			dir.sub(targetPos, shipPos);
+			aiEntity.moveTo(timer, dir, true);
+			debug(entity, "closing on attack target (" + (int) dist + " > " + (int) engageDist + ")");
+		} else {
+			// In range — make sure the engine is engaging this target, then let it drive/orient/fire.
+			AIUtils.setAttackTarget(entity.getId(), targetId);
+			debug(entity, "in range — engine engaging attack target");
+		}
 	}
 
 	/**
