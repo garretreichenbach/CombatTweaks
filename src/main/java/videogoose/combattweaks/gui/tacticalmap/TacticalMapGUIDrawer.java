@@ -8,6 +8,7 @@ import com.bulletphysics.linearmath.Transform;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.util.glu.Project;
 import org.schema.common.util.ByteUtil;
@@ -62,6 +63,59 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f PATH_ORANGE = new Vector4f(1.0f, 0.6f, 0.0f, 1.0f);  // orange for mining
 	private static final Vector4f PATH_MAGENTA = new Vector4f(1.0f, 0.2f, 0.8f, 1.0f); // magenta for repair
 	// Bounding box wireframe colors — solid pass (depth tested) and occluded pass (through geometry)
+	/**
+	 * Near/far planes for the map's 3D passes. These MUST match the planes the engine renders the sector
+	 * scene with ({@code MainGameGraphics}: near 0.05, far sectorSize*7) — otherwise our depth values don't
+	 * line up with what's in the depth buffer and depth-testing the highlight boxes fails (they'd draw over
+	 * geometry that should occlude them). Far is computed live from the sector size.
+	 */
+	private static final float SCENE_NEAR_PLANE = 0.05f;
+
+	private float sceneFarPlane() {
+		return getSectorSize() * 7.0f;
+	}
+
+	// Camera-relative rendering temporaries (see loadCameraRelativeModelview).
+	private final Transform crView = new Transform();
+	private final javax.vecmath.Matrix3f crBasisT = new javax.vecmath.Matrix3f();
+	private final Vector3f crCamPos = new Vector3f();
+	private final Transform relTransform = new Transform();
+	/** Camera world position captured for the current dotted-line batch. */
+	private final Vector3f pathCamPos = new Vector3f();
+
+	/**
+	 * Loads a <em>camera-relative</em> modelview matrix (the camera's rotation only, eye at the origin)
+	 * and returns the camera's world position.
+	 *
+	 * <p>StarMade world coordinates are large, and the engine renders the sector camera-relative for
+	 * precision. If we instead load the full view (rotation + large eye translation) and then multiply by
+	 * an entity's large world transform, the GPU computes {@code basis*entityPos − basis*camPos} — a
+	 * subtraction of two large floats that loses precision the farther the entity is, so our overlays
+	 * (boxes, paths) visibly drift off the ship at 1km+. By loading rotation-only here and subtracting the
+	 * camera position from each entity position on the CPU first, the GPU only ever sees small relative
+	 * offsets, so overlays stay locked to the engine-rendered geometry at any distance.</p>
+	 */
+	/** Multiplies the current (camera-relative) modelview by {@code worldTransform} shifted by {@code camPos}. */
+	private void multCameraRelative(Transform worldTransform, Vector3f camPos) {
+		relTransform.basis.set(worldTransform.basis);
+		relTransform.origin.set(worldTransform.origin);
+		relTransform.origin.sub(camPos);
+		GlUtil.glMultMatrix(relTransform);
+	}
+
+	private Vector3f loadCameraRelativeModelview() {
+		Transform view = camera.lookAt(false); // compute view (rotation + -basis*eye), don't load it
+		crBasisT.set(view.basis);
+		crBasisT.transpose();
+		crCamPos.set(view.origin);
+		crCamPos.negate();
+		crBasisT.transform(crCamPos); // eye world pos = -basisᵀ * view.origin
+		crView.setIdentity();
+		crView.basis.set(view.basis);
+		GlUtil.glLoadMatrix(crView);
+		return crCamPos;
+	}
+
 	private static final Vector4f OUTLINE_SELECTED = new Vector4f(1.0f, 1.0f, 0.0f, 1.0f);   // yellow, solid
 	private static final Vector4f OUTLINE_SELECTED_OCCLUDED = new Vector4f(1.0f, 1.0f, 0.0f, 0.15f);
 	private static final Vector4f OUTLINE_HOVERED = new Vector4f(1.0f, 1.0f, 1.0f, 0.6f);    // white, slightly transparent
@@ -657,7 +711,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
-		camera.lookAt(true);
+		pathCamPos.set(loadCameraRelativeModelview()); // capture camera pos for this batch; endpoints drawn relative to it
 		GL11.glLineWidth(2.0f); // Make paths more visible
 		GlUtil.glBegin(GL11.GL_LINES);
 	}
@@ -695,8 +749,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			a.scale(segStart);
 			b.set(dottedDirN);
 			b.scale(segEnd);
-			GL11.glVertex3f(from.x + a.x, from.y + a.y, from.z + a.z);
-			GL11.glVertex3f(from.x + b.x, from.y + b.y, from.z + b.z);
+			// Camera-relative: subtract the captured camera position so GPU coords stay small (precision).
+			GL11.glVertex3f(from.x - pathCamPos.x + a.x, from.y - pathCamPos.y + a.y, from.z - pathCamPos.z + a.z);
+			GL11.glVertex3f(from.x - pathCamPos.x + b.x, from.y - pathCamPos.y + b.y, from.z - pathCamPos.z + b.z);
 		}
 	}
 
@@ -744,6 +799,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			onInit();
 		}
 
+		syncViewport();
+
 		if(toggleDraw && Controller.getCamera() instanceof TacticalMapCamera) {
 			GlUtil.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 			GameClient.getClientPlayerState().getNetworkObject().selectedEntityId.set(-1);
@@ -760,6 +817,30 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		}
 		drawHudIndicators();
+	}
+
+	/**
+	 * Re-syncs the engine's cached GL viewport ({@link Controller#viewport}, what {@link GLFrame#getWidth()}
+	 * and {@code GUIElement.enableOrthogonal()} read) to the real window size.
+	 *
+	 * <p>The map projects entities to screen with the live {@code GL_VIEWPORT} but positions labels and
+	 * sizes its perspective from the cached viewport. The engine only refreshes that cache when it catches
+	 * a {@code Display.wasResized()} event — and a maximize/resize that lands during startup (before the GL
+	 * context is tracking resizes) can be missed, leaving the cache stuck at the initial size for the rest
+	 * of the session. Everything the map draws then ends up offset/mis-scaled. We self-heal: if the real
+	 * window size differs from the cached viewport, set the GL viewport and refresh the cache so all the
+	 * map's matrices (and the GUI ortho) agree with what's actually on screen.</p>
+	 */
+	private void syncViewport() {
+		try {
+			int dw = Display.getWidth();
+			int dh = Display.getHeight();
+			if(dw > 0 && dh > 0 && (dw != GLFrame.getWidth() || dh != GLFrame.getHeight())) {
+				GL11.glViewport(0, 0, dw, dh);
+				Controller.onViewportChange();
+			}
+		} catch(Exception ignored) {
+		}
 	}
 
 	/**
@@ -786,11 +867,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPushMatrix();
 		float aspect = (float) currentWidth / currentHeight;
-		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, 10, 25000, true);
+		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
-		camera.lookAt(true); // loads view matrix; push/pop above ensures GL state is restored
+		// Camera-relative modelview (rotation only); project points as (worldPos - camPos) for precision.
+		Vector3f camPos = loadCameraRelativeModelview();
 
 		GL_MODELVIEW.clear();
 		GL_PROJECTION.clear();
@@ -807,10 +889,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		int vpH = GL_VIEWPORT.get(3);
 
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			// Project entity center for label placement
+			// Project entity center for label placement (camera-relative: subtract camera position)
 			Vector3f pos = indicator.entityTransform.origin;
 			GL_WIN_COORDS.clear();
-			boolean ok = Project.gluProject(pos.x, pos.y, pos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+			boolean ok = Project.gluProject(pos.x - camPos.x, pos.y - camPos.y, pos.z - camPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
 			float depth = GL_WIN_COORDS.get(2);
 			indicator.screenPosValid = ok && depth > 0.0f && depth < 1.0f;
 			if(!indicator.screenPosValid) continue;
@@ -836,6 +918,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			for(int i = 0; i < 8; i++) {
 				tmpBboxCorner.set(bb.min.x + BBOX_XS[i] * (bb.max.x - bb.min.x), bb.min.y + BBOX_YS[i] * (bb.max.y - bb.min.y), bb.min.z + BBOX_ZS[i] * (bb.max.z - bb.min.z));
 				t.transform(tmpBboxCorner);
+				tmpBboxCorner.sub(camPos); // camera-relative
 				GL_WIN_COORDS.clear();
 				boolean cornerOk = Project.gluProject(tmpBboxCorner.x, tmpBboxCorner.y, tmpBboxCorner.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
 				if(!cornerOk) continue;
@@ -906,11 +989,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPushMatrix();
 		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
-		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, 10, 25000, true);
+		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
-		camera.lookAt(true);
+		Vector3f camPos = loadCameraRelativeModelview();
 		GL11.glLineWidth(2.0f);
 
 		// Pass 1: depth-tested — draw solid lines only where not occluded by geometry
@@ -925,7 +1008,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			Vector4f color = isSelected ? OUTLINE_SELECTED : OUTLINE_HOVERED;
 			GlUtil.glColor4f(color.x, color.y, color.z, color.w);
 			GlUtil.glPushMatrix();
-			GlUtil.glMultMatrix(indicator.entityTransform);
+			multCameraRelative(indicator.entityTransform, camPos);
 			drawAABBLines(bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z);
 			GlUtil.glPopMatrix();
 		}
@@ -942,7 +1025,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			Vector4f color = isSelected ? OUTLINE_SELECTED_OCCLUDED : OUTLINE_HOVERED_OCCLUDED;
 			GlUtil.glColor4f(color.x, color.y, color.z, color.w);
 			GlUtil.glPushMatrix();
-			GlUtil.glMultMatrix(indicator.entityTransform);
+			multCameraRelative(indicator.entityTransform, camPos);
 			drawAABBLines(bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z);
 			GlUtil.glPopMatrix();
 		}
@@ -955,7 +1038,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				if(bb == null) continue;
 				GlUtil.glColor4f(OUTLINE_TURRET.x, OUTLINE_TURRET.y, OUTLINE_TURRET.z, OUTLINE_TURRET.w);
 				GlUtil.glPushMatrix();
-				GlUtil.glMultMatrix(turret.getWorldTransform());
+				multCameraRelative(turret.getWorldTransform(), camPos);
 				drawAABBLines(bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z);
 				GlUtil.glPopMatrix();
 			}
@@ -967,7 +1050,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				if(bb == null) continue;
 				GlUtil.glColor4f(OUTLINE_TURRET_OCCLUDED.x, OUTLINE_TURRET_OCCLUDED.y, OUTLINE_TURRET_OCCLUDED.z, OUTLINE_TURRET_OCCLUDED.w);
 				GlUtil.glPushMatrix();
-				GlUtil.glMultMatrix(turret.getWorldTransform());
+				multCameraRelative(turret.getWorldTransform(), camPos);
 				drawAABBLines(bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z);
 				GlUtil.glPopMatrix();
 			}

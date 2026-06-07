@@ -13,6 +13,7 @@ import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.schine.graphicsengine.forms.BoundingBox;
 import videogoose.combattweaks.CombatTweaks;
+import videogoose.combattweaks.utils.AIUtils;
 
 import javax.vecmath.Vector3f;
 import java.util.Iterator;
@@ -55,6 +56,8 @@ public class MoveManager {
 	private static MoveManager instance;
 	/** Maps ship entity ID → destination world position. */
 	private final ConcurrentHashMap<Integer, Vector3f> assignments = new ConcurrentHashMap<>();
+	/** Ships whose move tracks a target entity (ship ID → target entity ID); destination is recomputed each tick. */
+	private final ConcurrentHashMap<Integer, Integer> entityTargets = new ConcurrentHashMap<>();
 	/** Tracks which ships have arrived and are holding position. */
 	private final ConcurrentHashMap<Integer, Boolean> arrivedStates = new ConcurrentHashMap<>();
 	private final ScheduledExecutorService scheduler;
@@ -101,7 +104,11 @@ public class MoveManager {
 	 * comes first.
 	 */
 	public static Vector3f computeDestination(SegmentController ship, SegmentController target) {
-		Vector3f targetPos = target.getWorldTransform().origin;
+		// World-transform origins are sector-local, so for a target in another sector we must rebase it
+		// into the ship's sector frame first — otherwise the destination is in the wrong coordinate frame
+		// and the ship never heads toward it (the "won't move to a distant object" bug). Copy the origin:
+		// the rebased transform is the target's shared clientTransform and may be overwritten elsewhere.
+		Vector3f targetPos = new Vector3f(AIUtils.getTransformRelativeTo(ship, target).origin);
 		Vector3f shipPos = ship.getWorldTransform().origin;
 
 		// Direction from target toward ship
@@ -141,6 +148,13 @@ public class MoveManager {
 	 */
 	private static void resolveNearbyConflicts(Vector3f dest, SegmentController ship, SegmentController target) {
 		int targetSector = target.getSectorId();
+		// dest is in the ship's sector frame; the obstacle entities below are read in their own (target's)
+		// frame. Those frames only line up when ship and target share a sector, so skip the nudge when
+		// they differ — comparing across frames would push the destination by a whole sector offset. The
+		// ship recomputes every tick and re-runs this once it arrives in the target's sector.
+		if(ship.getSectorId() != targetSector) {
+			return;
+		}
 		for(int iter = 0; iter < MAX_RESOLVE_ITERS; iter++) {
 			boolean anyConflict = false;
 			for(SegmentController other : GameServer.getServerState().getSegmentControllersByName().values()) {
@@ -178,7 +192,20 @@ public class MoveManager {
 
 	/** Register a move order for the given ship to the given destination. Replaces any existing order. */
 	public void addMove(int shipId, Vector3f destination) {
+		entityTargets.remove(shipId); // a fixed-point move no longer tracks an entity
 		assignments.put(shipId, new Vector3f(destination));
+	}
+
+	/**
+	 * Register a move order that tracks a target entity. The destination is recomputed every tick from
+	 * the live target, so it follows a moving target and — crucially — stays in the right coordinate
+	 * frame as the ship crosses sector boundaries (world-transform origins are sector-local, so a
+	 * destination snapshotted once goes stale by a full sector offset the moment the ship changes
+	 * sector). {@code initialDest} seeds the first tick.
+	 */
+	public void addMove(int shipId, int targetId, Vector3f initialDest) {
+		entityTargets.put(shipId, targetId);
+		assignments.put(shipId, new Vector3f(initialDest));
 	}
 
 	/**
@@ -194,6 +221,7 @@ public class MoveManager {
 	public void removeMove(int shipId) {
 		assignments.remove(shipId);
 		arrivedStates.remove(shipId);
+		entityTargets.remove(shipId);
 	}
 
 	// -------------------------------------------------------------------------
@@ -226,6 +254,19 @@ public class MoveManager {
 		// Only fleeted ships run the passive program that obeys our orders; if the ship has
 		// left its fleet, drop the assignment so we stop driving it into the autonomous AI.
 		if(!ship.isInFleet()) return false;
+
+		// Entity-tracking move: recompute the destination from the live target each tick so it follows a
+		// moving target and stays sector-correct as the ship crosses sector boundaries.
+		Integer targetId = entityTargets.get(shipId);
+		if(targetId != null) {
+			SimpleGameObject targetObj = (SimpleGameObject) GameCommon.getGameObject(targetId);
+			if(targetObj instanceof SegmentController target && target.getWorldTransform() != null) {
+				destination = computeDestination(ship, target);
+				assignments.put(shipId, destination);
+			} else {
+				return false; // target gone — drop the order
+			}
+		}
 
 		Vector3f shipPos = ship.getWorldTransform().origin;
 		float dist = Vector3fTools.distance(shipPos.x, shipPos.y, shipPos.z, destination.x, destination.y, destination.z);

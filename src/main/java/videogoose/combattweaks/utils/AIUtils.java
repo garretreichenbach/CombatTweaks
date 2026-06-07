@@ -1,10 +1,14 @@
 package videogoose.combattweaks.utils;
 
 import com.bulletphysics.dynamics.RigidBody;
+import com.bulletphysics.linearmath.Transform;
 import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
+import org.schema.game.common.data.world.Sector;
+import org.schema.game.common.data.world.SimpleTransformableSendableObject;
+import org.schema.game.server.data.GameServerState;
 import org.schema.game.common.controller.ai.AIConfiguationElements;
 import org.schema.game.common.controller.ai.Types;
 import org.schema.game.common.controller.rails.RailRelation;
@@ -54,6 +58,34 @@ public class AIUtils {
 	 */
 	public static boolean canReceiveOrders(SegmentController entity) {
 		return entity instanceof Ship && entity.isInFleet();
+	}
+
+	/**
+	 * Rebases {@code target}'s transform into {@code reference}'s sector frame and returns it.
+	 *
+	 * <p>StarMade world-transform origins are <em>sector-local</em> — each entity's
+	 * {@code getWorldTransform().origin} is relative to its own sector's center. So when a ship and its
+	 * target sit in different sectors, subtracting their raw origins yields a meaningless vector: the
+	 * direction points nowhere near the real target and the ship just sits still (the "won't move to a
+	 * distant object" / "won't fly to a far asteroid" bug). This mirrors the engine's own targeting
+	 * ({@code EngagingTargetSteady.findRotDir}): it calls {@link SimpleTransformableSendableObject#calcWorldTransformRelative}
+	 * to express the target in the reference's sector frame, then reads the corrected origin. After this
+	 * call the returned transform's {@code origin} is directly comparable with
+	 * {@code reference.getWorldTransform().origin}. Same-sector is a cheap identity copy.</p>
+	 *
+	 * @return the target's transform in the reference's sector frame (its {@code clientTransform},
+	 * which this call overwrites); falls back to the raw world transform if the sector can't be resolved.
+	 */
+	public static Transform getTransformRelativeTo(SegmentController reference, SimpleTransformableSendableObject<?> target) {
+		try {
+			Sector sec = ((GameServerState) reference.getState()).getUniverse().getSector(reference.getSectorId());
+			if(sec != null) {
+				target.calcWorldTransformRelative(reference.getSectorId(), sec.pos);
+				return target.getClientTransform();
+			}
+		} catch(Exception ignored) {
+		}
+		return target.getWorldTransform();
 	}
 
 	/** Whether the entity has any salvage (mining) beam blocks — required to accept a mine order. */
@@ -171,6 +203,18 @@ public class AIUtils {
 		}
 	}
 
+	/**
+	 * Leaves the FleetMining state (back to idle) so the ship stops firing — used when the target is too
+	 * far to mine, so the ship flies over under full power instead of burning the beam (and reactor) into
+	 * empty space. The mining assignment stays; the controller re-enters once it's close again.
+	 */
+	public static void exitMiningState(Ship ship) {
+		try {
+			ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.RESTART);
+		} catch(Exception ignored) {
+		}
+	}
+
 	public static void setRepairTarget(Ship ship, SegmentController target) {
 		try {
 			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
@@ -208,7 +252,9 @@ public class AIUtils {
 		if(ship instanceof Ship && target != null && ship.getWorldTransform() != null && target.getWorldTransform() != null) {
 			Vector3f dest = MoveManager.computeDestination(ship, target);
 			clearTarget((Ship) ship);
-			MoveManager.getInstance().addMove(shipId, dest);
+			// Track the target entity so the destination is recomputed each tick (follows a moving target
+			// and stays sector-correct as the ship crosses sector boundaries).
+			MoveManager.getInstance().addMove(shipId, targetId, dest);
 		}
 	}
 

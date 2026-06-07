@@ -11,7 +11,15 @@ import org.schema.game.common.data.world.SegmentData;
 import javax.vecmath.Vector3f;
 
 /**
- * Segment-buffer iterator that finds the valid block on a structure nearest a given point.
+ * Segment-buffer iterator that finds the valid block on a structure <em>nearest</em> a given point.
+ *
+ * <p>It checks <em>every</em> valid block, not just the first per segment. Picking only the first block
+ * of the nearest segment aims at an arbitrary corner of a 32&sup3; segment — up to ~55 blocks off the
+ * real nearest surface — so salvage beams rayed toward it skim past the rock and "shoot near it" without
+ * hitting blocks. Comparison is done in the structure's <em>local</em> frame: the query point is
+ * inverse-transformed once in {@link #reset}, then each block is compared in local space (rigid
+ * transforms preserve distance, so the nearest block is the same in both frames). That avoids a
+ * per-block world-transform, which keeps the full scan cheap enough to run each mining tick.</p>
  *
  * <p>Kept as a normal top-level class (not nested inside a Mixin) because SpongePowered Mixin cannot
  * reliably relocate inner classes declared inside a {@code @Mixin} type — doing so produces a mangled
@@ -19,8 +27,8 @@ import javax.vecmath.Vector3f;
  */
 public final class NearestBlockPiece implements SegmentBufferIteratorInterface {
 
-	private final Vector3f point = new Vector3f();
-	private Transform worldTransform;
+	/** Query point expressed in the structure's local frame (set once in {@link #reset}). */
+	private final Vector3f localPoint = new Vector3f();
 	private final Vector3b helper = new Vector3b();
 	private final SegmentPiece tmp = new SegmentPiece();
 	private final Vector3f cand = new Vector3f();
@@ -31,10 +39,14 @@ public final class NearestBlockPiece implements SegmentBufferIteratorInterface {
 	public boolean found;
 	private float bestDistSq;
 
-	/** Reset for a fresh search from {@code point}, with the structure's world transform. */
+	/** Reset for a fresh search from {@code point} (world space), with the structure's world transform. */
 	public void reset(Vector3f point, Transform worldTransform) {
-		this.point.set(point);
-		this.worldTransform = worldTransform;
+		// Transform the query point into the structure's local frame once, so per-block comparisons need
+		// no transform. getAbsolutePos returns local (structure-relative) coordinates.
+		Transform inv = new Transform(worldTransform);
+		inv.inverse();
+		this.localPoint.set(point);
+		inv.transform(this.localPoint);
 		this.bestSegment = null;
 		this.found = false;
 		this.bestDistSq = Float.MAX_VALUE;
@@ -54,10 +66,9 @@ public final class NearestBlockPiece implements SegmentBufferIteratorInterface {
 				cand.x -= SegmentData.SEG_HALF;
 				cand.y -= SegmentData.SEG_HALF;
 				cand.z -= SegmentData.SEG_HALF;
-				worldTransform.transform(cand);
-				float dx = cand.x - point.x;
-				float dy = cand.y - point.y;
-				float dz = cand.z - point.z;
+				float dx = cand.x - localPoint.x;
+				float dy = cand.y - localPoint.y;
+				float dz = cand.z - localPoint.z;
 				float distSq = dx * dx + dy * dy + dz * dz;
 				if(distSq < bestDistSq) {
 					bestDistSq = distSq;
@@ -65,7 +76,6 @@ public final class NearestBlockPiece implements SegmentBufferIteratorInterface {
 					bestPos.set(helper);
 					found = true;
 				}
-				break; // first valid block per segment is enough to rank segments by nearness
 			}
 		}
 		return false;
