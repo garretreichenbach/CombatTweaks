@@ -121,6 +121,16 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 	public void use(Ship entity, ShipManagerContainer managerContainer, Timer timer) {
 		try {
 			int id = entity.getId();
+
+			// Attack: the engine only engages a target already within shooting range (a lone fleet ship has
+			// no flagship to fly it there), so drive the ship into range ourselves, then hand off to the
+			// engine's engage cycle to orient and fire.
+			Integer attackTargetId = AIUtils.getAttackTarget(id);
+			if(attackTargetId != null) {
+				handleAttack(entity, attackTargetId, timer);
+				return;
+			}
+
 			Integer asteroidId = MineManager.getInstance().getAssignedTarget(id);
 			if(asteroidId == null) {
 				clearShipState(id);
