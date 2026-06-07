@@ -33,6 +33,7 @@ import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.graphicsengine.core.settings.ContextFilter;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.BoundingBox;
+import org.schema.schine.graphicsengine.forms.font.FontLibrary;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
 import org.schema.schine.input.InputType;
@@ -98,6 +99,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private final Transform relTransform = new Transform();
 	/** Camera world position captured for the current dotted-line batch. */
 	private final Vector3f pathCamPos = new Vector3f();
+	/** Camera world position from the last {@link #computeScreenPositions} pass; reused to project grid labels. */
+	private final Vector3f lastCamPos = new Vector3f();
+	/** Reusable scratch for reading an entity's sector coords in {@link #getEntityDisplay}. */
+	private final Vector3i tmpEntitySector = new Vector3i();
+	/** Dedicated large-font overlay for the sector-grid wall labels (kept separate from the entity-label pool). */
+	private GUITextOverlay gridLabelOverlay;
 
 	/**
 	 * Loads a <em>camera-relative</em> modelview matrix (the camera's rotation only, eye at the origin)
@@ -907,6 +914,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawBoundingBoxWireframes();
 			drawPaths();
 			drawLabels();
+			drawSectorGridLabels();
 			drawDragSelectRect();
 			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		}
@@ -967,6 +975,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glLoadIdentity();
 		// Camera-relative modelview (rotation only); project points as (worldPos - camPos) for precision.
 		Vector3f camPos = loadCameraRelativeModelview();
+		lastCamPos.set(camPos); // reused by the sector-grid label pass (same captured matrices)
 
 		GL_MODELVIEW.clear();
 		GL_PROJECTION.clear();
@@ -1065,6 +1074,14 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				builder.append(StringTools.formatDistance(camDist)).append("\n");
 			}
 		}
+		// Absolute sector coords plus the subsector (e.g. "C3") the entity occupies within that sector.
+		Vector3i sec = entity.getSector(tmpEntitySector);
+		builder.append("Sector (").append(sec.x).append(", ").append(sec.y).append(", ").append(sec.z).append(")");
+		String sub = subsectorLabel(entity);
+		if(sub != null) {
+			builder.append(" [").append(sub);
+		}
+		builder.append("]\n");
 		if(indicator.getCurrentTarget() != null) {
 			builder.append("Engaging ").append(indicator.getCurrentTarget().getName());
 		}
@@ -1252,6 +1269,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		GlUtil.glEnd();
 
+		// Dotted sub-grid dividing the sector the camera is over into subsectors (chessboard-style cells).
+		if(subsectorDivisions() >= 2) {
+			drawSubGrid(csx, csy, csz, s, camPos);
+		}
+
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GlUtil.glPopMatrix(); // modelview
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
@@ -1262,15 +1284,179 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
 	}
 
+	/** Soft, dimmer blue for the dotted subsector grid drawn inside the camera's current sector. */
+	private static final Vector4f SECTOR_SUBGRID_COLOR = new Vector4f(0.4f, 0.65f, 0.95f, 0.3f);
+
+	/** Subsector divisions per axis (config), clamped to a sane 1-8. */
+	private int subsectorDivisions() {
+		int n = (int) Math.round(ConfigManager.getMainConfig().tacticalMapSubsectorDivisions.getValue());
+		return Math.max(1, Math.min(8, n));
+	}
+
+	/**
+	 * Draws a dotted grid on the six faces of the sector cube the camera is over, subdividing it into an
+	 * N×N×N lattice of subsectors. We draw on the faces only (not a full interior volume of lines) so it
+	 * reads as a clearly divided box rather than an opaque cage; lines are stippled, dim and distance-faded.
+	 * The cube spans (cs±0.5)*sectorSize on each axis, matching the solid boundary already drawn by the main
+	 * grid.
+	 */
+	private void drawSubGrid(int csx, int csy, int csz, float s, Vector3f camPos) {
+		int n = subsectorDivisions();
+		float step = s / n;
+		float baseX = (csx - 0.5f) * s;
+		float baseY = (csy - 0.5f) * s;
+		float baseZ = (csz - 0.5f) * s;
+		float[] gx = new float[n + 1];
+		float[] gy = new float[n + 1];
+		float[] gz = new float[n + 1];
+		for(int m = 0; m <= n; m++) {
+			gx[m] = baseX + m * step;
+			gy[m] = baseY + m * step;
+			gz[m] = baseZ + m * step;
+		}
+		float fadeDist = 1.25f * s; // sub-grid belongs to one sector; fade it out within ~a sector
+
+		GL11.glEnable(GL11.GL_LINE_STIPPLE);
+		GL11.glLineStipple(2, (short) 0xAAAA); // fine dotted pattern
+		GlUtil.glBegin(GL11.GL_LINES);
+		float xLo = gx[0], xHi = gx[n], yLo = gy[0], yHi = gy[n], zLo = gz[0], zHi = gz[n];
+		// Faces perpendicular to X (the two y/z faces): grid lines parallel to Y and to Z.
+		for(float xf : new float[]{xLo, xHi}) {
+			for(int k = 0; k <= n; k++) subGridLine(xf, yLo, gz[k], xf, yHi, gz[k], n, camPos, fadeDist);
+			for(int j = 0; j <= n; j++) subGridLine(xf, gy[j], zLo, xf, gy[j], zHi, n, camPos, fadeDist);
+		}
+		// Faces perpendicular to Y: grid lines parallel to X and to Z.
+		for(float yf : new float[]{yLo, yHi}) {
+			for(int k = 0; k <= n; k++) subGridLine(xLo, yf, gz[k], xHi, yf, gz[k], n, camPos, fadeDist);
+			for(int i = 0; i <= n; i++) subGridLine(gx[i], yf, zLo, gx[i], yf, zHi, n, camPos, fadeDist);
+		}
+		// Faces perpendicular to Z: grid lines parallel to X and to Y.
+		for(float zf : new float[]{zLo, zHi}) {
+			for(int j = 0; j <= n; j++) subGridLine(xLo, gy[j], zf, xHi, gy[j], zf, n, camPos, fadeDist);
+			for(int i = 0; i <= n; i++) subGridLine(gx[i], yLo, zf, gx[i], yHi, zf, n, camPos, fadeDist);
+		}
+		GlUtil.glEnd();
+		GL11.glDisable(GL11.GL_LINE_STIPPLE);
+	}
+
+	/** Emits a sub-grid line split into {@code seg} pieces so the per-vertex distance fade is smooth. */
+	private void subGridLine(float x0, float y0, float z0, float x1, float y1, float z1, int seg, Vector3f camPos, float fadeDist) {
+		for(int m = 0; m < seg; m++) {
+			float t0 = (float) m / seg;
+			float t1 = (float) (m + 1) / seg;
+			gridVertex(x0 + (x1 - x0) * t0, y0 + (y1 - y0) * t0, z0 + (z1 - z0) * t0, camPos, fadeDist, SECTOR_SUBGRID_COLOR);
+			gridVertex(x0 + (x1 - x0) * t1, y0 + (y1 - y0) * t1, z0 + (z1 - z0) * t1, camPos, fadeDist, SECTOR_SUBGRID_COLOR);
+		}
+	}
+
 	/** Emits one sector-grid vertex camera-relative, fading its alpha from {@link #SECTOR_GRID_COLOR} by distance. */
 	private void gridVertex(float x, float y, float z, Vector3f camPos, float fadeDist) {
+		gridVertex(x, y, z, camPos, fadeDist, SECTOR_GRID_COLOR);
+	}
+
+	/** Emits one grid vertex camera-relative in {@code col}, fading its alpha by distance to the camera. */
+	private void gridVertex(float x, float y, float z, Vector3f camPos, float fadeDist, Vector4f col) {
 		float rx = x - camPos.x;
 		float ry = y - camPos.y;
 		float rz = z - camPos.z;
 		float dist = (float) Math.sqrt(rx * rx + ry * ry + rz * rz);
 		float t = fadeDist > 0 ? Math.max(0.0f, 1.0f - dist / fadeDist) : 1.0f;
-		GlUtil.glColor4fForced(SECTOR_GRID_COLOR.x, SECTOR_GRID_COLOR.y, SECTOR_GRID_COLOR.z, SECTOR_GRID_COLOR.w * t);
+		GlUtil.glColor4fForced(col.x, col.y, col.z, col.w * t);
 		GL11.glVertex3f(rx, ry, rz);
+	}
+
+	/**
+	 * Draws the A/B/C (X axis) and 1/2/3 (Z axis) subsector labels on the walls of the sector the camera is
+	 * over, like the galaxy map's coordinate grid. The tactical-map camera usually sits <em>inside</em> the
+	 * current sector (it orbits the player's ship), so unlike the galaxy map — whose camera is always outside
+	 * its grid — flat outward-facing wall text would face away and read mirrored. Instead the labels are
+	 * billboarded (screen-facing) and pinned to the wall surfaces, placed on the wall <em>farthest</em> from
+	 * the camera per axis so they sit as a backdrop behind the ships rather than floating in front of them.
+	 * Runs in the orthographic pass, reusing the matrices/camera captured by {@link #computeScreenPositions}.
+	 */
+	private void drawSectorGridLabels() {
+		if(!ConfigManager.getMainConfig().tacticalMapSectorGrid.getValue()) {
+			return;
+		}
+		int n = subsectorDivisions();
+		if(n < 2) {
+			return;
+		}
+		float s = getSectorSize();
+		if(s <= 0) {
+			return;
+		}
+		int csx = Math.round(lastCamPos.x / s);
+		int csy = Math.round(lastCamPos.y / s);
+		int csz = Math.round(lastCamPos.z / s);
+		float step = s / n;
+		float xLo = (csx - 0.5f) * s, xHi = (csx + 0.5f) * s;
+		float zLo = (csz - 0.5f) * s, zHi = (csz + 0.5f) * s;
+		float yMid = csy * s; // wall vertical centre
+		// Pick the wall on the far side of the camera for each axis, so labels back the scene rather than
+		// occluding it. (Letters live on a constant-Z wall and span X; numbers on a constant-X wall span Z.)
+		float farZ = lastCamPos.z <= csz * s ? zHi : zLo;
+		float farX = lastCamPos.x <= csx * s ? xHi : xLo;
+
+		GUIElement.enableOrthogonal();
+		// Letters (X columns) across the far Z wall.
+		for(int i = 0; i < n; i++) {
+			drawWorldLabel(xLo + (i + 0.5f) * step, yMid, farZ, String.valueOf((char) ('A' + i)));
+		}
+		// Numbers (Z rows) across the far X wall.
+		for(int k = 0; k < n; k++) {
+			drawWorldLabel(farX, yMid, zLo + (k + 0.5f) * step, String.valueOf(k + 1));
+		}
+		GUIElement.disableOrthogonal();
+	}
+
+	/** Projects a world point (camera-relative, via the captured matrices) and draws centred text there. */
+	private void drawWorldLabel(float wx, float wy, float wz, String text) {
+		GL_WIN_COORDS.clear();
+		boolean ok = Project.gluProject(wx - lastCamPos.x, wy - lastCamPos.y, wz - lastCamPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+		if(!ok) {
+			return;
+		}
+		float depth = GL_WIN_COORDS.get(2);
+		if(depth <= 0.0f || depth >= 1.0f) {
+			return; // behind the camera or beyond the far plane
+		}
+		int vpH = GL_VIEWPORT.get(3);
+		float sx = GL_WIN_COORDS.get(0);
+		float sy = vpH - GL_WIN_COORDS.get(1);
+		// Dedicated large-font overlay so the grid labels are bigger than the entity name labels (which use
+		// the shared pool). Lazily created and reused across all grid labels.
+		if(gridLabelOverlay == null) {
+			gridLabelOverlay = new GUITextOverlay(64, 64, FontLibrary.getBoldArial40WhiteNoOutline(), GameClient.getClientState());
+		}
+		GUITextOverlay overlay = gridLabelOverlay;
+		overlay.setTextSimple(text);
+		overlay.updateTextSize();
+		overlay.getPos().set((int) (sx - overlay.getWidth() / 2.0f), (int) (sy - overlay.getHeight() / 2.0f), 0);
+		overlay.draw();
+	}
+
+	/** Subsector index 0..n-1 for a sector-local coordinate (range -s/2..+s/2). */
+	private int subsectorIndex(float local, float s, int n) {
+		int idx = (int) Math.floor(((local + s * 0.5f) / s) * n);
+		return Math.max(0, Math.min(n - 1, idx));
+	}
+
+	/**
+	 * Subsector designation for an entity within its own sector — X column as a letter, Z row as a number
+	 * (e.g. "C3"), matching the on-grid axis labels. Null when subsectors are disabled.
+	 */
+	private String subsectorLabel(SegmentController entity) {
+		int n = subsectorDivisions();
+		if(n < 2) {
+			return null;
+		}
+		float s = getSectorSize();
+		if(s <= 0 || entity.getWorldTransform() == null) {
+			return null;
+		}
+		Vector3f o = entity.getWorldTransform().origin; // sector-local position
+		return "" + (char) ('A' + subsectorIndex(o.x, s, n)) + (subsectorIndex(o.z, s, n) + 1);
 	}
 
 	/**
