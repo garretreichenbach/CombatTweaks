@@ -36,8 +36,7 @@ public class TacticalMapTurretSelector {
 
 		int i = 0;
 		for(RailRelation child : entity.railController.next) {
-			if(child.docked.getSegmentController() instanceof Ship) {
-				Ship dockedShip = (Ship) child.docked.getSegmentController();
+			if(child.docked.getSegmentController() instanceof Ship dockedShip) {
 				if(dockedShip.isAIControlled()) {
 					availableTurrets.add(new TurretInfo(dockedShip, "Turret " + (i + 1) + " (" + StringTools.massFormat(dockedShip.getMassWithDocks()) + ")", i));
 					i++;
