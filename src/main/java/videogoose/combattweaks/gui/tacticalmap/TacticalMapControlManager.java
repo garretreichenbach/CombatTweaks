@@ -356,7 +356,12 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	private void focusCameraOnEntity(SegmentController entity) {
 		if(entity == null || guiDrawer.camera == null) return;
 
-		Vector3f target = entity.getWorldTransform().origin;
+		// Use the engine's client render transform, which rebases entities in other sectors into the player's
+		// sector frame — the same frame the camera and all the map's drawables live in. The raw world
+		// transform is sector-local, so for a contact in another sector it would send the camera to a point
+		// a whole sector (or more) away from where the entity is actually drawn.
+		com.bulletphysics.linearmath.Transform ct = entity.getWorldTransformOnClient();
+		Vector3f target = (ct != null ? ct : entity.getWorldTransform()).origin;
 
 		// Preserve current camera heading (yaw) so orientation feels natural
 		Vector3f camPos = guiDrawer.camera.getWorldTransform().origin;

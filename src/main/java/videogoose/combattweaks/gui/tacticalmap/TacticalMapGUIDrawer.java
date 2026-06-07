@@ -705,10 +705,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			if(!isOwnShip && !isSelected && !isHovered) continue;
 
 			// Heading line (pale blue): the entity's actual velocity vector — where it's really moving right
-			// now, independent of any order. Length scales with speed (clamped to a fraction of a sector).
-			Vector3f vel = indicator.getEntity().getLinearVelocity(new Vector3f());
+			// now, independent of any order. Skipped for own-faction ships, whose command/target vectors
+			// already show intent and would clash with this. Length scales with speed (clamped per sector).
+			Vector3f vel = new Vector3f();
+			indicator.getEstimatedVelocity(vel);
 			float speed = vel.length();
-			if(speed > 1.0f) {
+			if(!isOwnShip && speed > 1.0f) {
 				float sec = getSectorSize();
 				float len = Math.max(sec * 0.05f, Math.min(sec * 0.5f, speed * 2.0f));
 				Vector3f hStart = new Vector3f(indicator.entityTransform.origin);
@@ -1175,9 +1177,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		// Total mass (including docked turrets/entities), so the player can gauge a ship's size at a glance.
 		builder.append(StringTools.massFormat(entity.getMassWithDocks())).append(" Mass\n");
-		// Current speed (velocity magnitude). Shown for everything; a parked ship reads "0.0 m/s".
-		float speed = entity.getLinearVelocity(new Vector3f()).length();
-		builder.append(StringTools.formatPointZero(speed)).append(" m/s\n");
+		// Current speed (client-side estimate; the RigidBody velocity flickers on the client). Shown for
+		// everything; a parked ship reads "0.0 m/s".
+		builder.append(StringTools.formatPointZero(indicator.getEstimatedSpeed())).append(" m/s\n");
 		if(!entity.equals(playerEntity)) {
 			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
 				builder.append("???km\n");

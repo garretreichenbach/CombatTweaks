@@ -42,7 +42,7 @@ public class EventManager {
 		FastListenerCommon.damageReductionByArmorCalcListeners.add(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl());
 		FastListenerCommon.customAddOnUseListeners.add(miningSalvageListener = new MiningSalvageListener());
 
-		StarLoader.registerListener(HudCreateEvent.class, new Listener<HudCreateEvent>() {
+		StarLoader.registerListener(HudCreateEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(HudCreateEvent event) {
 				HudManager.initializeHud(event);
@@ -51,7 +51,7 @@ public class EventManager {
 
 		// Record FTL arrivals so the incoming-signature detector can flag a freshly jumped-in ship even if
 		// it's sitting still afterwards (and tag it as a JUMP contact for the dramatic "FTL inbound" label).
-		StarLoader.registerListener(ShipJumpEngageEvent.class, new Listener<ShipJumpEngageEvent>() {
+		StarLoader.registerListener(ShipJumpEngageEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(ShipJumpEngageEvent event) {
 				try {
@@ -63,14 +63,14 @@ public class EventManager {
 			}
 		}, instance);
 
-		StarLoader.registerListener(TargetPanelCreateEvent.class, new Listener<TargetPanelCreateEvent>() {
+		StarLoader.registerListener(TargetPanelCreateEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(TargetPanelCreateEvent event) {
 				HudManager.initializeTargetPanel(event);
 			}
 		}, instance);
 
-		StarLoader.registerListener(KeyPressEvent.class, new Listener<KeyPressEvent>() {
+		StarLoader.registerListener(KeyPressEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(KeyPressEvent event) {
 				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
@@ -94,14 +94,14 @@ public class EventManager {
 		}, instance);
 
 
-		StarLoader.registerListener(RegisterConfigGroupsEvent.class, new Listener<RegisterConfigGroupsEvent>() {
+		StarLoader.registerListener(RegisterConfigGroupsEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(RegisterConfigGroupsEvent event) {
 				ConfigGroupRegistry.registerEffects(event.getModConfigGroups());
 			}
 		}, instance);
 
-		StarLoader.registerListener(RegisterWorldDrawersEvent.class, new Listener<RegisterWorldDrawersEvent>() {
+		StarLoader.registerListener(RegisterWorldDrawersEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(RegisterWorldDrawersEvent event) {
 				if(TacticalMapGUIDrawer.getInstance() == null) {
@@ -110,7 +110,7 @@ public class EventManager {
 			}
 		}, instance);
 
-		StarLoader.registerListener(ManagerContainerRegisterEvent.class, new Listener<ManagerContainerRegisterEvent>() {
+		StarLoader.registerListener(ManagerContainerRegisterEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(ManagerContainerRegisterEvent event) {
 				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID));
@@ -120,14 +120,14 @@ public class EventManager {
 			}
 		}, instance);
 
-		StarLoader.registerListener(StructureStatsGroupsAddEvent.class, new Listener<StructureStatsGroupsAddEvent>() {
+		StarLoader.registerListener(StructureStatsGroupsAddEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(StructureStatsGroupsAddEvent event) {
 				event.addGroup(new AdvancedStructureStatsArmor(event.getAdvancedStructureStats()));
 			}
 		}, instance);
 
-		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<SegmentPieceAddByMetadataEvent>() {
+		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(SegmentPieceAddByMetadataEvent event) {
 				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) {
@@ -144,7 +144,7 @@ public class EventManager {
 			}
 		}, instance);
 
-		StarLoader.registerListener(SegmentPieceAddEvent.class, new Listener<SegmentPieceAddEvent>() {
+		StarLoader.registerListener(SegmentPieceAddEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(SegmentPieceAddEvent event) {
 				if(!ElementKeyMap.getInfo(event.getNewType()).isArmor()) {
@@ -161,7 +161,7 @@ public class EventManager {
 			}
 		}, instance);
 
-		StarLoader.registerListener(SegmentPieceRemoveEvent.class, new Listener<SegmentPieceRemoveEvent>() {
+		StarLoader.registerListener(SegmentPieceRemoveEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(SegmentPieceRemoveEvent event) {
 				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) {
