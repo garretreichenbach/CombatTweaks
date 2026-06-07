@@ -100,8 +100,9 @@ public class RepairManager {
 		if(ship.getWorldTransform() == null) {
 			return false;
 		}
-		// Only fleeted ships obey our orders; drop the assignment if the ship left its fleet.
-		if(!ship.isInFleet()) {
+		// Only fleeted ships obey our orders; drop only after a confirmed (non-transient) fleet loss, so a
+		// fleet edit's brief uncache/re-cache doesn't silently kill the repair order.
+		if(AIUtils.confirmedLeftFleet(ship)) {
 			return false;
 		}
 

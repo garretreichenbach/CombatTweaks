@@ -7,6 +7,7 @@ import org.schema.game.common.controller.ai.AIConfiguationElements;
 import org.schema.game.common.controller.ai.Types;
 import org.schema.game.common.data.SimpleGameObject;
 import videogoose.combattweaks.CombatTweaks;
+import videogoose.combattweaks.utils.AIUtils;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -95,8 +96,9 @@ public class MineManager {
 			return false;
 		}
 		Ship ship = (Ship) shipObj;
-		// Only fleeted ships obey our orders; drop the assignment if the ship left its fleet.
-		if(!ship.isInFleet()) {
+		// Only fleeted ships obey our orders; drop only after a confirmed (non-transient) fleet loss, so a
+		// fleet edit's brief uncache/re-cache doesn't silently kill the mining order.
+		if(AIUtils.confirmedLeftFleet(ship)) {
 			return false;
 		}
 		// Keep AI active so the ship updates (and our salvage controller runs) each server tick.

@@ -217,6 +217,24 @@ public class MoveManager {
 		return destination != null ? new Vector3f(destination) : null;
 	}
 
+	/**
+	 * Whether the ship has reached its move destination and is now just holding position. The tactical map
+	 * uses this to stop drawing the move line once the ship has arrived (the assignment is intentionally
+	 * kept afterwards so the ship re-acquires if knocked away, but the line shouldn't keep showing).
+	 */
+	public boolean isArrived(int shipId) {
+		return arrivedStates.getOrDefault(shipId, false);
+	}
+
+	/**
+	 * The entity this ship's move is tracking, or null for a fixed-point move. Used by the tactical map to
+	 * draw the move line to the target's live client position (correct across sectors) rather than the
+	 * server-computed destination point, which is in the ship's sector frame and won't line up.
+	 */
+	public Integer getTargetEntityId(int shipId) {
+		return entityTargets.get(shipId);
+	}
+
 	/** Cancel any active move order for the given ship. */
 	public void removeMove(int shipId) {
 		assignments.remove(shipId);
@@ -251,9 +269,9 @@ public class MoveManager {
 
 		ManagedUsableSegmentController<?> ship = (ManagedUsableSegmentController<?>) obj;
 		if(ship.getWorldTransform() == null) return false;
-		// Only fleeted ships run the passive program that obeys our orders; if the ship has
-		// left its fleet, drop the assignment so we stop driving it into the autonomous AI.
-		if(!ship.isInFleet()) return false;
+		// Only fleeted ships run the passive program that obeys our orders; drop only after a confirmed
+		// (non-transient) fleet loss, so a fleet edit's brief uncache/re-cache doesn't kill the move order.
+		if(AIUtils.confirmedLeftFleet(ship)) return false;
 
 		// Entity-tracking move: recompute the destination from the live target each tick so it follows a
 		// moving target and stays sector-correct as the ship crosses sector boundaries.

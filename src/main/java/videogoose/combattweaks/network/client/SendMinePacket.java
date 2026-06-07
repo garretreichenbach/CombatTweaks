@@ -7,7 +7,7 @@ import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import api.utils.game.PlayerUtils;
 import org.schema.game.common.data.player.PlayerState;
-import videogoose.combattweaks.manager.MineManager;
+import videogoose.combattweaks.manager.OrderQueueManager;
 import videogoose.combattweaks.utils.AIUtils;
 import videogoose.combattweaks.utils.EntityUtils;
 
@@ -16,30 +16,30 @@ import java.io.IOException;
 public class SendMinePacket extends Packet {
 	private int shipId;
 	private int asteroidId;
+	/** When true, append after existing orders instead of replacing them (shift-held). */
+	private boolean queue;
 
 	public SendMinePacket() {
 	}
 
-	public SendMinePacket(Ship ship, SegmentController asteroid) {
+	public SendMinePacket(Ship ship, SegmentController asteroid, boolean queue) {
 		shipId = ship.getId();
 		asteroidId = asteroid.getId();
-	}
-
-	public SendMinePacket(int shipId, int asteroidId) {
-		this.shipId = shipId;
-		this.asteroidId = asteroidId;
+		this.queue = queue;
 	}
 
 	@Override
 	public void readPacketData(PacketReadBuffer buf) throws IOException {
 		shipId = buf.readInt();
 		asteroidId = buf.readInt();
+		queue = buf.readBoolean();
 	}
 
 	@Override
 	public void writePacketData(PacketWriteBuffer buf) throws IOException {
 		buf.writeInt(shipId);
 		buf.writeInt(asteroidId);
+		buf.writeBoolean(queue);
 	}
 
 	@Override
@@ -58,7 +58,10 @@ public class SendMinePacket extends Packet {
 			}
 			return;
 		}
-		AIUtils.clearAllOrders(shipId);
-		MineManager.getInstance().addMine(shipId, asteroidId);
+		if(queue) {
+			OrderQueueManager.getInstance().enqueue(shipId, OrderQueueManager.OrderType.MINE, asteroidId);
+		} else {
+			OrderQueueManager.getInstance().replace(shipId, OrderQueueManager.OrderType.MINE, asteroidId);
+		}
 	}
 }

@@ -27,6 +27,7 @@ import videogoose.combattweaks.manager.MoveManager;
 import videogoose.combattweaks.manager.RepairManager;
 
 import javax.vecmath.Vector3f;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -34,6 +35,35 @@ public class AIUtils {
 
 	/** Ships currently ordered to attack (no manager tracks attack, unlike mine/defend/repair). */
 	private static final Set<Integer> attackOrders = ConcurrentHashMap.newKeySet();
+
+	/** Per-ship timestamp (ms) of when it was first seen without a fleet, for the drop grace period. */
+	private static final Map<Integer, Long> unfleetedSince = new ConcurrentHashMap<>();
+	/**
+	 * How long a ship must be continuously without a fleet before we treat its order as truly gone.
+	 * Editing a fleet briefly uncaches every member (the sync uncaches all then re-caches), so
+	 * {@code isInFleet()} flips false for a moment on an unrelated edit; dropping orders on that single
+	 * observation is what silently kills commanded ships' tasks until re-issued. A few seconds rides out
+	 * the edit while still releasing ships that genuinely left the fleet.
+	 */
+	private static final long FLEET_LOSS_GRACE_MS = 6000;
+
+	/**
+	 * Whether a ship has <em>confirmed</em> left its fleet — i.e. it's been fleetless continuously past
+	 * {@link #FLEET_LOSS_GRACE_MS}. Managers use this instead of a raw {@code !isInFleet()} so a transient
+	 * un-fleeting (e.g. during a fleet edit's uncache/re-cache) doesn't drop a still-valid order.
+	 */
+	public static boolean confirmedLeftFleet(SegmentController ship) {
+		if(ship == null) {
+			return true;
+		}
+		if(ship.isInFleet()) {
+			unfleetedSince.remove(ship.getId());
+			return false;
+		}
+		long now = System.currentTimeMillis();
+		Long since = unfleetedSince.putIfAbsent(ship.getId(), now);
+		return since != null && now - since > FLEET_LOSS_GRACE_MS;
+	}
 
 	/**
 	 * Whether a ship is under any CombatTweaks order (attack/defend/mine/repair). Used by the fleet
@@ -47,6 +77,25 @@ public class AIUtils {
 				|| MineManager.getInstance().getAssignedTarget(shipId) != null
 				|| RepairManager.getInstance().getAssignedTarget(shipId) != null
 				|| DefenseManager.getInstance().isDefending(shipId);
+	}
+
+	/**
+	 * Whether weapon/beam/missile fire should be suppressed for the ship with this order id.
+	 *
+	 * <p>True when the ship is on a <em>peaceful</em> order (mining or moving) and NOT on a combat order
+	 * (attack/defend). Mining ships should only fire their salvage beams; ships executing a move should
+	 * just move. Attacking/defending ships must still shoot, so those override. Pass the order-bearing
+	 * ship id — for a turret, that's its rail root, since turrets fire on behalf of the ship they're on.</p>
+	 */
+	public static boolean shouldSuppressWeapons(int shipId) {
+		boolean peaceful = MineManager.getInstance().getAssignedTarget(shipId) != null
+				|| MoveManager.getInstance().getAssignedDestination(shipId) != null;
+		return peaceful && !isCombatOrder(shipId);
+	}
+
+	/** Whether the ship is under an attack or defend order (it should fire weapons, not salvage). */
+	public static boolean isCombatOrder(int shipId) {
+		return attackOrders.contains(shipId) || DefenseManager.getInstance().isDefending(shipId);
 	}
 
 	/**

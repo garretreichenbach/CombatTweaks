@@ -5,6 +5,7 @@ import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
+import videogoose.combattweaks.manager.OrderQueueManager;
 import videogoose.combattweaks.utils.AIUtils;
 
 import java.io.IOException;
@@ -40,6 +41,7 @@ public class SendIdlePacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
+		OrderQueueManager.getInstance().clear(shipId); // wipe any queued orders too
 		AIUtils.clearAllOrders(shipId);
 		AIUtils.haltShip(shipId); // stop residual drift/spin so "idle" actually parks the ship
 	}

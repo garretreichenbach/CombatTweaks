@@ -25,6 +25,7 @@ import org.schema.game.common.data.SimpleGameObject;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.Camera;
+import org.schema.schine.graphicsengine.core.AbstractScene;
 import org.schema.schine.graphicsengine.core.Controller;
 import org.schema.schine.graphicsengine.core.GLFrame;
 import org.schema.schine.graphicsengine.core.GlUtil;
@@ -62,6 +63,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f PATH_GREEN = new Vector4f(0.2f, 1.0f, 0.2f, 1.0f);   // bright green for defend
 	private static final Vector4f PATH_ORANGE = new Vector4f(1.0f, 0.6f, 0.0f, 1.0f);  // orange for mining
 	private static final Vector4f PATH_MAGENTA = new Vector4f(1.0f, 0.2f, 0.8f, 1.0f); // magenta for repair
+	private static final Vector4f PATH_QUEUED = new Vector4f(0.7f, 0.7f, 0.75f, 0.45f); // faint grey for queued orders
 	// Bounding box wireframe colors — solid pass (depth tested) and occluded pass (through geometry)
 	/**
 	 * Near/far planes for the map's 3D passes. These MUST match the planes the engine renders the sector
@@ -73,6 +75,19 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	private float sceneFarPlane() {
 		return getSectorSize() * 7.0f;
+	}
+
+	/**
+	 * The field-of-view the engine renders the sector scene with — base FOV times the active zoom factor.
+	 *
+	 * <p>The engine's scene projection (AbstractScene.initProjection) uses {@code G_FOV * zoomFactor}, and
+	 * the zoom factor is non-1 whenever a zoom-capable weapon's zoom is toggled (right-click) — which the
+	 * tactical map's right-drag camera rotation can trip, and it stays toggled. If we project our overlays
+	 * with the plain FOV while the scene (and its correct markers) use the zoomed FOV, every overlay lands
+	 * consistently offset, even with the camera still. Matching the FOV keeps them locked to the scene.</p>
+	 */
+	private float sceneFov() {
+		return (Float) EngineSettings.G_FOV.getCurrentState() * AbstractScene.getZoomFactorForRender(true);
 	}
 
 	// Camera-relative rendering temporaries (see loadCameraRelativeModelview).
@@ -323,7 +338,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPushMatrix();
 		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
-		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, 10, 25000, true);
+		GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		Vector3i selectedPos = new Vector3i();
 		selectedPos.x = ByteUtil.modU16(selectedPos.x);
@@ -627,12 +642,32 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 					assignedRepairTarget = videogoose.combattweaks.manager.RepairManager.getInstance().getAssignedTarget(indicator.getEntity().getId());
 				} catch(Exception ignored) {
 				}
-				if(assignedAsteroid == null && assignedRepairTarget == null) {
-					Vector3f destination = MoveManager.getInstance().getAssignedDestination(indicator.getEntity().getId());
-					if(destination != null) {
+				if(assignedAsteroid == null && assignedRepairTarget == null && !MoveManager.getInstance().isArrived(indicator.getEntity().getId())) {
+					int shipId = indicator.getEntity().getId();
+					Vector3f end = null;
+					// Move-to-entity: draw to the target's live client position so the line stays correct
+					// across sectors (the stored destination is in the ship's sector frame and won't line up).
+					Integer moveTargetId = MoveManager.getInstance().getTargetEntityId(shipId);
+					if(moveTargetId != null) {
+						TacticalMapEntityIndicator targetIndicator = drawMap.get(moveTargetId);
+						if(targetIndicator != null) {
+							end = new Vector3f(targetIndicator.entityTransform.origin);
+						} else {
+							SimpleGameObject obj = (SimpleGameObject) GameCommon.getGameObject(moveTargetId);
+							if(obj instanceof SegmentController && ((SegmentController) obj).getWorldTransformOnClient() != null) {
+								end = new Vector3f(((SegmentController) obj).getWorldTransformOnClient().origin);
+							}
+						}
+					} else {
+						// Fixed-point move: the clicked point is already in the player's sector frame.
+						Vector3f destination = MoveManager.getInstance().getAssignedDestination(shipId);
+						if(destination != null) {
+							end = new Vector3f(destination);
+						}
+					}
+					if(end != null && end.length() != 0) {
 						Vector3f start = new Vector3f(indicator.entityTransform.origin);
-						Vector3f end = new Vector3f(destination);
-						if(end.length() != 0 && Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
+						if(Math.abs(Vector3fTools.sub(start, end).length()) > 1.0f) {
 							startDrawDottedLine();
 							drawDottedLine(start, end, PATH_CYAN);
 							endDrawDottedLine();
@@ -691,8 +726,52 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 						}
 					}
 				}
+
+				// Queued-order chain (faint): only for selected/hovered ships, show where the ship will go
+				// after its current order — current order target -> next target -> ... Unselected ships show
+				// only their current-order line (drawn above).
+				if(isSelected || isHovered) {
+					drawQueuedOrderChain(indicator.getEntity().getId());
+				}
 			}
 		}
+	}
+
+	/**
+	 * Draws the faint chain of upcoming (queued) orders for a ship: a line from its current order's target
+	 * to the next order's target, and so on. The current-order line itself is drawn by the per-type logic
+	 * above; this only draws the segments between successive order targets.
+	 */
+	private void drawQueuedOrderChain(int shipId) {
+		int[] chain = videogoose.combattweaks.manager.OrderQueueManager.getInstance().getOrderTargetIds(shipId);
+		if(chain.length < 2) {
+			return; // nothing queued beyond the active order
+		}
+		Vector3f prev = orderTargetPos(chain[0]);
+		for(int i = 1; i < chain.length; i++) {
+			Vector3f next = orderTargetPos(chain[i]);
+			if(prev != null && next != null && Vector3fTools.distance(prev.x, prev.y, prev.z, next.x, next.y, next.z) > 1.0f) {
+				startDrawDottedLine();
+				drawDottedLine(prev, next, PATH_QUEUED);
+				endDrawDottedLine();
+			}
+			if(next != null) {
+				prev = next;
+			}
+		}
+	}
+
+	/** Client-frame world position of an order's target entity, or null if it can't be resolved. */
+	private Vector3f orderTargetPos(int targetId) {
+		TacticalMapEntityIndicator indicator = drawMap.get(targetId);
+		if(indicator != null) {
+			return new Vector3f(indicator.entityTransform.origin);
+		}
+		SimpleGameObject obj = (SimpleGameObject) GameCommon.getGameObject(targetId);
+		if(obj instanceof SegmentController && ((SegmentController) obj).getWorldTransformOnClient() != null) {
+			return new Vector3f(((SegmentController) obj).getWorldTransformOnClient().origin);
+		}
+		return null;
 	}
 
 	/**
@@ -707,7 +786,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPushMatrix();
 		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
-		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, 10, 25000, true);
+		GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
@@ -867,7 +946,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPushMatrix();
 		float aspect = (float) currentWidth / currentHeight;
-		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
+		GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
@@ -989,7 +1068,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPushMatrix();
 		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
-		GlUtil.gluPerspective(Controller.projectionMatrix, (Float) EngineSettings.G_FOV.getCurrentState(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
+		GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();

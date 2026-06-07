@@ -109,8 +109,9 @@ public class DefenseManager {
 		ManagedUsableSegmentController<?> defender = (ManagedUsableSegmentController<?>) defenderObj;
 		SegmentController protectedEntity = (SegmentController) protectedObj;
 
-		// Only fleeted ships obey our orders; drop the assignment if the defender left its fleet.
-		if(!defender.isInFleet()) return false;
+		// Only fleeted ships obey our orders; drop only after a confirmed (non-transient) fleet loss, so a
+		// fleet edit's brief uncache/re-cache doesn't silently kill the defend order.
+		if(AIUtils.confirmedLeftFleet(defender)) return false;
 
 		SegmentController threat = findNearestThreat(protectedEntity, defender.getFactionId());
 		if(threat != null) {

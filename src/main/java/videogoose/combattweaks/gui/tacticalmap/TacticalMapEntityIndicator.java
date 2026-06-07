@@ -12,7 +12,6 @@ import org.schema.game.common.data.world.VoidSystem;
 import org.schema.game.server.ai.SegmentControllerAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.schine.graphicsengine.core.Timer;
-import videogoose.combattweaks.utils.SectorUtils;
 
 import javax.vecmath.Vector3f;
 
@@ -39,22 +38,23 @@ public class TacticalMapEntityIndicator {
 	}
 
 	/**
-	 * Updates entityTransform from the entity's world state, adjusting for cross-sector
-	 * offsets relative to the player's ship. This must be called each frame before any
+	 * Updates entityTransform from the entity's world state. This must be called each frame before any
 	 * draw method that uses entityTransform (labels, paths, screen projection).
+	 *
+	 * <p>Uses the engine's own client render transform ({@code getWorldTransformOnClient()}), which already
+	 * places entities in other sectors relative to the player's sector — exactly the way the scene and the
+	 * game's own markers are positioned. We previously applied our own sector offset using
+	 * {@code ServerConfig.SECTOR_SIZE}, but the engine builds its cross-sector transform with
+	 * {@code GameStateInterface.getSectorSize()} (plus planet-rotation handling); the mismatch made our
+	 * overlays drift whenever the camera looked at a sector other than the player's. Deferring to the
+	 * engine's transform keeps everything locked to the rendered ships.</p>
 	 */
 	public void updateEntityTransform() {
 		if(entity.getWorldTransform() == null) return;
 		if(entity.isCloakedFor(getCurrentEntity())) return;
-		entityTransform.set(entity.getWorldTransform());
-		SegmentController current = getCurrentEntity();
-		if(current != null) {
-			Vector3i curSector = current.getSector(tmpSectorOther);
-			Vector3i mySector = getSector();
-			if(curSector != null && mySector != null && !mySector.equals(curSector)) {
-				SectorUtils.transformToSector(entityTransform, curSector, mySector);
-			}
-		}
+		Transform clientTransform = entity.getWorldTransformOnClient();
+		if(clientTransform == null) return;
+		entityTransform.set(clientTransform);
 	}
 
 	private SegmentController getCurrentEntity() {

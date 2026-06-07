@@ -9,6 +9,7 @@ import org.schema.game.client.view.gui.RadialMenuDialog;
 import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
+import org.lwjgl.input.Keyboard;
 import org.schema.schine.graphicsengine.core.MouseEvent;
 import org.schema.schine.graphicsengine.forms.font.FontLibrary;
 import org.schema.schine.graphicsengine.forms.gui.GUIActivationCallback;
@@ -26,6 +27,11 @@ public class TacticalMapRadial extends RadialMenuDialog {
 		super(GameClient.getClientState());
 		this.drawer = drawer;
 		this.target = target;
+	}
+
+	/** Whether shift is held — issue this order as a queued (append) order rather than replacing. */
+	private static boolean isQueueModifier() {
+		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
 	}
 
 	@Override
@@ -59,7 +65,7 @@ public class TacticalMapRadial extends RadialMenuDialog {
 						if(event.pressedLeftMouse()) {
 							for(SegmentController selected : drawer.selectedEntities) {
 								if(selected instanceof Ship && !target.getEntity().equals(selected)) {
-									PacketUtil.sendPacketToServer(new SendDefensePacket((Ship) selected, target.getEntity()));
+									PacketUtil.sendPacketToServer(new SendDefensePacket((Ship) selected, target.getEntity(), isQueueModifier()));
 									// Update client-side indicator immediately so the green path appears at once
 									TacticalMapEntityIndicator defenderIndicator = drawer.drawMap.get(selected.getId());
 									if(defenderIndicator != null) {
@@ -67,7 +73,7 @@ public class TacticalMapRadial extends RadialMenuDialog {
 									}
 								}
 							}
-							drawer.clearSelected();
+							if(!isQueueModifier()) drawer.clearSelected(); // shift-held = keep selection to queue more orders
 							deactivate();
 						}
 					}
@@ -88,10 +94,10 @@ public class TacticalMapRadial extends RadialMenuDialog {
 						if(event.pressedLeftMouse()) {
 							for(SegmentController selected : drawer.selectedEntities) {
 								if(selected instanceof Ship) {
-									PacketUtil.sendPacketToServer(new SendMinePacket((Ship) selected, target.getEntity()));
+									PacketUtil.sendPacketToServer(new SendMinePacket((Ship) selected, target.getEntity(), isQueueModifier()));
 								}
 							}
-							drawer.clearSelected();
+							if(!isQueueModifier()) drawer.clearSelected(); // shift-held = keep selection to queue more orders
 							deactivate();
 						}
 					}
@@ -109,10 +115,10 @@ public class TacticalMapRadial extends RadialMenuDialog {
 						if(event.pressedLeftMouse()) {
 							for(SegmentController selected : drawer.selectedEntities) {
 								if(selected instanceof Ship && !target.getEntity().equals(selected)) {
-									PacketUtil.sendPacketToServer(new SendAttackPacket((Ship) selected, target.getEntity()));
+									PacketUtil.sendPacketToServer(new SendAttackPacket((Ship) selected, target.getEntity(), isQueueModifier()));
 								}
 							}
-							drawer.clearSelected();
+							if(!isQueueModifier()) drawer.clearSelected(); // shift-held = keep selection to queue more orders
 							deactivate();
 						}
 					}
@@ -130,14 +136,14 @@ public class TacticalMapRadial extends RadialMenuDialog {
 						if(event.pressedLeftMouse()) {
 							for(SegmentController selected : drawer.selectedEntities) {
 								if(selected instanceof Ship && !target.getEntity().equals(selected)) {
-									PacketUtil.sendPacketToServer(new SendDefensePacket((Ship) selected, target.getEntity()));
+									PacketUtil.sendPacketToServer(new SendDefensePacket((Ship) selected, target.getEntity(), isQueueModifier()));
 									TacticalMapEntityIndicator defenderIndicator = drawer.drawMap.get(selected.getId());
 									if(defenderIndicator != null) {
 										defenderIndicator.setDefendTarget(target.getEntity());
 									}
 								}
 							}
-							drawer.clearSelected();
+							if(!isQueueModifier()) drawer.clearSelected(); // shift-held = keep selection to queue more orders
 							deactivate();
 						}
 					}
@@ -154,10 +160,10 @@ public class TacticalMapRadial extends RadialMenuDialog {
 						if(event.pressedLeftMouse()) {
 							for(SegmentController selected : drawer.selectedEntities) {
 								if(selected instanceof Ship && !target.getEntity().equals(selected)) {
-									PacketUtil.sendPacketToServer(new SendRepairPacket((Ship) selected, target.getEntity()));
+									PacketUtil.sendPacketToServer(new SendRepairPacket((Ship) selected, target.getEntity(), isQueueModifier()));
 								}
 							}
-							drawer.clearSelected();
+							if(!isQueueModifier()) drawer.clearSelected(); // shift-held = keep selection to queue more orders
 							deactivate();
 						}
 					}
@@ -176,10 +182,10 @@ public class TacticalMapRadial extends RadialMenuDialog {
 				if(event.pressedLeftMouse()) {
 					for(SegmentController selected : drawer.selectedEntities) {
 						if(selected instanceof Ship && !target.getEntity().equals(selected)) {
-							PacketUtil.sendPacketToServer(new SendMoveToPacket((Ship) selected, target.getEntity()));
+							PacketUtil.sendPacketToServer(new SendMoveToPacket((Ship) selected, target.getEntity(), isQueueModifier()));
 						}
 					}
-					drawer.clearSelected();
+					if(!isQueueModifier()) drawer.clearSelected(); // shift-held = keep selection to queue more orders
 					deactivate();
 				}
 			}
