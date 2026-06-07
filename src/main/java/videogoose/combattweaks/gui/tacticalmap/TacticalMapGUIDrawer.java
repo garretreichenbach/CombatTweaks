@@ -1053,7 +1053,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			builder.append("[").append(entity.getFaction().getName()).append("]\n");
 		}
 		// Total mass (including docked turrets/entities), so the player can gauge a ship's size at a glance.
-		builder.append(StringTools.massFormat(entity.getMassWithDocks())).append("\n");
+		builder.append(StringTools.massFormat(entity.getMassWithDocks())).append(" Mass\n");
 		if(!entity.equals(playerEntity)) {
 			if(entity.isJammingFor(playerEntity) || entity.isCloakedFor(playerEntity)) {
 				builder.append("???km\n");
