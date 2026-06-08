@@ -78,8 +78,9 @@ public class EventManager {
 					// on foot as an astronaut — not just while piloting a ship. The camera anchors to the
 					// controlled object's position regardless of its type.
 					if(GameClient.getClientPlayerState().getFirstControlledTransformableWOExc() != null && event.isKeyDown()) {
-						int tacticalKey = ConfigManager.getTacticalMapKey();
-						boolean isTacticalKey = event.getKey() == tacticalKey;
+						// Match against the keybind we registered with StarMade (isMapping respects the user's
+						// current/remapped key from the Controls settings) instead of comparing a raw key code.
+						boolean isTacticalKey = event.isMapping(CombatTweaks.getInstance().tacticalMapKey);
 						if((event.getKey() == Keyboard.KEY_ESCAPE || isTacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
 							TacticalMapGUIDrawer.getInstance().toggleDraw();
 						} else {

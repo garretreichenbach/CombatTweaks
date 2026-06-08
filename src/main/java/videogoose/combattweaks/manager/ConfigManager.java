@@ -22,11 +22,4 @@ public class ConfigManager {
 	public static SystemConfig getSystemConfig() {
 		return systemConfig;
 	}
-
-	public static int getTacticalMapKey() {
-		String keyName = mainConfig.tacticalMapKeybind.value;
-		if(keyName == null || keyName.isEmpty()) return Keyboard.KEY_BACKSLASH;
-		int key = Keyboard.getKeyIndex(keyName.toUpperCase().trim());
-		return key != Keyboard.KEY_NONE ? key : Keyboard.KEY_BACKSLASH;
-	}
 }

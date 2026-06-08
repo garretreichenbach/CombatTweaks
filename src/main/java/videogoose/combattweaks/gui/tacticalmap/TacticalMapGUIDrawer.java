@@ -35,6 +35,7 @@ import org.schema.schine.graphicsengine.forms.font.FontLibrary;
 import org.schema.schine.graphicsengine.forms.gui.GUIElement;
 import org.schema.schine.graphicsengine.forms.gui.GUITextOverlay;
 import org.schema.schine.input.InputType;
+import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
 import api.utils.game.SegmentControllerUtils;
@@ -457,7 +458,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			controlManager.onSwitch(true);
 			if(firstTime) {
 				camera.reset();
-				firstTime = false;
+				// Only consume the one-time reset once it actually succeeded. reset() bails (leaving
+				// camera.transform null) when the controlled entity is mid-jump/sector-load; in that case
+				// keep firstTime set so the next open retries instead of running with an uninitialized camera.
+				if(camera.transform != null) {
+					firstTime = false;
+				}
 			}
 		} else {
 			if(camera != null) {
@@ -717,7 +723,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	private void drawHudIndicators() {
 		if(shouldDraw()) {
-			hud.addHelper(InputType.KEYBOARD, ConfigManager.getTacticalMapKey(), "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.IMPORTANT);
+			// Show the key the player actually has bound (respects remapping in the Controls settings) rather
+			// than a fixed config value, now that the binding is owned by StarMade's keybind system.
+			KeyboardMappings mapping = CombatTweaks.getInstance().tacticalMapKey;
+			int hintKey = mapping != null ? mapping.getMapping() : Keyboard.KEY_BACKSLASH;
+			hud.addHelper(InputType.KEYBOARD, hintKey, "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.IMPORTANT);
 		}
 		if(toggleDraw) {
 			hud.addHelper(InputType.MOUSE, 0, "Drag: Select / Deselect | Double-click: Focus", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);

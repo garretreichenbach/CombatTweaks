@@ -3,7 +3,11 @@ package videogoose.combattweaks;
 import api.config.BlockConfig;
 import api.mod.StarMod;
 import api.network.packets.PacketUtil;
+import org.lwjgl.input.Keyboard;
 import org.schema.game.client.view.mainmenu.GuidesRegistry;
+import org.schema.schine.graphicsengine.core.GLFW;
+import org.schema.schine.input.KeyboardContext;
+import org.schema.schine.input.KeyboardMappings;
 import org.schema.schine.resource.ResourceLoader;
 import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.manager.*;
@@ -25,6 +29,12 @@ public class CombatTweaks extends StarMod {
 		instance = this;
 	}
 
+	/**
+	 * The tactical-map toggle binding, registered with StarMade's keybind system so it shows up in the
+	 * Controls settings and is user-rebindable. Detected via {@code KeyPressEvent.isMapping(this)}.
+	 */
+	public KeyboardMappings tacticalMapKey;
+
 	@Override
 	public List<String> getMixinConfigs() {
 		return Collections.singletonList("mixins.combattweaks.json");
@@ -34,6 +44,10 @@ public class CombatTweaks extends StarMod {
 	public void onEnable() {
 		instance = this;
 		ConfigManager.initialize(this);
+		// Register the tactical-map toggle with StarMade's keybind system (rebindable in Controls settings,
+		// GENERAL context = available everywhere). The config value seeds the default key; once registered,
+		// StarMade owns the binding. Detected in EventManager via KeyPressEvent.isMapping(tacticalMapKey).
+		tacticalMapKey = KeyboardMappings.registerMapping(this, "Toggle Tactical Map", GLFW.GLFW_KEY_BACKSLASH, KeyboardContext.GENERAL);
 		EventManager.initialize(this);
 		MoveManager.getInstance(); // Initialize move manager
 		MineManager.getInstance(); // Initialize mine manager
@@ -49,12 +63,9 @@ public class CombatTweaks extends StarMod {
 
 	@Override
 	public void onRegisterGuides(GuidesRegistry.ModGuideRegistrar registrar) {
-		// Contribute our docs to StarMade's in-game guides viewer. The markdown is packaged into the jar
-		// under guides/ (see build.gradle) straight from the docs/ folder, so there's a single source.
 		String key = "combattweaks";
 		String label = "CombatTweaks";
 		registrar.registerFromResource(key, label, "Overview", "guides/index.md", this);
-		registrar.registerFromResource(key, label, "Installation", "guides/getting-started/installation.md", this);
 		registrar.registerFromResource(key, label, "Configuration", "guides/getting-started/configuration.md", this);
 		registrar.registerFromResource(key, label, "Tactical Map", "guides/features/tactical-map.md", this);
 		registrar.registerFromResource(key, label, "Fleet Orders", "guides/features/fleet-orders.md", this);
