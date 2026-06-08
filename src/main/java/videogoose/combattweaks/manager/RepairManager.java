@@ -118,18 +118,23 @@ public class RepairManager {
 			return false;
 		}
 
-		// Hold the order until the target is destroyed/overheating or the player cancels it (like Defend).
-		// NOTE: auto-reverting to idle "when fully repaired" is deferred — it relied on the in-memory
-		// damaged-block recorder being reliably populated, which isn't dependable yet (block damage isn't
-		// always captured), so it was dropping the order the instant it was issued. Re-add once damaged-block
-		// detection is solid (e.g. a scan of the target's actual block HP).
+		// Stop when there's nothing left to mend — the ship then returns to idle. Drop the order when the
+		// target is destroyed/overheating, OR fully repaired: full reactor HP AND no destroyed blocks
+		// (block-kill recorder) AND no damaged blocks (damaged-block recorder). Until then it holds, like
+		// Defend.
 		if(target instanceof Ship) {
 			try {
-				if(((Ship) target).getReactorHp() <= 0) {
+				Ship t = (Ship) target;
+				if(t.getReactorHp() <= 0) {
 					return false; // destroyed / overheating
 				}
+				if(t.getReactorHp() >= t.getReactorHpMax()
+						&& t.getBlockKillRecorder().size() == 0
+						&& t.getDamagedBlockRecorder().size() == 0) {
+					return false; // fully repaired — revert to idle
+				}
 			} catch(Exception ignored) {
-				// Target doesn't expose reactor hp — let the FSM decide when to stop.
+				// Target doesn't expose its HP/recorders — let the FSM decide when to stop.
 			}
 		}
 
