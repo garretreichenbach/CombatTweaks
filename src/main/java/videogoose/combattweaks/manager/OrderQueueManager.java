@@ -180,7 +180,18 @@ public class OrderQueueManager {
 					queues.remove(shipId); // ship gone — drop its queue
 					continue;
 				}
-				if(isComplete(shipId, entry.getValue())) {
+				QueuedOrder order = entry.getValue();
+				// Re-affirm a standing ATTACK target if the ship has fallen out of its attack cycle — e.g. it
+				// crossed a sector boundary (uncache/recache drops the target) or its enemy-oriented search
+				// dropped a commanded neutral target and it went idle next to it. Guarded by isInAttackCycle so
+				// it never interrupts a live search/engagement (and setAttackTarget is itself idempotent when
+				// the target is already set). Attack is the only order type without such a maintenance pass.
+				if(order.type == OrderType.ATTACK
+						&& GameCommon.getGameObject(order.targetId) instanceof SegmentController
+						&& !AIUtils.isInAttackCycle(shipId)) {
+					AIUtils.setAttackTarget(shipId, order.targetId);
+				}
+				if(isComplete(shipId, order)) {
 					advance(shipId);
 				}
 			}
@@ -191,22 +202,19 @@ public class OrderQueueManager {
 
 	/** Whether the active order has finished, so the next queued one should start. */
 	private boolean isComplete(int shipId, QueuedOrder order) {
-		switch(order.type) {
-			case MOVE:
-				return MoveManager.getInstance().isArrived(shipId);
-			case MINE:
+		return switch(order.type) {
+			case MOVE -> MoveManager.getInstance().isArrived(shipId);
+			case MINE ->
 				// MineManager drops the assignment once the asteroid is mined out or gone.
-				return MineManager.getInstance().getAssignedTarget(shipId) == null;
-			case REPAIR:
-				return RepairManager.getInstance().getAssignedTarget(shipId) == null
-						|| !(GameCommon.getGameObject(order.targetId) instanceof SegmentController);
-			case ATTACK:
+					MineManager.getInstance().getAssignedTarget(shipId) == null;
+			case REPAIR -> RepairManager.getInstance().getAssignedTarget(shipId) == null
+					|| !(GameCommon.getGameObject(order.targetId) instanceof SegmentController);
+			case ATTACK ->
 				// Target destroyed / no longer exists.
-				return !(GameCommon.getGameObject(order.targetId) instanceof SegmentController);
-			case DEFEND:
-			default:
+					!(GameCommon.getGameObject(order.targetId) instanceof SegmentController);
+			default ->
 				// Defend is indefinite — it holds the spot, so the queue stops here until re-ordered.
-				return false;
-		}
+					false;
+		};
 	}
 }

@@ -1304,6 +1304,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(full) {
 			// Absolute sector coords plus the subsector (e.g. "C3") the entity occupies within that sector.
 			Vector3i sec = entity.getSector(tmpEntitySector);
+			if(sec == null) {
+				return "LOADING";
+			}
 			builder.append("Sector (").append(sec.x).append(", ").append(sec.y).append(", ").append(sec.z).append(")");
 			String sub = subsectorLabel(entity);
 			if(sub != null) {

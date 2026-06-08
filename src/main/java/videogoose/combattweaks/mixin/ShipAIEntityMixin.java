@@ -81,6 +81,9 @@ public abstract class ShipAIEntityMixin {
 			if(root != null) {
 				orderId = root.getId();
 			}
+			// Repair orders are handled entirely by the engine's doShooting now: it skips offensive weapons
+			// against a friendly target and fires the repair beams at a damaged ally. We deliberately do NOT
+			// suppress here (repair isn't in shouldSuppressWeapons), so doShooting runs in full and repairs.
 			// Mining/moving ships (and their turrets) only ever fire salvage — cancel any weapon/beam/missile
 			// shot. Attacking/defending ships are exempt (shouldSuppressWeapons returns false for them).
 			if(AIUtils.shouldSuppressWeapons(orderId)

@@ -54,6 +54,9 @@ public class RepairManager {
 	/** Register a repair order for the given ship targeting the given object. Replaces any existing order. */
 	public void addRepair(int shipId, int targetId) {
 		assignments.put(shipId, targetId);
+		// Engage the repair FSM right away instead of waiting up to a full tick (which left the ship idle and
+		// looking like the order did nothing). The tick still re-affirms it and drops it when appropriate.
+		AIUtils.setRepairTarget(shipId, targetId);
 	}
 
 	/** Returns the repair target id assigned to the given ship, or null if none. */
@@ -115,13 +118,15 @@ public class RepairManager {
 			return false;
 		}
 
-		// Stop once the target is fully repaired (reactor at max) or dead.
+		// Hold the order until the target is destroyed/overheating or the player cancels it (like Defend).
+		// NOTE: auto-reverting to idle "when fully repaired" is deferred — it relied on the in-memory
+		// damaged-block recorder being reliably populated, which isn't dependable yet (block damage isn't
+		// always captured), so it was dropping the order the instant it was issued. Re-add once damaged-block
+		// detection is solid (e.g. a scan of the target's actual block HP).
 		if(target instanceof Ship) {
 			try {
-				long reactorHp = ((Ship) target).getReactorHp();
-				long maxHp = ((Ship) target).getReactorHpMax();
-				if(reactorHp >= maxHp || reactorHp <= 0) {
-					return false;
+				if(((Ship) target).getReactorHp() <= 0) {
+					return false; // destroyed / overheating
 				}
 			} catch(Exception ignored) {
 				// Target doesn't expose reactor hp — let the FSM decide when to stop.

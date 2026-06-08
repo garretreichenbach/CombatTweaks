@@ -3,11 +3,13 @@ package videogoose.combattweaks.network.client;
 import api.network.Packet;
 import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
+import api.utils.game.PlayerUtils;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
 import videogoose.combattweaks.manager.OrderQueueManager;
 import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.utils.EntityUtils;
 
 import java.io.IOException;
 
@@ -47,6 +49,13 @@ public class SendRepairPacket extends Packet {
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
 		if(!AIUtils.canReceiveOrders(shipId, playerState)) {
+			return;
+		}
+		// A ship with no repair (astrotech) beams can't repair anything, so ignore the order rather than
+		// sending it to orbit the target doing nothing.
+		SegmentController ship = EntityUtils.getEntityById(shipId);
+		if(ship != null && !AIUtils.hasRepairBeams(ship)) {
+			PlayerUtils.sendMessage(playerState, ship.getName() + " has no repair beams and can't repair.");
 			return;
 		}
 		if(queue) {

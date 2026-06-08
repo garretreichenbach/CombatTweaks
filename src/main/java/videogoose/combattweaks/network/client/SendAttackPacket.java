@@ -3,11 +3,13 @@ package videogoose.combattweaks.network.client;
 import api.network.Packet;
 import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
+import api.utils.game.PlayerUtils;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
 import videogoose.combattweaks.manager.OrderQueueManager;
 import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.utils.EntityUtils;
 
 import java.io.IOException;
 
@@ -47,6 +49,14 @@ public class SendAttackPacket extends Packet {
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
 		if(!AIUtils.canReceiveOrders(entityId, playerState)) {
+			return;
+		}
+		// Weaponless ships (repair/salvage-only or unarmed) can't fight, so ignore attack orders rather than
+		// sending them flying at the target to sit there. Docked turrets are exempt — they're commanded as a
+		// unit whose gun (reached via the order cascade) carries the weapons.
+		SegmentController ship = EntityUtils.getEntityById(entityId);
+		if(ship != null && !ship.isDocked() && !AIUtils.hasWeapons(ship)) {
+			PlayerUtils.sendMessage(playerState, ship.getName() + " has no weapons and can't attack.");
 			return;
 		}
 		if(queue) {

@@ -5,7 +5,10 @@ import com.bulletphysics.linearmath.Transform;
 import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
+import api.utils.game.SegmentControllerUtils;
 import org.schema.game.common.controller.Ship;
+import org.schema.game.common.controller.elements.WeaponElementManagerInterface;
+import org.schema.game.common.controller.elements.beam.repair.RepairElementManager;
 import org.schema.game.common.data.world.Sector;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.GameServerState;
@@ -192,6 +195,40 @@ public class AIUtils {
 		try {
 			return ((Ship) entity).getManagerContainer().getSalvage().getElementManager().totalSize > 0;
 		} catch(Exception exception) {
+			return false;
+		}
+	}
+
+	/**
+	 * Whether the ship has any offensive weapon (damage beam, cannon, or missile) that actually deals damage.
+	 * {@code getWeapons()} contains only those three weapon types — salvage and repair/astrotech beams are
+	 * not weapons — and a system with no blocks reports a damage index of 0, so a repair-only or unarmed ship
+	 * returns false. Used to keep weaponless ships from accepting attack orders.
+	 */
+	public static boolean hasWeapons(SegmentController entity) {
+		if(!(entity instanceof Ship)) {
+			return false;
+		}
+		try {
+			for(WeaponElementManagerInterface w : ((Ship) entity).getManagerContainer().getWeapons()) {
+				if(w.calculateWeaponDamageIndex() > 0) {
+					return true;
+				}
+			}
+		} catch(Exception ignored) {
+		}
+		return false;
+	}
+
+	/** Whether the ship has any repair (astrotech) beam blocks — required to accept a repair order. */
+	public static boolean hasRepairBeams(SegmentController entity) {
+		if(!(entity instanceof Ship)) {
+			return false;
+		}
+		try {
+			RepairElementManager m = SegmentControllerUtils.getElementManager((Ship) entity, RepairElementManager.class);
+			return m != null && m.totalSize > 0;
+		} catch(Exception ignored) {
 			return false;
 		}
 	}

@@ -265,9 +265,8 @@ public class MoveManager {
 	 */
 	private boolean updateMove(int shipId, Vector3f destination) {
 		SimpleGameObject obj = (SimpleGameObject) GameCommon.getGameObject(shipId);
-		if(!(obj instanceof ManagedUsableSegmentController)) return false;
+		if(!(obj instanceof ManagedUsableSegmentController<?> ship)) return false;
 
-		ManagedUsableSegmentController<?> ship = (ManagedUsableSegmentController<?>) obj;
 		if(ship.getWorldTransform() == null) return false;
 		// Only fleeted ships run the passive program that obeys our orders; drop only after a confirmed
 		// (non-transient) fleet loss, so a fleet edit's brief uncache/re-cache doesn't kill the move order.
