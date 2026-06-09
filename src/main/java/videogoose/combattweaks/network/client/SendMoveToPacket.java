@@ -8,6 +8,7 @@ import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
 import videogoose.combattweaks.manager.OrderQueueManager;
 import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.utils.CTLog;
 
 import java.io.IOException;
 
@@ -46,7 +47,9 @@ public class SendMoveToPacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-		if(!AIUtils.canReceiveOrders(shipId, playerState)) {
+		boolean canOrder = AIUtils.canReceiveOrders(shipId, playerState);
+		CTLog.debug("[MOVE] SendMoveToPacket received ship=" + shipId + " target=" + targetId + " queue=" + queue + " canReceiveOrders=" + canOrder);
+		if(!canOrder) {
 			return;
 		}
 		if(queue) {

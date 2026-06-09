@@ -45,9 +45,6 @@ public class MainConfig extends SimpleConfigContainer {
 	public final SimpleConfigDouble tacticalMapLabelDetail =
 			new SimpleConfigDouble(this, "tactical_map_label_detail", 2.0, "Entity label detail: 0 minimal (name+faction), 1 normal (+distance/engagement), 2 full (+mass/speed/sector).");
 
-	public final SimpleConfigString tacticalMapPinned =
-			new SimpleConfigString(this, "tactical_map_pinned", "", "Pinned entity unique-ids for the selection panel (newline-separated); managed via the map's Pin buttons.");
-
 	public MainConfig(StarMod mod) {
 		super(mod, "config", true);
 	}

@@ -24,6 +24,9 @@ public class SystemConfig extends SimpleConfigContainer {
 	public final SimpleConfigDouble armorHpAbsorptionEffect2Sub =
 			new SimpleConfigDouble(this, "armor_hp_absorption_effect_2_sub", -7.5, "Chamber 2 bleed-through reduction");
 
+	public final SimpleConfigDouble armorHpRepairFractionPerSecond =
+			new SimpleConfigDouble(this, "armor_hp_repair_fraction_per_second", 0.05, "Fraction of a repair target's max Armor HP restored per second by an active repair beam (0.05 = 5%/s, ~20s from empty to full).");
+
 	public SystemConfig(StarMod mod) {
 		super(mod, "system_config", false);
 	}

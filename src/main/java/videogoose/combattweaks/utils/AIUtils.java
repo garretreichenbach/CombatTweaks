@@ -30,6 +30,13 @@ import videogoose.combattweaks.manager.DefenseManager;
 import videogoose.combattweaks.manager.MineManager;
 import videogoose.combattweaks.manager.MoveManager;
 import videogoose.combattweaks.manager.RepairManager;
+import videogoose.combattweaks.system.armor.ArmorHPCollection;
+import org.schema.common.util.linAlg.Vector3b;
+import org.schema.game.common.controller.SegmentBufferIteratorInterface;
+import org.schema.game.common.data.SegmentPiece;
+import org.schema.game.common.data.element.ElementKeyMap;
+import org.schema.game.common.data.world.Segment;
+import org.schema.game.common.data.world.SegmentData;
 
 import javax.vecmath.Vector3f;
 import java.util.Map;
@@ -126,6 +133,29 @@ public class AIUtils {
 	}
 
 	/**
+	 * The id under which an entity's CombatTweaks order is recorded. For a docked <em>turret</em> that's its
+	 * rail root: a turret fires on behalf of — and its AI searches as — the ship it's docked to, but the
+	 * attack order is only ever stored against the root ship's id (turrets are dispatched via
+	 * {@code setTurretAttackTarget}, which never touches {@code attackOrders}). Resolving to the root here lets
+	 * a turret's own target search (which calls {@code isEnemy} with the turret itself as the searcher) find
+	 * the root's commanded attack target.
+	 *
+	 * <p>Only <b>turret-docked</b> entities are resolved — a plain rail-docked ship runs its own AI and orders
+	 * and must NOT inherit its host's attack target (doing so makes it engage/fire independently with an
+	 * invalid firing solution, spamming NaN raytraces). Everything else returns its own target id.</p>
+	 */
+	public static int orderId(SimpleTransformableSendableObject<?> entity) {
+		if(entity instanceof SegmentController) {
+			SegmentController sc = (SegmentController) entity;
+			if(sc.getDockingController() != null && sc.getDockingController().isTurretDocking()
+					&& sc.railController != null && sc.railController.getRoot() != null) {
+				return sc.railController.getRoot().getId();
+			}
+		}
+		return entity.getAsTargetId();
+	}
+
+	/**
 	 * Whether the ship is currently running its attack cycle (searching for / closing on / engaging a
 	 * target). We can't just check the program's target: the search state nulls the target on entry, so a
 	 * target-based check reads false mid-search and makes the caller re-issue the order, restarting the
@@ -143,6 +173,24 @@ public class AIUtils {
 		} catch(Exception ignored) {
 		}
 		return false;
+	}
+
+	/** The simple class name of a ship's current AI FSM state (e.g. {@code FleetGettingToTarget}), for debug logging. */
+	public static String currentStateName(Ship ship) {
+		try {
+			return ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().getCurrentState().getClass().getSimpleName();
+		} catch(Exception exception) {
+			return "<unknown:" + exception.getClass().getSimpleName() + ">";
+		}
+	}
+
+	/** The simple class name of a ship's current AI program (e.g. {@code FleetControllableProgram}), for debug logging. */
+	public static String currentProgramName(Ship ship) {
+		try {
+			return ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getClass().getSimpleName();
+		} catch(Exception exception) {
+			return "<unknown:" + exception.getClass().getSimpleName() + ">";
+		}
 	}
 
 	/**
@@ -185,6 +233,94 @@ public class AIUtils {
 		} catch(Exception ignored) {
 		}
 		return target.getWorldTransform();
+	}
+
+	/**
+	 * Whether a repair target still has anything a repair ship can mend: reduced reactor HP, recorded
+	 * destroyed/damaged blocks, OR depleted CombatTweaks Armor HP. Returns false for a destroyed/overheating
+	 * target (reactor &le; 0 — nothing to save) and for a fully-intact one.
+	 *
+	 * <p>Armor HP is included deliberately: combat damage is mostly absorbed by the Armor HP pool (blocks stay
+	 * intact, reactor full), and the engine's block-damage recorders don't survive a server restart — so a
+	 * genuinely-damaged ally would otherwise report "nothing to repair" and the order would cancel immediately.
+	 * Armor HP is synced/persisted, making it the reliable damage signal here.</p>
+	 */
+	public static boolean needsRepair(SegmentController target) {
+		if(!(target instanceof Ship t)) {
+			return false;
+		}
+		try {
+			if(t.getReactorHp() <= 0) {
+				return false; // destroyed / overheating — beyond repair
+			}
+			if(t.getReactorHp() < t.getReactorHpMax()) {
+				return true;
+			}
+			if(t.getBlockKillRecorder().size() > 0 || t.getDamagedBlockRecorder().size() > 0) {
+				return true;
+			}
+			ArmorHPCollection armor = ArmorHPCollection.getCollection(t);
+			if(armor != null && armor.getMaxHP() > 0 && armor.getCurrentHP() < armor.getMaxHP() - 0.5) {
+				return true;
+			}
+		} catch(Exception ignored) {
+		}
+		return false;
+	}
+
+	/**
+	 * Re-populates a target's damaged-block recorder from its <em>persisted</em> block HP, so a repair beam
+	 * can mend blocks whose in-memory damage records were lost — most importantly across a server restart,
+	 * after which the recorder is empty even though the blocks are still damaged on disk. Without this the
+	 * beam only heals the outer block it directly hits (recorder-independent) and never touches internal
+	 * damage. Scans the loaded structure once and records every block currently below max HP; the engine's
+	 * repair beam then drains the recorder as it heals. Server-only, best-effort.
+	 *
+	 * @return the number of damaged blocks recorded
+	 */
+	public static int recordExistingBlockDamage(SegmentController target) {
+		if(!(target instanceof ManagedUsableSegmentController<?>) || !target.isOnServer()) {
+			return 0;
+		}
+		try {
+			DamagedBlockScanner scanner = new DamagedBlockScanner((ManagedUsableSegmentController<?>) target);
+			target.getSegmentBuffer().iterateOverNonEmptyElement(scanner, true);
+			return scanner.recorded;
+		} catch(Exception exception) {
+			CTLog.error("Failed to scan repair target for existing block damage", exception);
+			return 0;
+		}
+	}
+
+	/** Iterates a structure's blocks and records every one below max HP into its damaged-block recorder. */
+	private static final class DamagedBlockScanner implements SegmentBufferIteratorInterface {
+		private final SegmentPiece piece = new SegmentPiece();
+		private final Vector3b helper = new Vector3b();
+		private final ManagedUsableSegmentController<?> target;
+		int recorded;
+
+		DamagedBlockScanner(ManagedUsableSegmentController<?> target) {
+			this.target = target;
+		}
+
+		@Override
+		public boolean handle(Segment s, long lastChanged) {
+			SegmentData data = s.getSegmentData();
+			if(data == null) {
+				return false;
+			}
+			for(int i = 0; i < SegmentData.BLOCK_COUNT; i++) {
+				if(ElementKeyMap.isValidType(data.getType(i))) {
+					SegmentData.getPositionFromIndex(i, helper);
+					piece.setByReference(s, helper);
+					if(piece.getHitpointsByte() < piece.getInfo().getMaxHitPointsByte()) {
+						target.recordDamagedBlock(piece.getAbsoluteIndex());
+						recorded++;
+					}
+				}
+			}
+			return false;
+		}
 	}
 
 	/** Whether the entity has any salvage (mining) beam blocks — required to accept a mine order. */
@@ -276,7 +412,7 @@ public class AIUtils {
 			// Transition not available from current state — try resetting to idle first
 			e.printStackTrace();
 			try {
-				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_BREAKING);
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.RESTART);
 				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_GET_TO_MINING_POS);
 			} catch(FSMException exception) {
 				exception.printStackTrace();
@@ -325,7 +461,7 @@ public class AIUtils {
 		} catch(FSMException e) {
 			// Not in a state that allows the transition — reset to idle first, then retry the pair.
 			try {
-				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_BREAKING);
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.RESTART);
 				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_GET_TO_MINING_POS);
 				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_MINE);
 			} catch(FSMException exception) {
@@ -360,8 +496,11 @@ public class AIUtils {
 			program.suspend(false);
 			program.getMachine().getFsm().stateTransition(Transition.FLEET_REPAIR);
 		} catch(FSMException e) {
+			// Current state doesn't accept FLEET_REPAIR — reset to idle first, then retry. Use RESTART (valid
+			// from FleetBreaking and nearly every state), NOT FLEET_BREAKING: a ship already in FleetBreaking
+			// rejects FLEET_BREAKING, and FleetBreaking has no FLEET_REPAIR exit anyway. idle accepts FLEET_REPAIR.
 			try {
-				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_BREAKING);
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.RESTART);
 				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_REPAIR);
 			} catch(FSMException exception) {
 				exception.printStackTrace();
@@ -382,8 +521,12 @@ public class AIUtils {
 	public static void setMoveToTarget(int shipId, int targetId) {
 		SegmentController ship = EntityUtils.getEntityById(shipId);
 		SegmentController target = EntityUtils.getEntityById(targetId);
-		if(ship instanceof Ship && target != null && ship.getWorldTransform() != null && target.getWorldTransform() != null) {
+		boolean ok = ship instanceof Ship && target != null && ship.getWorldTransform() != null && target.getWorldTransform() != null;
+		CTLog.debug("[MOVE] setMoveToTarget ship=" + shipId + " target=" + targetId + " accepted=" + ok
+				+ (ship == null ? " (ship null)" : "") + (target == null ? " (target null)" : ""));
+		if(ok) {
 			Vector3f dest = MoveManager.computeDestination(ship, target);
+			CTLog.debug("[MOVE] computed dest=(" + dest.x + "," + dest.y + "," + dest.z + ") for ship=" + shipId);
 			clearTarget((Ship) ship);
 			// Track the target entity so the destination is recomputed each tick (follows a moving target
 			// and stays sector-correct as the ship crosses sector boundaries).
@@ -506,26 +649,34 @@ public class AIUtils {
 	 */
 	private static void engageWithFleetShip(Ship ship, SegmentController to) {
 		attackOrders.put(ship.getId(), to.getId()); // mark commanded (with target) so the fleet won't break it out, and the map can draw the attack line
+		CTLog.debug("[ATTACK] engageWithFleetShip ship=" + ship.getId() + " (" + ship.getName() + ") target=" + to.getId()
+				+ " (" + to.getName() + ") program=" + currentProgramName(ship) + " state=" + currentStateName(ship)
+				+ " active=" + ship.getAiConfiguration().getAiEntityState().isActive() + " inFleet=" + ship.isInFleet()
+				+ " docked=" + ship.isDocked());
 		try {
 			((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
 			FleetControllableProgram program = ensureFleetProgram(ship);
 			if(program.getTarget() == to) {
+				CTLog.debug("[ATTACK] ship=" + ship.getId() + " already engaging target=" + to.getId() + " (state=" + currentStateName(ship) + ") — not re-transitioning");
 				return; // already attacking this target — don't re-transition and interrupt the engagement
 			}
 			program.setTarget(to);
 			program.setSpecificTargetId(to.getAsTargetId());
 			program.suspend(false);
 			program.getMachine().getFsm().stateTransition(Transition.SEARCH_FOR_TARGET);
+			CTLog.debug("[ATTACK] ship=" + ship.getId() + " SEARCH_FOR_TARGET ok — now state=" + currentStateName(ship));
 		} catch(FSMException e) {
 			// Not currently in a state that allows SEARCH_FOR_TARGET — reset to idle first, then retry.
+			CTLog.debug("[ATTACK] ship=" + ship.getId() + " SEARCH_FOR_TARGET rejected from state=" + currentStateName(ship) + " — breaking to idle then retrying");
 			try {
-				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.FLEET_BREAKING);
+				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.RESTART);
 				ship.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().stateTransition(Transition.SEARCH_FOR_TARGET);
+				CTLog.debug("[ATTACK] ship=" + ship.getId() + " retry SEARCH_FOR_TARGET ok — now state=" + currentStateName(ship));
 			} catch(FSMException exception) {
-				exception.printStackTrace();
+				CTLog.error("[ATTACK] ship=" + ship.getId() + " retry SEARCH_FOR_TARGET failed from state=" + currentStateName(ship), exception);
 			}
 		} catch(Exception exception) {
-			exception.printStackTrace();
+			CTLog.error("[ATTACK] ship=" + ship.getId() + " engage failed", exception);
 		}
 	}
 

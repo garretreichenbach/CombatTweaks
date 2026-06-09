@@ -43,9 +43,7 @@ public abstract class FleetStateMixin {
 			if(AIUtils.isUnderCommand(s.getId())) {
 				continue;
 			}
-			if(s.isCoreOverheating()
-					|| s.getAiConfiguration().getAiEntityState().getCurrentProgram() == null
-					|| !(s.getAiConfiguration().getAiEntityState().getCurrentProgram() instanceof FleetControllableProgram)) {
+			if(s.isCoreOverheating() || s.getAiConfiguration().getAiEntityState().getCurrentProgram() == null || !(s.getAiConfiguration().getAiEntityState().getCurrentProgram() instanceof FleetControllableProgram)) {
 				continue;
 			}
 			State st = s.getAiConfiguration().getAiEntityState().getCurrentProgram().getMachine().getFsm().getCurrentState();

@@ -93,9 +93,7 @@ public abstract class FleetMiningMixin {
 	 * it"). FOCUSED concentrates the array on the aim point, so the beams actually hit the targeted
 	 * surface. We redirect that one call to set FOCUSED instead.</p>
 	 */
-	@Redirect(method = "updateAI", at = @At(value = "INVOKE",
-			target = "Lorg/schema/game/common/controller/elements/beam/harvest/SalvageBeamCollectionManager;setFireMode(Lorg/schema/game/common/controller/elements/FocusableUsableModule$FireMode;)V"),
-			remap = false)
+	@Redirect(method = "updateAI", at = @At(value = "INVOKE", target = "Lorg/schema/game/common/controller/elements/beam/harvest/SalvageBeamCollectionManager;setFireMode(Lorg/schema/game/common/controller/elements/FocusableUsableModule$FireMode;)V"), remap = false)
 	private void combatTweaks$forceFocusedSalvage(SalvageBeamCollectionManager group, FocusableUsableModule.FireMode mode) {
 		group.setFireMode(FocusableUsableModule.FireMode.FOCUSED);
 	}

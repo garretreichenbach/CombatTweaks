@@ -94,6 +94,10 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		getInteractionManager().getBuildToolsManager().suspend(active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().suspend(active);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().suspend(active);
+		// The astronaut controller fires the player's hotbar/handheld and grabs the mouse every frame in
+		// astronaut mode; suspend it too so the hotbar isn't live (and doesn't fight for the mouse) while
+		// the map is open, and release it on exit so astronaut control returns.
+		getInteractionManager().getPlayerCharacterManager().suspend(active);
 		super.onSwitch(active);
 	}
 
@@ -112,6 +116,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 		getInteractionManager().getBuildToolsManager().suspend(true);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getShipExternalFlightController().suspend(true);
 		getInteractionManager().getInShipControlManager().getShipControlManager().getSegmentBuildController().suspend(true);
+		getInteractionManager().getPlayerCharacterManager().suspend(true);
 		handleInteraction(timer);
 	}
 	private int dragAnchorX;
@@ -453,8 +458,8 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			// Double-tap-to-jump is disabled — it triggered too easily during normal panning.
 			// handleMovementTaps();
 			if(Mouse.hasWheel() && Mouse.getEventDWheel() != 0 && guiDrawer.isOverSelectionPanel(Mouse.getX(), GLFrame.getHeight() - Mouse.getY())) {
-				// Hovering the selection panel: scroll it instead of zooming the map.
-				guiDrawer.scrollSelectionPanel(Mouse.getEventDWheel() > 0 ? -48.0f : 48.0f);
+				// Hovering a roster panel: scroll it instead of zooming the map.
+				guiDrawer.scrollSelectionPanel(Mouse.getX(), GLFrame.getHeight() - Mouse.getY(), Mouse.getEventDWheel() > 0 ? -48.0f : 48.0f);
 			} else if(Mouse.hasWheel() && Mouse.getEventDWheel() != 0) {
 				float wheelAmount = (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) ? 1000 : 100;
 				if(Mouse.getEventDWheel() == 0) {
@@ -535,6 +540,11 @@ public class TacticalMapControlManager extends AbstractControlManager {
 				} else {
 					TacticalMapEntityIndicator hit = guiDrawer.findIndicatorAtScreen(mouseX, mouseY, ENTITY_CLICK_THRESHOLD_PX);
 					if(hit != null) {
+						// A click on a non-own (neutral/enemy) entity makes it the right roster's current target
+						// so it can be inspected and pinned. Own/allied ships go through normal selection instead.
+						if(hit.getEntity() != null && !guiDrawer.isOwnOrAlly(hit.getEntity())) {
+							guiDrawer.currentOtherTargetId = hit.getEntity().getId();
+						}
 						if(turretTargetingMode) {
 							handleTurretTargeting(hit.getEntity());
 						} else if(pendingClickIndicator != null) {
@@ -560,8 +570,9 @@ public class TacticalMapControlManager extends AbstractControlManager {
 							lastClickY = mouseY;
 						}
 					} else if(!hasModifierKeyPressed()) {
-						// Clicked empty space — clear selection
+						// Clicked empty space — clear selection and the right roster's transient target
 						guiDrawer.clearSelected();
+						guiDrawer.currentOtherTargetId = -1;
 					}
 				}
 			} else if(isMiddleDown && !wasMiddleMouseDown && !rightDown) {

@@ -16,6 +16,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import videogoose.combattweaks.manager.MineManager;
 import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.utils.CTLog;
+
+import javax.vecmath.Quat4f;
+import javax.vecmath.Vector3f;
 
 /**
  * Mining-ship AI tweaks: don't ram the asteroid, and only ever fire salvage while on a mine order.
@@ -67,6 +71,38 @@ public abstract class ShipAIEntityMixin {
 		return entity.isInFleet() || AIUtils.isUnderCommand(entity.getId());
 	}
 
+	/**
+	 * Safety net against permanent AI lock-up: drop any non-finite movement vector before it reaches physics.
+	 *
+	 * <p>{@code moveTo} normalizes {@code toDir} and, when {@code orientate} is true, also orients the ship to
+	 * it — so a NaN/Inf direction writes a NaN velocity <em>and</em> a NaN orientation basis. Once the ship's
+	 * transform is NaN, every later AI computation (target vectors, ranges, aim) comes out NaN too, and the
+	 * ship can never move or fight again until it's reloaded from disk (seen as endless {@code
+	 * RAYTRACE_TRAVERSE} NaN spam). A bad direction can come from a degenerate (zero-length) aim or a
+	 * cross-sector transform that resolves to NaN. Cancelling the call leaves the ship momentarily idle and
+	 * fully recoverable instead of bricked.</p>
+	 */
+	@Inject(method = "moveTo(Lorg/schema/schine/graphicsengine/core/Timer;Ljavax/vecmath/Vector3f;Z)V", at = @At("HEAD"), cancellable = true, remap = false)
+	private void combatTweaks$guardMoveToNaN(Timer timer, Vector3f toDir, boolean orientate, CallbackInfo ci) {
+		if(toDir == null || !combatTweaks$finite(toDir.x) || !combatTweaks$finite(toDir.y) || !combatTweaks$finite(toDir.z)) {
+			CTLog.debugThrottled("nanMove", 2000, "[GUARD] dropped non-finite moveTo dir=" + toDir);
+			ci.cancel();
+		}
+	}
+
+	/** Companion to {@link #combatTweaks$guardMoveToNaN}: never write a NaN/Inf orientation onto the ship. */
+	@Inject(method = "orientate(Lorg/schema/schine/graphicsengine/core/Timer;Ljavax/vecmath/Quat4f;)V", at = @At("HEAD"), cancellable = true, remap = false)
+	private void combatTweaks$guardOrientateNaN(Timer timer, Quat4f toDir, CallbackInfo ci) {
+		if(toDir == null || !combatTweaks$finite(toDir.x) || !combatTweaks$finite(toDir.y) || !combatTweaks$finite(toDir.z) || !combatTweaks$finite(toDir.w)) {
+			CTLog.debugThrottled("nanOrient", 2000, "[GUARD] dropped non-finite orientate quat=" + toDir);
+			ci.cancel();
+		}
+	}
+
+	private static boolean combatTweaks$finite(float f) {
+		return !Float.isNaN(f) && !Float.isInfinite(f);
+	}
+
 	@Inject(method = "doShooting", at = @At("HEAD"), cancellable = true)
 	private void combatTweaks$suppressWeaponsOnPeacefulOrders(AIControllerStateUnit<?> unit, Timer timer, CallbackInfo ci) {
 		try {
@@ -84,11 +120,16 @@ public abstract class ShipAIEntityMixin {
 			// Repair orders are handled entirely by the engine's doShooting now: it skips offensive weapons
 			// against a friendly target and fires the repair beams at a damaged ally. We deliberately do NOT
 			// suppress here (repair isn't in shouldSuppressWeapons), so doShooting runs in full and repairs.
-			// Mining/moving ships (and their turrets) only ever fire salvage — cancel any weapon/beam/missile
-			// shot. Attacking/defending ships are exempt (shouldSuppressWeapons returns false for them).
-			if(AIUtils.shouldSuppressWeapons(orderId)
-					&& ship.getNetworkObject().targetType.getByte() != SimpleGameObject.MINABLE) {
-				ci.cancel();
+			// Mining/moving/defending ships (and their turrets) shouldn't fire weapons. The ONE thing they may
+			// fire is salvage, and ONLY when actually on a mine order against a MINABLE target — otherwise a
+			// mining ship under a MOVE order briefly salvages whenever it drifts near an asteroid (its target
+			// type flips to MINABLE). So exempt MINABLE shots only when this ship is genuinely mining.
+			if(AIUtils.shouldSuppressWeapons(orderId)) {
+				boolean miningMinable = MineManager.getInstance().getAssignedTarget(orderId) != null
+						&& ship.getNetworkObject().targetType.getByte() == SimpleGameObject.MINABLE;
+				if(!miningMinable) {
+					ci.cancel();
+				}
 			}
 		} catch(Exception ignored) {
 		}
@@ -103,9 +144,7 @@ public abstract class ShipAIEntityMixin {
 	 * needed to fire its actual weapons, effectively disabling them. We gate that salvage call: skip it for
 	 * ships (and their turrets) under a combat order; mining and idle ships are unaffected.</p>
 	 */
-	@Redirect(method = "doShooting", at = @At(value = "INVOKE",
-			target = "Lorg/schema/game/common/controller/elements/beam/harvest/SalvageElementManager;handle(Lorg/schema/game/common/data/player/ControllerStateInterface;Lorg/schema/schine/graphicsengine/core/Timer;)V"),
-			remap = false)
+	@Redirect(method = "doShooting", at = @At(value = "INVOKE", target = "Lorg/schema/game/common/controller/elements/beam/harvest/SalvageElementManager;handle(Lorg/schema/game/common/data/player/ControllerStateInterface;Lorg/schema/schine/graphicsengine/core/Timer;)V"), remap = false)
 	private void combatTweaks$noSalvageWhileFighting(SalvageElementManager mgr, ControllerStateInterface unit, Timer timer) {
 		try {
 			Ship ship = ((ShipAIEntity) (Object) this).getEntity();

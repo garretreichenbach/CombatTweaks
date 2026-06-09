@@ -4,6 +4,7 @@ import api.common.GameCommon;
 import org.schema.game.common.controller.SegmentController;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.utils.CTLog;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -187,9 +188,19 @@ public class OrderQueueManager {
 				// it never interrupts a live search/engagement (and setAttackTarget is itself idempotent when
 				// the target is already set). Attack is the only order type without such a maintenance pass.
 				if(order.type == OrderType.ATTACK
-						&& GameCommon.getGameObject(order.targetId) instanceof SegmentController
-						&& !AIUtils.isInAttackCycle(shipId)) {
-					AIUtils.setAttackTarget(shipId, order.targetId);
+						&& GameCommon.getGameObject(order.targetId) instanceof SegmentController) {
+					boolean inCycle = AIUtils.isInAttackCycle(shipId);
+					if(CTLog.debugEnabled() && GameCommon.getGameObject(shipId) instanceof org.schema.game.common.controller.Ship s) {
+						CTLog.debug("[ATTACK] tick ship=" + shipId + " target=" + order.targetId
+								+ " inAttackCycle=" + inCycle + " program=" + AIUtils.currentProgramName(s)
+								+ " state=" + AIUtils.currentStateName(s)
+								+ " storedTarget=" + AIUtils.getAttackTarget(shipId));
+					}
+					// Re-affirm only when the ship has fallen out of its attack cycle, so this never interrupts a
+					// live search/engagement (and setAttackTarget is idempotent when the target is already set).
+					if(!inCycle) {
+						AIUtils.setAttackTarget(shipId, order.targetId);
+					}
 				}
 				if(isComplete(shipId, order)) {
 					advance(shipId);

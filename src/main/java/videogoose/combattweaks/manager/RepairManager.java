@@ -6,6 +6,7 @@ import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.SimpleGameObject;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.utils.CTLog;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -54,6 +55,20 @@ public class RepairManager {
 	/** Register a repair order for the given ship targeting the given object. Replaces any existing order. */
 	public void addRepair(int shipId, int targetId) {
 		assignments.put(shipId, targetId);
+		// Re-sync the target's damaged-block recorder from its persisted block HP (the recorder is empty after
+		// a server restart, so the beam would otherwise leave internal damage unrepaired). One-time on issue.
+		Object target = GameCommon.getGameObject(targetId);
+		if(target instanceof SegmentController sc) {
+			int killBefore = (sc instanceof Ship) ? ((Ship) sc).getBlockKillRecorder().size() : -1;
+			int recorded = AIUtils.recordExistingBlockDamage(sc);
+			if(CTLog.debugEnabled() && sc instanceof Ship t) {
+				// killRecorder = destroyed blocks the engine can rebuild (cleared whenever ANY block is added,
+				// and wiped on restart); damagedRecorder = reduced-HP blocks (our scan just re-populated it).
+				CTLog.debug("[REPAIR] target=" + targetId + " destroyed-blocks(killRecorder)=" + killBefore
+						+ " damaged-blocks(after scan)=" + t.getDamagedBlockRecorder().size()
+						+ " (scan re-recorded " + recorded + " reduced-HP blocks)");
+			}
+		}
 		// Engage the repair FSM right away instead of waiting up to a full tick (which left the ship idle and
 		// looking like the order did nothing). The tick still re-affirms it and drops it when appropriate.
 		AIUtils.setRepairTarget(shipId, targetId);
@@ -119,23 +134,11 @@ public class RepairManager {
 		}
 
 		// Stop when there's nothing left to mend — the ship then returns to idle. Drop the order when the
-		// target is destroyed/overheating, OR fully repaired: full reactor HP AND no destroyed blocks
-		// (block-kill recorder) AND no damaged blocks (damaged-block recorder). Until then it holds, like
-		// Defend.
-		if(target instanceof Ship) {
-			try {
-				Ship t = (Ship) target;
-				if(t.getReactorHp() <= 0) {
-					return false; // destroyed / overheating
-				}
-				if(t.getReactorHp() >= t.getReactorHpMax()
-						&& t.getBlockKillRecorder().size() == 0
-						&& t.getDamagedBlockRecorder().size() == 0) {
-					return false; // fully repaired — revert to idle
-				}
-			} catch(Exception ignored) {
-				// Target doesn't expose its HP/recorders — let the FSM decide when to stop.
-			}
+		// target is destroyed/overheating OR fully repaired (reactor HP, blocks, AND Armor HP all topped up).
+		// Until then it holds, like Defend. needsRepair() centralises this so the firing gate and completion
+		// check agree (a reactor-only check would cancel on a ship whose damage is in the Armor HP pool).
+		if(target instanceof Ship && !AIUtils.needsRepair(target)) {
+			return false;
 		}
 
 		// Hand off to the engine's repair FSM (idempotent — skips if already repairing this target).

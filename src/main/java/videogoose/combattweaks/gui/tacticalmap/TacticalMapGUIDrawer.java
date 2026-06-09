@@ -2287,12 +2287,29 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private final java.util.Set<String> pinsSeen = new java.util.HashSet<>();
 	/** Clickable pin-button rects {x, y, w, h, entityId}, rebuilt every panel draw for hit-testing. */
 	private final List<int[]> pinRects = new ArrayList<>();
-	/** Selection-panel scroll state (when it grows taller than the screen). */
-	private float panelScroll;
-	private float selPanelX, selPanelY, selPanelW, selPanelH, selPanelMaxScroll;
-	private boolean selPanelScrollable;
-	/** Scrollbar thumb/track geometry, for click-drag scrolling. */
-	private float selThumbX, selThumbY, selThumbW, selThumbH, selTrackTop, selTrackH;
+
+	/**
+	 * Per-roster scroll + geometry state, so the left (own/allied) and right (neutral/enemy) panels scroll
+	 * and hit-test independently. Rebuilt each frame by {@link #drawRosterPanel}.
+	 */
+	private static final class PanelScroll {
+		float x, y, w, h;        // panel rect
+		float scroll, maxScroll; // vertical scroll offset / its cap
+		boolean scrollable;
+		float thumbX, thumbY, thumbW, thumbH, trackTop, trackH; // scrollbar geometry for click-drag
+	}
+
+	private final PanelScroll leftPanel = new PanelScroll();
+	private final PanelScroll rightPanel = new PanelScroll();
+	/** The panel whose scrollbar thumb is currently being dragged (set by {@link #isOverScrollThumb}). */
+	private PanelScroll draggingScroll;
+
+	/**
+	 * A non-own entity the player most recently clicked on the map, shown transiently in the right roster so
+	 * it can be inspected and pinned (a hovered entity would vanish the moment the mouse moved to the Pin
+	 * button). -1 = none; cleared when empty space is clicked.
+	 */
+	public int currentOtherTargetId = -1;
 
 	/**
 	 * A corner panel listing the currently-selected ships with their shield/armor/reactor bars — a compact
@@ -2302,12 +2319,53 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * <p>Drawn in three passes (background, then all bars, then all names) rather than interleaving quads
 	 * with text overlays — an overlay's own GL state changes were leaving the bar quads invisible.</p>
 	 */
+	/**
+	 * Draws the two roster panels: own/allied ships on the left (selected or pinned), neutral/enemy ships on
+	 * the right (pinned or the current clicked target). Both share the pin framework and renderer; entities
+	 * are routed by faction.
+	 */
 	private void drawSelectionPanel() {
 		pinRects.clear();
-		loadPins();
 		validatePins();
-		if(selectedEntities.isEmpty() && pinnedUIDs.isEmpty()) {
-			selPanelScrollable = false;
+
+		// Partition pinned entities by faction; selected ships are always own/allied (left); the current
+		// clicked non-own target rides along on the right so it can be pinned.
+		LinkedHashSet<Integer> leftOrder = new LinkedHashSet<>();
+		LinkedHashSet<Integer> rightOrder = new LinkedHashSet<>();
+		if(!pinnedUIDs.isEmpty()) {
+			for(TacticalMapEntityIndicator ind : drawMap.values()) {
+				SegmentController e = ind.getEntity();
+				if(e != null && pinnedUIDs.contains(e.getUniqueIdentifier())) {
+					(isOwnOrAlly(e) ? leftOrder : rightOrder).add(e.getId());
+				}
+			}
+		}
+		for(SegmentController e : selectedEntities) {
+			leftOrder.add(e.getId());
+		}
+		if(currentOtherTargetId != -1) {
+			TacticalMapEntityIndicator ind = drawMap.get(currentOtherTargetId);
+			if(ind != null && ind.getEntity() != null && !isOwnOrAlly(ind.getEntity())) {
+				rightOrder.add(currentOtherTargetId);
+			}
+		}
+
+		drawRosterPanel(false, leftOrder, leftPanel);
+		drawRosterPanel(true, rightOrder, rightPanel);
+	}
+
+	/**
+	 * Renders one roster panel (a list of entity rows with stat block, HP bars and a Pin/Unpin button) and
+	 * records its scroll/hit-test geometry into {@code st}.
+	 *
+	 * @param rightSide anchor to the right screen edge (others) vs. the left (own/allied)
+	 * @param order     entity ids to show, in display order (own-faction first within a side)
+	 */
+	private void drawRosterPanel(boolean rightSide, LinkedHashSet<Integer> order, PanelScroll st) {
+		if(order.isEmpty()) {
+			st.scrollable = false;
+			st.w = 0;
+			st.h = 0;
 			return;
 		}
 		// Turret units fold base+barrel into one row and intentionally show no HP — their stats belong to
@@ -2316,29 +2374,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		int maxRows = 40;
 		SegmentController viewer = getCurrentEntity();
 
-		// Row entities = pinned (by UID, those currently in view) then selected, deduped. Each must have a live
-		// indicator (for its rebased transform/stats); pinned entities out of view are skipped this frame.
-		LinkedHashSet<Integer> order = new LinkedHashSet<>();
-		if(!pinnedUIDs.isEmpty()) {
-			for(TacticalMapEntityIndicator ind : drawMap.values()) {
-				SegmentController e = ind.getEntity();
-				if(e != null && pinnedUIDs.contains(e.getUniqueIdentifier())) {
-					order.add(e.getId());
-				}
-			}
-		}
-		for(SegmentController e : selectedEntities) {
-			order.add(e.getId());
-		}
-
-		// Collect rows with their full stat block (respecting Label Detail) plus measured text size, so the
-		// panel fits its content and rows stack cleanly.
-		List<SegmentController> ents = new ArrayList<>();
-		List<String> texts = new ArrayList<>();
-		List<Integer> heights = new ArrayList<>();
-		float contentW = 150.0f; // minimum (also the bar width)
-
-		// Keep only ids with a live indicator, then stable-sort own-faction ships first (allies below).
+		// Keep only ids with a live indicator, then stable-sort own-faction ships first.
 		int myFac = GameClient.getClientPlayerState().getFactionId();
 		List<Integer> ids = new java.util.ArrayList<>();
 		for(int id : order) {
@@ -2348,6 +2384,13 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 		}
 		ids.sort((a, b) -> Integer.compare(rowGroup(a, myFac), rowGroup(b, myFac)));
+
+		// Collect rows with their full stat block (respecting Label Detail) plus measured text size, so the
+		// panel fits its content and rows stack cleanly.
+		List<SegmentController> ents = new ArrayList<>();
+		List<String> texts = new ArrayList<>();
+		List<Integer> heights = new ArrayList<>();
+		float contentW = 150.0f; // minimum (also the bar width)
 
 		GUIElement.enableOrthogonal();
 		for(int id : ids) {
@@ -2370,13 +2413,14 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			heights.add(th);
 		}
 		if(ents.isEmpty()) {
-			selPanelScrollable = false;
+			st.scrollable = false;
+			st.w = 0;
+			st.h = 0;
 			GUIElement.disableOrthogonal();
 			return;
 		}
 
 		float pad = 8.0f;
-		float x = 28.0f;
 		float y = 188.0f;
 		float barGap = 5.0f;          // gap between the stat text and the bars
 		float barsH = bars ? SEL_BARS_H : 0.0f; // height of the three labelled bars
@@ -2384,8 +2428,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		float btnW = 54.0f;
 		float btnH = 16.0f;
 		float btnGap = 10.0f;
-		float btnX = x + contentW + btnGap;
 		float scrollbarW = 6.0f, scrollbarGap = 6.0f;
+		float screenMargin = 28.0f;
 
 		float totalH = 0.0f;
 		for(int th : heights) {
@@ -2398,26 +2442,32 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		float maxPanelH = GLFrame.getHeight() - panelTop - 16.0f;
 		boolean scrollable = totalH + pad * 2.0f > maxPanelH;
 		float visibleH = scrollable ? maxPanelH - pad * 2.0f : totalH;
-		selPanelScrollable = scrollable;
-		selPanelMaxScroll = Math.max(0.0f, totalH - visibleH);
-		panelScroll = Math.max(0.0f, Math.min(panelScroll, selPanelMaxScroll));
 		float panelH = visibleH + pad * 2.0f;
 		float panelW = contentW + btnGap + btnW + (scrollable ? scrollbarGap + scrollbarW : 0.0f) + pad * 2.0f;
-		selPanelX = x - pad;
-		selPanelY = panelTop;
-		selPanelW = panelW;
-		selPanelH = panelH;
+
+		// Anchor to the chosen edge; x is the content origin (panel left edge + pad).
+		float panelLeft = rightSide ? (GLFrame.getWidth() - screenMargin - panelW) : (screenMargin - pad);
+		float x = panelLeft + pad;
+		float btnX = x + contentW + btnGap;
+
+		st.scrollable = scrollable;
+		st.maxScroll = Math.max(0.0f, totalH - visibleH);
+		st.scroll = Math.max(0.0f, Math.min(st.scroll, st.maxScroll));
+		st.x = panelLeft;
+		st.y = panelTop;
+		st.w = panelW;
+		st.h = panelH;
 
 		begin2D();
-		drawRoundedRect(x - pad, panelTop, panelW, panelH, 10.0f, PANEL_BG);
-		strokeRoundedRect(x - pad, panelTop, panelW, panelH, 10.0f, PANEL_BORDER);
+		drawRoundedRect(panelLeft, panelTop, panelW, panelH, 10.0f, PANEL_BG);
+		strokeRoundedRect(panelLeft, panelTop, panelW, panelH, 10.0f, PANEL_BORDER);
 
 		// Clip the scrolling rows to the panel so they don't spill past it.
 		if(scrollable) {
 			GL11.glEnable(GL11.GL_SCISSOR_TEST);
-			GL11.glScissor((int) (x - pad), (int) (GLFrame.getHeight() - (panelTop + panelH)), (int) panelW, (int) panelH);
+			GL11.glScissor((int) panelLeft, (int) (GLFrame.getHeight() - (panelTop + panelH)), (int) panelW, (int) panelH);
 		}
-		float startY = y - panelScroll;
+		float startY = y - st.scroll;
 
 		// Quad pass: HP bars + pin-button backgrounds (record click rects only for visible buttons).
 		float rowY = startY;
@@ -2463,19 +2513,19 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(scrollable) {
 			GL11.glDisable(GL11.GL_SCISSOR_TEST);
 			// Scrollbar track + thumb on the right edge (geometry stored so the thumb can be dragged).
-			float sbX = (x - pad) + panelW - pad - scrollbarW;
+			float sbX = panelLeft + panelW - pad - scrollbarW;
 			float trackTop = panelTop + pad;
 			float trackH = visibleH;
 			drawRoundedRect(sbX, trackTop, scrollbarW, trackH, 3.0f, new Vector4f(0.15f, 0.17f, 0.22f, 0.85f));
 			float thumbH = Math.max(20.0f, trackH * (visibleH / totalH));
-			float thumbY = trackTop + (selPanelMaxScroll > 0 ? (panelScroll / selPanelMaxScroll) * (trackH - thumbH) : 0.0f);
+			float thumbY = trackTop + (st.maxScroll > 0 ? (st.scroll / st.maxScroll) * (trackH - thumbH) : 0.0f);
 			drawRoundedRect(sbX, thumbY, scrollbarW, thumbH, 3.0f, new Vector4f(0.45f, 0.6f, 0.8f, 0.9f));
-			selThumbX = sbX;
-			selThumbY = thumbY;
-			selThumbW = scrollbarW;
-			selThumbH = thumbH;
-			selTrackTop = trackTop;
-			selTrackH = trackH;
+			st.thumbX = sbX;
+			st.thumbY = thumbY;
+			st.thumbW = scrollbarW;
+			st.thumbH = thumbH;
+			st.trackTop = trackTop;
+			st.trackH = trackH;
 		}
 
 		GlUtil.glColor4f(1, 1, 1, 1);
@@ -2491,28 +2541,58 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		return myFac != 0 && ind.getEntity().getFactionId() == myFac ? 0 : 1;
 	}
 
-	/** Whether a point is over the scrollbar thumb (so the control manager can start a drag). */
-	public boolean isOverScrollThumb(int mx, int my) {
-		return selPanelScrollable && mx >= selThumbX && mx <= selThumbX + selThumbW && my >= selThumbY && my <= selThumbY + selThumbH;
+	/** Whether {@code e} is the player's own faction or an ally (routes it to the left roster). */
+	public boolean isOwnOrAlly(SegmentController e) {
+		if(e == null) {
+			return false;
+		}
+		int myFac = GameClient.getClientPlayerState().getFactionId();
+		int fac = e.getFactionId();
+		return (fac != 0 && fac == myFac) || (myFac != 0 && GameCommon.getGameState().getFactionManager().isFriend(fac, myFac));
 	}
 
-	/** While dragging the thumb, maps a mouse-Y to a scroll offset. */
+	/** Whether a point is over either roster's scrollbar thumb; remembers which, so a drag scrolls it. */
+	public boolean isOverScrollThumb(int mx, int my) {
+		if(overThumb(leftPanel, mx, my)) {
+			draggingScroll = leftPanel;
+			return true;
+		}
+		if(overThumb(rightPanel, mx, my)) {
+			draggingScroll = rightPanel;
+			return true;
+		}
+		return false;
+	}
+
+	private boolean overThumb(PanelScroll p, int mx, int my) {
+		return p.scrollable && mx >= p.thumbX && mx <= p.thumbX + p.thumbW && my >= p.thumbY && my <= p.thumbY + p.thumbH;
+	}
+
+	/** While dragging a thumb, maps a mouse-Y to a scroll offset on the panel whose thumb was grabbed. */
 	public void scrollPanelToThumbY(int my) {
-		if(!selPanelScrollable || selTrackH <= selThumbH) {
+		PanelScroll p = draggingScroll;
+		if(p == null || !p.scrollable || p.trackH <= p.thumbH) {
 			return;
 		}
-		float t = (my - selThumbH / 2.0f - selTrackTop) / (selTrackH - selThumbH);
-		panelScroll = Math.max(0.0f, Math.min(t, 1.0f)) * selPanelMaxScroll;
+		float t = (my - p.thumbH / 2.0f - p.trackTop) / (p.trackH - p.thumbH);
+		p.scroll = Math.clamp(t, 0.0f, 1.0f) * p.maxScroll;
 	}
 
-	/** Whether a screen point is over the selection panel (for routing the scroll wheel). */
+	/** Whether a screen point is over either roster panel (for routing the scroll wheel). */
 	public boolean isOverSelectionPanel(int mx, int my) {
-		return selPanelScrollable && mx >= selPanelX && mx <= selPanelX + selPanelW && my >= selPanelY && my <= selPanelY + selPanelH;
+		return overPanel(leftPanel, mx, my) || overPanel(rightPanel, mx, my);
 	}
 
-	/** Scroll the selection panel by {@code dy} pixels (clamped). */
-	public void scrollSelectionPanel(float dy) {
-		panelScroll = Math.max(0.0f, Math.min(panelScroll + dy, selPanelMaxScroll));
+	private boolean overPanel(PanelScroll p, int mx, int my) {
+		return p.scrollable && mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h;
+	}
+
+	/** Scroll whichever roster panel the cursor is over by {@code dy} pixels (clamped). */
+	public void scrollSelectionPanel(int mx, int my, float dy) {
+		PanelScroll p = overPanel(rightPanel, mx, my) ? rightPanel : (overPanel(leftPanel, mx, my) ? leftPanel : null);
+		if(p != null) {
+			p.scroll = Math.max(0.0f, Math.min(p.scroll + dy, p.maxScroll));
+		}
 	}
 
 	/** If the click hits a pin button, toggle that entity's pinned state and return true (consume the click). */
@@ -2528,32 +2608,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 					} else {
 						pinsSeen.remove(uid);
 					}
-					savePins();
 				}
 				return true;
 			}
 		}
 		return false;
-	}
-
-	/** Load pinned UIDs from config once (a newline-joined list — UIDs never contain newlines). */
-	private void loadPins() {
-		if(pinsLoaded) {
-			return;
-		}
-		pinsLoaded = true;
-		pinLoadTime = System.currentTimeMillis();
-		try {
-			String s = ConfigManager.getMainConfig().tacticalMapPinned.getValue();
-			if(s != null && !s.isEmpty()) {
-				for(String u : s.split("\n")) {
-					if(!u.isEmpty()) {
-						pinnedUIDs.add(u);
-					}
-				}
-			}
-		} catch(Exception ignored) {
-		}
 	}
 
 	/**
@@ -2585,30 +2644,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			if(loadedUIDs.contains(uid)) {
 				pinsSeen.add(uid);
 			}
-		}
-		// Give the world time to stream in after a restart before pruning never-seen pins.
-		if(now - pinLoadTime > 15000) {
-			if(pinnedUIDs.removeIf(uid -> !pinsSeen.contains(uid))) {
-				savePins();
-			}
-		}
-	}
-
-	private void savePins() {
-		try {
-			StringBuilder sb = new StringBuilder();
-			for(String u : pinnedUIDs) {
-				if(u == null || u.indexOf('\n') >= 0) {
-					continue;
-				}
-				if(sb.length() > 0) {
-					sb.append('\n');
-				}
-				sb.append(u);
-			}
-			ConfigManager.getMainConfig().tacticalMapPinned.setValue(sb.toString());
-			ConfigManager.getMainConfig().writeAllFields();
-		} catch(Exception ignored) {
 		}
 	}
 

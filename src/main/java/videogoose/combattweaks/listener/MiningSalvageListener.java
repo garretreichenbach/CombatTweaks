@@ -23,6 +23,7 @@ import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
 import videogoose.combattweaks.manager.MineManager;
 import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.utils.CTLog;
 
 import javax.vecmath.AxisAngle4f;
 import javax.vecmath.Matrix3f;
@@ -43,10 +44,15 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class MiningSalvageListener implements CustomAddOnUseListener {
 
-	/** Distance from the stand-off over which the approach speed ramps down for a smooth arrival. */
-	private static final float APPROACH_SLOW_ZONE = 600.0f;
+	/**
+	 * Distance from the stand-off over which the approach speed ramps down for a smooth arrival. Beyond this
+	 * the ship thrusts at full engine power; within it the speed is capped/tapered. Kept fairly tight so the
+	 * ship actually drives in under power instead of coasting the whole way (a too-large zone made nearly
+	 * every same-sector asteroid fall entirely inside it, so the ship just drifted in at the low cap).
+	 */
+	private static final float APPROACH_SLOW_ZONE = 250.0f;
 	/** Speed cap at the top of the slow zone (full speed beyond it), tapering to {@link #MIN_APPROACH_SPEED}. */
-	private static final float MAX_APPROACH_SPEED = 60.0f;
+	private static final float MAX_APPROACH_SPEED = 150.0f;
 	/** Minimum creep speed at the bottom of the slow zone, so the ship keeps closing the last gap. */
 	private static final float MIN_APPROACH_SPEED = 8.0f;
 	/** Per-tick velocity retention while braking in the slow zone (gentle, smooth decel — not a hard stop). */
@@ -204,6 +210,7 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 
 			Vector3f target = getTargetBlock(entity, asteroid, shipPos);
 			if(target == null) {
+				debug(entity, "no target block found this tick (asteroid sector=" + asteroid.getSectorId() + " ship sector=" + entity.getSectorId() + ")");
 				return; // no block found this tick
 			}
 			float dist = Vector3fTools.distance(shipPos.x, shipPos.y, shipPos.z, target.x, target.y, target.z);
@@ -212,6 +219,12 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 			float leaveDist = radius + LEAVE_STANDOFF;
 
 			boolean mining = AIUtils.isMiningState(entity);
+
+			CTLog.debugThrottled("mineapproach:" + id, 1000, "[MINE] ship=" + id + " dist=" + dist + " standoff=" + standoff
+					+ " mining=" + mining + " speed=" + speed + " radius=" + radius
+					+ " block=(" + target.x + "," + target.y + "," + target.z + ")"
+					+ " shipPos=(" + shipPos.x + "," + shipPos.y + "," + shipPos.z + ")"
+					+ " sameSector=" + (asteroid.getSectorId() == entity.getSectorId()));
 
 			// Spot exhausted? If we've been mining but the asteroid hasn't lost a block for a while, the
 			// reachable rock is gone — leave mining and orbit to a fresh face.
@@ -351,41 +364,30 @@ public class MiningSalvageListener implements CustomAddOnUseListener {
 	}
 
 	/**
-	 * Drives an attack-ordered ship toward its target until it's comfortably within shooting range, then
-	 * hands movement back to the engine's engage cycle (which orients and fires).
+	 * Kicks off the engine's attack cycle for a commanded ship, then stays out of its way.
 	 *
-	 * <p>The engine's fleet AI won't fly a lone ship to a distant target — its target search rejects
-	 * anything beyond {@code getShootingRange()} — so without this the ship just sits. We close the gap;
-	 * once in range we (re)assert the attack target so the engine acquires it, and stop steering so the
-	 * engine's own engage/orient/fire logic can take over without us fighting it.</p>
+	 * <p>This used to manually fly the ship into weapon range, because the engine's fleet AI wouldn't fly a
+	 * lone ship to a target beyond {@code getShootingRange()}. That gap is now closed by {@code
+	 * ShipGameStateMixin} (the commanded target is acquired at any range), so the engine's own
+	 * getting-to-target state flies the ship in and its engage cycle orbits/orients/fires. Steering on top of
+	 * that was actively harmful: it fought the engine's orbit (the in/out oscillation) and — because {@code
+	 * moveTo(..., orientate=true)} normalizes the direction — a degenerate or cross-sector-NaN direction set a
+	 * <em>NaN orientation</em> on the ship, corrupting its transform so every later AI computation came out NaN
+	 * and the ship froze until reload (the {@code RAYTRACE_TRAVERSE} NaN spam). So we no longer steer at all;
+	 * we only (re)assert the target when the ship has dropped out of its attack cycle.</p>
 	 */
 	private void handleAttack(Ship entity, int targetId, Timer timer) {
 		Object obj = GameCommon.getGameObject(targetId);
 		if(!(obj instanceof SegmentController target) || target.getWorldTransform() == null) {
 			return; // target gone — OrderQueueManager will retire the order
 		}
-		ShipAIEntity aiEntity = entity.getAiConfiguration().getAiEntityState();
-		float shootRange = aiEntity.getShootingRange();
-		Vector3f shipPos = entity.getWorldTransform().origin;
-		Vector3f targetPos = AIUtils.getTransformRelativeTo(entity, target).origin; // cross-sector aware
-		float dist = Vector3fTools.distance(shipPos.x, shipPos.y, shipPos.z, targetPos.x, targetPos.y, targetPos.z);
-
-		// Close to ~70% of weapon range so we're solidly inside the engine's engagement threshold.
-		float engageDist = Math.max(50.0f, shootRange * 0.7f);
-		if(dist > engageDist) {
-			aiEntity.setDockingTarget(null); // keep collision avoidance on while flying in
-			Vector3f dir = new Vector3f();
-			dir.sub(targetPos, shipPos);
-			aiEntity.moveTo(timer, dir, true);
-			debug(entity, "closing on attack target (" + (int) dist + " > " + (int) engageDist + ")");
-		} else if(!AIUtils.isInAttackCycle(entity.getId())) {
-			// In range but not currently in the attack cycle — kick it off once. We must NOT re-issue while
-			// it's already searching/engaging: the search state clears the target on entry, so re-issuing
-			// each tick restarts the search forever and the ship never actually engages.
+		// Only (re)assert when out of the cycle. Never re-issue while it's already searching/engaging: the
+		// search state clears the target on entry, so re-issuing each tick would restart the search forever.
+		if(!AIUtils.isInAttackCycle(entity.getId())) {
 			AIUtils.setAttackTarget(entity.getId(), targetId);
-			debug(entity, "in range — starting engine engagement");
+			debug(entity, "engaging attack target via engine cycle");
 		}
-		// else: in range and already in the attack cycle — let the engine drive/orient/fire uninterrupted.
+		// else: the engine owns the engagement — approach/orient/fire is entirely its job now.
 	}
 
 	/**

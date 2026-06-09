@@ -28,7 +28,9 @@ public abstract class FactionManagerMixin {
 			if(a == null || b == null) {
 				return;
 			}
-			Integer target = AIUtils.getAttackTarget(a.getAsTargetId());
+			// Resolve a to its rail root: a docked turret searches for targets as itself, but the attack order
+			// is recorded against the root ship it fires for — so look the order up under the root's id.
+			Integer target = AIUtils.getAttackTarget(AIUtils.orderId(a));
 			if(target != null && target == b.getAsTargetId()) {
 				cir.setReturnValue(true); // a is under a CombatTweaks order to attack b — treat b as hostile
 			}

@@ -17,6 +17,8 @@ import videogoose.combattweaks.utils.AIUtils;
 
 import javax.vecmath.Vector3f;
 import java.util.Iterator;
+import videogoose.combattweaks.utils.CTLog;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -288,6 +290,13 @@ public class MoveManager {
 		Vector3f shipPos = ship.getWorldTransform().origin;
 		float dist = Vector3fTools.distance(shipPos.x, shipPos.y, shipPos.z, destination.x, destination.y, destination.z);
 
+		CTLog.debugThrottled("move:" + shipId, 1000, "[MOVE] ship=" + shipId + " dist=" + dist
+				+ " dest=(" + destination.x + "," + destination.y + "," + destination.z + ")"
+				+ " shipPos=(" + shipPos.x + "," + shipPos.y + "," + shipPos.z + ")"
+				+ " arrived=" + arrivedStates.getOrDefault(shipId, false)
+				+ " targetTracked=" + (entityTargets.get(shipId) != null)
+				+ " inFleet=" + ship.isInFleet());
+
 		// Keep AI active
 		//noinspection unchecked
 		((AIConfiguationElements<Boolean>) ship.getAiConfiguration().get(Types.ACTIVE)).setCurrentState(true, true);
@@ -344,6 +353,26 @@ public class MoveManager {
 
 		Vector3f shipPos = ship.getWorldTransform().origin;
 		tmpMoveDir.sub(destination, shipPos);
+
+		if(CTLog.debugEnabled()) {
+			float thrust = -1.0f;
+			float mass = -1.0f;
+			float velLen = -1.0f;
+			try {
+				thrust = aiEntity.getEntity().getManagerContainer().getThrusterElementManager().getActualThrust();
+				mass = aiEntity.getEntity().getMass();
+				Object phys = ship.getPhysicsDataContainer().getObject();
+				if(phys instanceof com.bulletphysics.dynamics.RigidBody body) {
+					velLen = body.getLinearVelocity(new Vector3f()).length();
+				}
+			} catch(Exception ignored) {
+			}
+			CTLog.debugThrottled("movethrust:" + ship.getId(), 1000,
+					"[MOVE] ship=" + ship.getId() + " thrust=" + thrust + " mass=" + mass
+							+ " thrust/mass=" + (mass > 0 ? thrust / mass : -1) + " velLen=" + velLen
+							+ " moveDirLen=" + tmpMoveDir.length());
+		}
+
 		aiEntity.moveTo(GameServer.getServerState().getController().getTimer(), tmpMoveDir, true);
 	}
 }

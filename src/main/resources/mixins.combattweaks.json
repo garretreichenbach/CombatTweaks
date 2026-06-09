@@ -10,8 +10,10 @@
 	"mixins": [
 		"FleetStateMixin",
 		"ShipAIEntityMixin",
+		"ShipGameStateMixin",
 		"FleetMiningMixin",
-		"FactionManagerMixin"
+		"FactionManagerMixin",
+		"Vector3fToolsMixin"
 	],
 	"client": [],
 	"server": []
