@@ -47,7 +47,9 @@ import org.schema.game.common.controller.elements.ShieldLocalAddOn;
 import org.schema.game.common.data.ManagedSegmentController;
 import videogoose.combattweaks.manager.MoveManager;
 import videogoose.combattweaks.network.client.RequestArmorSyncPacket;
+import org.schema.game.common.data.player.faction.FactionRelation;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
+import videogoose.combattweaks.system.aura.AuraState;
 import videogoose.combattweaks.system.signature.IncomingSignature;
 import videogoose.combattweaks.utils.AIUtils;
 
@@ -126,6 +128,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f SIG_NEUTRAL = new Vector4f(1.0f, 0.85f, 0.2f, 1.0f);
 	private static final Vector4f SIG_HOSTILE = new Vector4f(1.0f, 0.25f, 0.25f, 1.0f);
 	private static final Vector4f SIG_UNKNOWN = new Vector4f(0.7f, 0.75f, 0.85f, 1.0f);
+	// Aura bounding-sphere colours by relation to the viewer (alpha is the solid-pass base, scaled by power).
+	private static final Vector4f AURA_FRIENDLY = new Vector4f(0.35f, 1.0f, 0.55f, 0.5f);
+	private static final Vector4f AURA_NEUTRAL = new Vector4f(1.0f, 0.85f, 0.25f, 0.5f);
+	private static final Vector4f AURA_HOSTILE = new Vector4f(1.0f, 0.35f, 0.35f, 0.5f);
 	private static TacticalMapGUIDrawer instance;
 	public final Vector3f labelOffset;
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap = new ConcurrentHashMap<>();
@@ -175,6 +181,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Latest incoming-signature contacts from the server (replaced wholesale each detector packet).
 	 */
 	private volatile java.util.List<IncomingSignature> incomingSignatures = new java.util.ArrayList<>();
+	/** Active auras (entityId -> sphere) for in-sector projectors, replaced wholesale by the aura sync packet. */
+	private volatile java.util.Map<Integer, AuraState> activeAuras = new java.util.HashMap<>();
 	/** Reusable scratch for the extrapolated contact position. */
 	private final Vector3f sigPosTmp = new Vector3f();
 	/** Cap (seconds) on how far a contact is extrapolated past its last update, so it can't run away if packets stop. */
@@ -343,6 +351,18 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			s.clientReceived = now;
 		}
 		incomingSignatures = signatures;
+	}
+
+	/**
+	 * Replace the active-aura set (called from the aura sync packet on the client). Keyed by projecting
+	 * entity id so {@link #drawAuraSpheres()} can look each up against the on-screen entity indicators.
+	 */
+	public void setActiveAuras(java.util.List<AuraState> auras) {
+		java.util.Map<Integer, AuraState> map = new java.util.HashMap<>();
+		for(AuraState a : auras) {
+			map.put(a.entityId, a);
+		}
+		activeAuras = map;
 	}
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
@@ -1129,6 +1149,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawSectorGrid();
 			drawIncomingSignatureLines();
 			drawBoundingBoxWireframes();
+			drawAuraSpheres();
 			drawPaths();
 			drawLabels();
 			drawSectorGridLabels();
@@ -1451,6 +1472,116 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glDisable(GL11.GL_BLEND);
 		GlUtil.glEnable(GL11.GL_LIGHTING);
 		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
+	}
+
+	/**
+	 * Draws a bounding sphere around each in-sector ship that is projecting a combat aura, so players can see
+	 * who is auraing and target the projector. Rendered camera-relative like the bounding boxes (two passes:
+	 * solid where visible, faint where occluded), coloured by the projector's relation to the viewer and dimmed
+	 * as the aura's power is disrupted.
+	 */
+	private void drawAuraSpheres() {
+		ensureCfgInit();
+		java.util.Map<Integer, AuraState> auras = activeAuras;
+		if(auras.isEmpty() || !cfgAuras) {
+			return;
+		}
+		GlUtil.glDisable(GL11.GL_LIGHTING);
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		GlUtil.glEnable(GL11.GL_COLOR_MATERIAL);
+		GlUtil.glEnable(GL11.GL_BLEND);
+		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPushMatrix();
+		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
+		GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glPushMatrix();
+		GlUtil.glLoadIdentity();
+		Vector3f camPos = loadCameraRelativeModelview();
+		GL11.glLineWidth(1.5f);
+		int myFac = GameClient.getClientPlayerState().getFactionId();
+
+		// Pass 1: depth-tested — solid arcs where the sphere isn't occluded by geometry.
+		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(!indicator.screenPosValid) continue;
+			SegmentController e = indicator.getEntity();
+			if(e == null) continue;
+			AuraState a = auras.get(e.getId());
+			if(a == null || a.radius <= 0.0f) continue;
+			Vector4f base = auraColor(e, myFac);
+			float power = Math.max(0.0f, Math.min(1.0f, a.powerFraction));
+			GlUtil.glColor4f(base.x, base.y, base.z, base.w * (0.4f + 0.6f * power));
+			GlUtil.glPushMatrix();
+			multCameraRelative(indicator.entityTransform, camPos);
+			drawWireframeSphere(a.radius);
+			GlUtil.glPopMatrix();
+		}
+
+		// Pass 2: no depth test — faint ghost arcs through occluding geometry.
+		GlUtil.glDisable(GL11.GL_DEPTH_TEST);
+		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
+			if(!indicator.screenPosValid) continue;
+			SegmentController e = indicator.getEntity();
+			if(e == null) continue;
+			AuraState a = auras.get(e.getId());
+			if(a == null || a.radius <= 0.0f) continue;
+			Vector4f base = auraColor(e, myFac);
+			GlUtil.glColor4f(base.x, base.y, base.z, base.w * 0.18f);
+			GlUtil.glPushMatrix();
+			multCameraRelative(indicator.entityTransform, camPos);
+			drawWireframeSphere(a.radius);
+			GlUtil.glPopMatrix();
+		}
+
+		GL11.glLineWidth(1.0f);
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
+		GlUtil.glPopMatrix(); // modelview
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPopMatrix();
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glDisable(GL11.GL_BLEND);
+		GlUtil.glEnable(GL11.GL_LIGHTING);
+		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
+	}
+
+	/** Aura sphere colour from the projector's faction relation to the viewer (green/red/yellow). */
+	private Vector4f auraColor(SegmentController projector, int myFac) {
+		int eFac = projector.getFactionId();
+		if(eFac != 0 && myFac != 0) {
+			FactionRelation.RType rel = GameCommon.getGameState().getFactionManager().getRelation(myFac, eFac);
+			if(rel == FactionRelation.RType.FRIEND) return AURA_FRIENDLY;
+			if(rel == FactionRelation.RType.ENEMY) return AURA_HOSTILE;
+		}
+		return AURA_NEUTRAL;
+	}
+
+	/**
+	 * Emits three orthogonal great circles (the classic wireframe-sphere gizmo) of the given radius, centred at
+	 * the current modelview origin. Cheap and reads clearly as a sphere from any angle on the tactical map.
+	 */
+	private static void drawWireframeSphere(float r) {
+		final int seg = 32;
+		GL11.glBegin(GL11.GL_LINE_LOOP); // XY plane
+		for(int i = 0; i < seg; i++) {
+			double ang = 2.0 * Math.PI * i / seg;
+			GL11.glVertex3f((float) (r * Math.cos(ang)), (float) (r * Math.sin(ang)), 0.0f);
+		}
+		GL11.glEnd();
+		GL11.glBegin(GL11.GL_LINE_LOOP); // XZ plane
+		for(int i = 0; i < seg; i++) {
+			double ang = 2.0 * Math.PI * i / seg;
+			GL11.glVertex3f((float) (r * Math.cos(ang)), 0.0f, (float) (r * Math.sin(ang)));
+		}
+		GL11.glEnd();
+		GL11.glBegin(GL11.GL_LINE_LOOP); // YZ plane
+		for(int i = 0; i < seg; i++) {
+			double ang = 2.0 * Math.PI * i / seg;
+			GL11.glVertex3f(0.0f, (float) (r * Math.cos(ang)), (float) (r * Math.sin(ang)));
+		}
+		GL11.glEnd();
 	}
 
 	/**
@@ -2052,8 +2183,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private boolean cfgSignatures = true;   // incoming signatures (seeded from config)
 	private boolean cfgLabelsAll = true;    // true = label every entity; false = own/allied only
 	private int cfgDetail = 2;              // entity-label detail: 0 minimal, 1 normal, 2 full
+	private boolean cfgAuras = true;        // aura bounding spheres (seeded from config)
 	private static final float CFG_X = 14.0f, CFG_Y = 14.0f, CFG_W = 200.0f, CFG_PAD = 8.0f, CFG_ROW_H = 20.0f;
-	private static final int CFG_ROWS = 6;
+	private static final int CFG_ROWS = 7;
 
 	/** Seed the panel toggles from config once (so grid/signatures match their configured defaults). */
 	private void ensureCfgInit() {
@@ -2069,6 +2201,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			cfgSignatures = c.tacticalMapIncomingSignatures.getValue();
 			cfgLabelsAll = c.tacticalMapLabelsAll.getValue();
 			cfgDetail = Math.max(0, Math.min(2, (int) Math.round(c.tacticalMapLabelDetail.getValue())));
+			cfgAuras = c.tacticalMapShowAuras.getValue();
 		} catch(Exception ignored) {
 		}
 	}
@@ -2083,6 +2216,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			c.tacticalMapIncomingSignatures.setValue(cfgSignatures);
 			c.tacticalMapLabelsAll.setValue(cfgLabelsAll);
 			c.tacticalMapLabelDetail.setValue((double) cfgDetail);
+			c.tacticalMapShowAuras.setValue(cfgAuras);
 			c.writeAllFields();
 		} catch(Exception ignored) {
 		}
@@ -2711,6 +2845,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				return "Labels: " + (cfgLabelsAll ? "All" : "Own Only");
 			case 5:
 				return "Label Detail: " + (cfgDetail == 0 ? "Minimal" : cfgDetail == 1 ? "Normal" : "Full");
+			case 6:
+				return "Aura Spheres: " + (cfgAuras ? "On" : "Off");
 			default:
 				return "";
 		}
@@ -2770,6 +2906,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				break;
 			case 5:
 				cfgDetail = (cfgDetail + 1) % 3;
+				break;
+			case 6:
+				cfgAuras = !cfgAuras;
 				break;
 			default:
 				break;

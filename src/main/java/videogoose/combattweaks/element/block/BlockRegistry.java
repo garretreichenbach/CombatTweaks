@@ -4,14 +4,47 @@ import api.config.BlockConfig;
 import org.schema.game.common.data.element.ElementInformation;
 import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber1;
 import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber2;
+import videogoose.combattweaks.element.block.chamber.offense.warhead.WarheadPreChargerChamber1;
+import videogoose.combattweaks.element.block.chamber.offense.warhead.WarheadPreChargerChamber2;
+import videogoose.combattweaks.element.block.chamber.support.aura.AuraProjectorChamber;
+import videogoose.combattweaks.element.block.chamber.support.aura.range.AuraRangeBoostChamber1;
+import videogoose.combattweaks.element.block.chamber.support.aura.range.AuraRangeBoostChamber2;
+import videogoose.combattweaks.element.block.chamber.support.aura.shieldaura.ShieldAuraCapacityChamber1;
+import videogoose.combattweaks.element.block.chamber.support.aura.shieldaura.ShieldAuraCapacityChamber2;
+import videogoose.combattweaks.element.block.reactor.ReactorOffenseChamber;
+import videogoose.combattweaks.element.block.reactor.ReactorSupportChamber;
+import videogoose.combattweaks.element.block.weapon.AuraDisruptorComputer;
+import videogoose.combattweaks.element.block.weapon.AuraDisruptorModule;
 
 /**
  * Central registry that defines and registers all mod blocks/chambers/weapons.
+ * <p>
+ * Enum order is the {@code initData()} order, so any block referencing another block's id in its own
+ * {@code initData()} must appear after it — the reactor parent chambers therefore precede their sub-chambers.
  */
 public enum BlockRegistry {
-	//Chambers
+	//Defense chambers
 	ARMOR_HP_ABSORPTION_CHAMBER_1(new ArmorHPAbsorptionChamber1()),
-	ARMOR_HP_ABSORPTION_CHAMBER_2(new ArmorHPAbsorptionChamber2());
+	ARMOR_HP_ABSORPTION_CHAMBER_2(new ArmorHPAbsorptionChamber2()),
+
+	//Generic reactor chambers (parents — must precede their sub-chambers below)
+	REACTOR_OFFENSE_CHAMBER(new ReactorOffenseChamber()),
+	REACTOR_SUPPORT_CHAMBER(new ReactorSupportChamber()),
+
+	//Offense chambers
+	WARHEAD_PRE_CHARGER_CHAMBER_1(new WarheadPreChargerChamber1()),
+	WARHEAD_PRE_CHARGER_CHAMBER_2(new WarheadPreChargerChamber2()),
+
+	//Support chambers
+	AURA_PROJECTOR_CHAMBER(new AuraProjectorChamber()),
+	SHIELD_AURA_CAPACITY_CHAMBER_1(new ShieldAuraCapacityChamber1()),
+	SHIELD_AURA_CAPACITY_CHAMBER_2(new ShieldAuraCapacityChamber2()),
+	AURA_RANGE_BOOST_CHAMBER_1(new AuraRangeBoostChamber1()),
+	AURA_RANGE_BOOST_CHAMBER_2(new AuraRangeBoostChamber2()),
+
+	//Weapons
+	AURA_DISRUPTOR_COMPUTER(new AuraDisruptorComputer()),
+	AURA_DISRUPTOR_MODULE(new AuraDisruptorModule());
 
 	public final ElementInterface elementInterface;
 
@@ -32,6 +65,7 @@ public enum BlockRegistry {
 		for(BlockRegistry registry : values()) {
 			BlockConfig.add(registry.getInfo());
 		}
+		BlockConfig.registerComputerModulePair(AURA_DISRUPTOR_COMPUTER.elementInterface.getId(), AURA_DISRUPTOR_MODULE.elementInterface.getId());
 	}
 
 	public ElementInformation getInfo() {
@@ -42,4 +76,3 @@ public enum BlockRegistry {
 		return getInfo().id;
 	}
 }
-

@@ -45,6 +45,13 @@ public class MainConfig extends SimpleConfigContainer {
 	public final SimpleConfigDouble tacticalMapLabelDetail =
 			new SimpleConfigDouble(this, "tactical_map_label_detail", 2.0, "Entity label detail: 0 minimal (name+faction), 1 normal (+distance/engagement), 2 full (+mass/speed/sector).");
 
+	public final SimpleConfigBool tacticalMapShowAuras =
+			new SimpleConfigBool(this, "tactical_map_show_auras", true, "Draw bounding spheres on the tactical map around ships projecting combat auras.");
+
+	// --- Aura behaviour ---
+	public final SimpleConfigBool auraAffectsRoot =
+			new SimpleConfigBool(this, "aura_affects_root", false, "Whether an Aura Projector also applies its aura to its own ship (the projector's rail root).");
+
 	public MainConfig(StarMod mod) {
 		super(mod, "config", true);
 	}

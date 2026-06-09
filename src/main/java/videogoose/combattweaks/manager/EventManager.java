@@ -12,10 +12,12 @@ import api.listener.events.gui.StructureStatsGroupsAddEvent;
 import api.listener.events.gui.TargetPanelCreateEvent;
 import api.listener.events.input.KeyPressEvent;
 import api.listener.events.register.ManagerContainerRegisterEvent;
+import api.listener.events.register.RegisterAddonsEvent;
 import api.listener.events.register.RegisterConfigGroupsEvent;
+import api.listener.events.systems.ReactorRecalibrateEvent;
 import api.listener.fastevents.FastListenerCommon;
 import api.mod.StarLoader;
-import api.utils.game.PlayerUtils;
+import api.utils.game.SegmentControllerUtils;
 import org.lwjgl.input.Keyboard;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
@@ -25,10 +27,12 @@ import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.effect.ConfigGroupRegistry;
 import videogoose.combattweaks.gui.elements.AdvancedStructureStatsArmor;
 import videogoose.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
+import videogoose.combattweaks.listener.AuraProjectorAddOnUseListener;
 import videogoose.combattweaks.listener.DamageReductionByArmorCalcListenerImpl;
 import videogoose.combattweaks.listener.MiningSalvageListener;
 import videogoose.combattweaks.listener.ShipAIShootListenerImpl;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
+import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
 
 public class EventManager {
 
@@ -41,6 +45,7 @@ public class EventManager {
 		FastListenerCommon.shipAIEntityAttemptToShootListeners.add(shipAIShootListener = new ShipAIShootListenerImpl());
 		FastListenerCommon.damageReductionByArmorCalcListeners.add(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl());
 		FastListenerCommon.customAddOnUseListeners.add(miningSalvageListener = new MiningSalvageListener());
+		FastListenerCommon.customAddOnUseListeners.add(new AuraProjectorAddOnUseListener());
 
 		StarLoader.registerListener(HudCreateEvent.class, new Listener<>() {
 			@Override
@@ -102,6 +107,27 @@ public class EventManager {
 			@Override
 			public void onEvent(RegisterConfigGroupsEvent event) {
 				ConfigGroupRegistry.registerEffects(event.getModConfigGroups());
+			}
+		}, instance);
+
+		// Attach the Aura Projector addon to every ship's manager container so it can be player-activated.
+		StarLoader.registerListener(RegisterAddonsEvent.class, new Listener<>() {
+			@Override
+			public void onEvent(RegisterAddonsEvent event) {
+				event.addModule(new AuraProjectorAddOn(event.getContainer()));
+			}
+		}, instance);
+
+		// Recompute aura range/effects when a ship's reactor (chambers) changes.
+		StarLoader.registerListener(ReactorRecalibrateEvent.class, new Listener<>() {
+			@Override
+			public void onEvent(ReactorRecalibrateEvent event) {
+				if(event.getImplementation().getSegmentController() instanceof ManagedUsableSegmentController<?>) {
+					AuraProjectorAddOn projector = SegmentControllerUtils.getAddon((ManagedUsableSegmentController<?>) event.getImplementation().getSegmentController(), AuraProjectorAddOn.class);
+					if(projector != null) {
+						projector.onReactorRecalibrate(event);
+					}
+				}
 			}
 		}, instance);
 

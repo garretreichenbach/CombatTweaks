@@ -3,9 +3,11 @@ package videogoose.combattweaks;
 import api.config.BlockConfig;
 import api.mod.StarMod;
 import api.network.packets.PacketUtil;
-import org.lwjgl.input.Keyboard;
+import api.utils.registry.UniversalRegistry;
+import api.utils.textures.StarLoaderTexture;
 import org.schema.game.client.view.mainmenu.GuidesRegistry;
 import org.schema.schine.graphicsengine.core.GLFW;
+import org.schema.schine.graphicsengine.core.GraphicsContext;
 import org.schema.schine.input.KeyboardContext;
 import org.schema.schine.input.KeyboardMappings;
 import org.schema.schine.resource.ResourceLoader;
@@ -13,6 +15,7 @@ import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.manager.*;
 import videogoose.combattweaks.network.client.*;
 import videogoose.combattweaks.network.server.SendArmorHPSyncPacket;
+import videogoose.combattweaks.network.server.SendAuraSyncPacket;
 import videogoose.combattweaks.network.server.SendIncomingSignaturesPacket;
 
 import java.util.Collections;
@@ -44,21 +47,36 @@ public class CombatTweaks extends StarMod {
 	public void onEnable() {
 		instance = this;
 		ConfigManager.initialize(this);
-		// Register the tactical-map toggle with StarMade's keybind system (rebindable in Controls settings,
-		// GENERAL context = available everywhere). The config value seeds the default key; once registered,
-		// StarMade owns the binding. Detected in EventManager via KeyPressEvent.isMapping(tacticalMapKey).
 		tacticalMapKey = KeyboardMappings.registerMapping(this, "Toggle Tactical Map", GLFW.GLFW_KEY_BACKSLASH, KeyboardContext.GENERAL);
 		EventManager.initialize(this);
 		MoveManager.getInstance(); // Initialize move manager
 		MineManager.getInstance(); // Initialize mine manager
 		RepairManager.getInstance(); // Initialize repair manager
 		IncomingSignatureManager.getInstance(); // Initialize incoming-signature detector
+		AuraManager.getInstance(); // Initialize aura broadcaster
 		registerPackets();
+		overwriteTextures();
+	}
+
+	/**
+	 * Replaces StarMade's reactor chamber-tab icon sheet with our own so the ported chambers (offense/support
+	 * trees) show proper tab art. No-op on a headless server (no graphics context). Ported from BetterChambers.
+	 */
+	private void overwriteTextures() {
+		if(GraphicsContext.initialized) {
+			StarLoaderTexture.addSpriteChange("gui/ingame/UI 64px ChamberTabs-4x4-gui-", (bufferedImage, graphics) -> bufferedImage.setData(getJarBufferedImage("sprites/reactor_chamber_tab_icons.png").getData()));
+		}
 	}
 
 	@Override
 	public void onResourceLoad(ResourceLoader resourceLoader) {
 		ResourceManager.loadResources(this);
+	}
+
+	@Override
+	public void onUniversalRegistryLoad() {
+		// Reserve the Aura Projector's player-usable id so the activatable addon gets a stable, synced id.
+		UniversalRegistry.registerURV(UniversalRegistry.RegistryType.PLAYER_USABLE_ID, getSkeleton(), "AuraProjectorChamber");
 	}
 
 	@Override
@@ -86,6 +104,7 @@ public class CombatTweaks extends StarMod {
 		PacketUtil.registerPacket(SendRepairPacket.class);
 		PacketUtil.registerPacket(SendMoveToPacket.class);
 		PacketUtil.registerPacket(SendArmorHPSyncPacket.class);
+		PacketUtil.registerPacket(SendAuraSyncPacket.class);
 		PacketUtil.registerPacket(SendIncomingSignaturesPacket.class);
 		PacketUtil.registerPacket(videogoose.combattweaks.network.client.RequestArmorSyncPacket.class);
 	}
