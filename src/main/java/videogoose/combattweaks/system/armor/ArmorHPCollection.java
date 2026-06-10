@@ -253,17 +253,25 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		return Lng.str("Armor HP System");
 	}
 
-	private int getCount(short type) {
-		return armorCountCacheMap.get(type);
-	}
-
 	private boolean hasAnyArmorBlocks() {
+		// Query the live engine count map directly, NOT armorCountCacheMap. The cache is only
+		// populated by recalcHP(), so a ship loaded from disk (e.g. on a dedicated server, which
+		// fires no block-add events) would have an empty cache, hasAnyArmorBlocks() would return
+		// false, and the bootstrap recalc in update() would never fire — leaving maxHP stuck at 0
+		// for every loaded ship. Reading getElementClassCountMap() (the same source getArmorCounts
+		// uses) breaks that chicken-and-egg.
 		ElementInformation[] infos = ElementKeyMap.getInfoArray();
 		for(ElementInformation info : infos) {
-			if(info != null && info.isArmor()) {
+			if(info != null && !info.isDeprecated() && info.isArmor()) {
 				short id = info.getId();
-				if(id != 0 && getCount(id) > 0) {
-					return true;
+				if(id != 0) {
+					try {
+						if(getSegmentController().getElementClassCountMap().get(id) > 0) {
+							return true;
+						}
+					} catch(Exception ignored) {
+						//ignore
+					}
 				}
 			}
 		}
