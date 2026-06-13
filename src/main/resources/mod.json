@@ -2,7 +2,7 @@
 	"name": "CombatTweaks",
 	"author": "VideoGoose",
 	"description": "Useful combat-related game additions.",
-	"version": "2.2.8",
+	"version": "2.2.9",
 	"starmade_version": "0.303.30",
 	"client_mod": false,
 	"server_mod": false,

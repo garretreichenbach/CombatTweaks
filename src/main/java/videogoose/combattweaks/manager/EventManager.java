@@ -111,18 +111,13 @@ public class EventManager {
 		StarLoader.registerListener(ManagerContainerRegisterEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(ManagerContainerRegisterEvent event) {
-				// Force-updatable so the collection ticks on dedicated servers (disk-loaded ships fire no block
-				// events). Override isUpdatable() instead of calling setUpdatable(true): setUpdatable touches
-				// getManagerContainer(), which is still null while this event fires from the ManagerContainer
-				// constructor — calling it here NPEs when a client deserializes a synchronized ship. The engine's
-				// initial updatable check (ManagerContainer enqueue after init) reads isUpdatable() directly.
-				VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager = new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class) {
+				VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager = new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class);
+				event.addModuleCollection(new ManagerModuleSingle<>(armorHPManager, ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID) {
 					@Override
-					public boolean isUpdatable() {
-						return true;
+					public boolean needsAnyUpdate() {
+						return getCollectionManager().needsUpdate();
 					}
-				};
-				event.addModuleCollection(new ManagerModuleSingle<>(armorHPManager, ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID));
+				});
 				if(event.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
 					ArmorHPCollection.enqueueRecalc(event.getSegmentController());
 				}
