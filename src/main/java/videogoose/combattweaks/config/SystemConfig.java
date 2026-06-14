@@ -7,7 +7,7 @@ import api.utils.simpleconfig.SimpleConfigDouble;
 public class SystemConfig extends SimpleConfigContainer {
 
 	public final SimpleConfigDouble armorHpValueMultiplier =
-			new SimpleConfigDouble(this, "armor_hp_value_multiplier", 50.0, "Base multiplier applied to raw armor value totals");
+			new SimpleConfigDouble(this, "armor_hp_value_multiplier", 1000.0, "Base multiplier applied to raw armor value totals");
 
 	public final SimpleConfigDouble armorHpScalingExponent =
 			new SimpleConfigDouble(this, "armor_hp_scaling_exponent", 0.75, "Sub-linear scaling exponent (1.0 = linear, lower = more diminishing returns for small ships)");
