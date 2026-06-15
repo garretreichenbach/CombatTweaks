@@ -32,7 +32,7 @@ import videogoose.combattweaks.listener.DamageReductionByArmorCalcListenerImpl;
 import videogoose.combattweaks.listener.MiningSalvageListener;
 import videogoose.combattweaks.listener.ShipAIShootListenerImpl;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
-import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
+import videogoose.combattweaks.system.armor.ArmorHPUnit;
 
 public class EventManager {
 
@@ -54,8 +54,6 @@ public class EventManager {
 			}
 		}, instance);
 
-		// Record FTL arrivals so the incoming-signature detector can flag a freshly jumped-in ship even if
-		// it's sitting still afterwards (and tag it as a JUMP contact for the dramatic "FTL inbound" label).
 		StarLoader.registerListener(ShipJumpEngageEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(ShipJumpEngageEvent event) {
@@ -79,12 +77,7 @@ public class EventManager {
 			@Override
 			public void onEvent(KeyPressEvent event) {
 				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
-					// Allow the tactical map anywhere the player is controlling something — ship, station, or
-					// on foot as an astronaut — not just while piloting a ship. The camera anchors to the
-					// controlled object's position regardless of its type.
 					if(GameClient.getClientPlayerState().getFirstControlledTransformableWOExc() != null && event.isKeyDown()) {
-						// Match against the keybind we registered with StarMade (isMapping respects the user's
-						// current/remapped key from the Controls settings) instead of comparing a raw key code.
 						boolean isTacticalKey = event.isMapping(CombatTweaks.getInstance().tacticalMapKey);
 						if((event.getKey() == Keyboard.KEY_ESCAPE || isTacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
 							TacticalMapGUIDrawer.getInstance().toggleDraw();
@@ -143,7 +136,13 @@ public class EventManager {
 		StarLoader.registerListener(ManagerContainerRegisterEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(ManagerContainerRegisterEvent event) {
-				event.addModuleCollection(new ManagerModuleSingle<>(new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class), ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID));
+				VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager = new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class);
+				event.addModuleCollection(new ManagerModuleSingle<>(armorHPManager, ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID) {
+					@Override
+					public boolean needsAnyUpdate() {
+						return getCollectionManager().needsUpdate();
+					}
+				});
 				if(event.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
 					ArmorHPCollection.enqueueRecalc(event.getSegmentController());
 				}
