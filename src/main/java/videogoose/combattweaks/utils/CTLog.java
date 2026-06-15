@@ -72,9 +72,15 @@ public final class CTLog {
 	}
 
 	private static void write(String message) {
+		// Always echo to stdout — the per-mod file logger isn't reliably generating a log file right now, so
+		// stdout is where debug traces actually show up. Still feed the file logger best-effort for when it works.
+		System.out.println(message);
 		CombatTweaks mod = CombatTweaks.getInstance();
 		if(mod != null) {
-			mod.logInfo(message);
+			try {
+				mod.logInfo(message);
+			} catch(Exception ignored) {
+			}
 		}
 	}
 }

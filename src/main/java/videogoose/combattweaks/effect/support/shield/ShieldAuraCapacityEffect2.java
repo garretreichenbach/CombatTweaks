@@ -22,7 +22,7 @@ public class ShieldAuraCapacityEffect2 extends ConfigEffectGroup {
 			configElement.stackType = ModifierStackType.ADD;
 			configElement.priority = 2;
 			StatusEffectFloatValue value = new StatusEffectFloatValue();
-			value.value.set(ConfigManager.getSystemConfig().shieldCapacityEffect2AuraAdd.value.floatValue());
+			value.value.set(ConfigManager.getSystemConfig().shieldCapacityEffect2AuraAdd.getValue().floatValue());
 			configElement.value = value;
 			elements.add(configElement);
 		}

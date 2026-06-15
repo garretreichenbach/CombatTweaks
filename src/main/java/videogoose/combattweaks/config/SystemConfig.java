@@ -28,16 +28,16 @@ public class SystemConfig extends SimpleConfigContainer {
 			new SimpleConfigDouble(this, "armor_hp_repair_fraction_per_second", 0.05, "Fraction of a repair target's max Armor HP restored per second by an active repair beam (0.05 = 5%/s, ~20s from empty to full).");
 
 	public final SimpleConfigDouble auraBaseChamberRangeSet =
-			new SimpleConfigDouble(this, "aura_base_chamber_range_set", 0.15, "Base aura range set by the Aura Projector chamber, as a fraction of sector size.");
+			new SimpleConfigDouble(this, "aura_base_chamber_range_set", 0.2, "Base aura range set by the Aura Projector chamber, as a fraction of sector size.");
 
 	public final SimpleConfigDouble auraRangeBoostEffect1Add =
 			new SimpleConfigDouble(this, "aura_range_boost_effect_1_add", 0.2, "Aura Range Boost chamber tier 1: range added, as a fraction of sector size.");
 
 	public final SimpleConfigDouble auraRangeBoostEffect2Add =
-			new SimpleConfigDouble(this, "aura_range_boost_effect_2_add", 0.25, "Aura Range Boost chamber tier 2: range added, as a fraction of sector size.");
+			new SimpleConfigDouble(this, "aura_range_boost_effect_2_add", 0.2, "Aura Range Boost chamber tier 2: range added, as a fraction of sector size.");
 
 	public final SimpleConfigDouble shieldCapacityEffect1AuraAdd =
-			new SimpleConfigDouble(this, "shield_capacity_effect_1_aura_add", 1.15, "Shield Aura Capacity tier 1: shield capacity bonus applied to affected ships.");
+			new SimpleConfigDouble(this, "shield_capacity_effect_1_aura_add", 1.2, "Shield Aura Capacity tier 1: shield capacity bonus applied to affected ships.");
 
 	public final SimpleConfigDouble shieldCapacityEffect2AuraAdd =
 			new SimpleConfigDouble(this, "shield_capacity_effect_2_aura_add", 1.2, "Shield Aura Capacity tier 2: shield capacity bonus applied to affected ships.");

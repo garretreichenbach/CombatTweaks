@@ -128,10 +128,13 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f SIG_NEUTRAL = new Vector4f(1.0f, 0.85f, 0.2f, 1.0f);
 	private static final Vector4f SIG_HOSTILE = new Vector4f(1.0f, 0.25f, 0.25f, 1.0f);
 	private static final Vector4f SIG_UNKNOWN = new Vector4f(0.7f, 0.75f, 0.85f, 1.0f);
-	// Aura bounding-sphere colours by relation to the viewer (alpha is the solid-pass base, scaled by power).
-	private static final Vector4f AURA_FRIENDLY = new Vector4f(0.35f, 1.0f, 0.55f, 0.5f);
-	private static final Vector4f AURA_NEUTRAL = new Vector4f(1.0f, 0.85f, 0.25f, 0.5f);
-	private static final Vector4f AURA_HOSTILE = new Vector4f(1.0f, 0.35f, 0.35f, 0.5f);
+	// Aura bounding-sphere colours by relation to the viewer (RGB; alpha applied at draw time). Green friendly,
+	// red hostile, blue neutral.
+	private static final Vector4f AURA_FRIENDLY = new Vector4f(0.3f, 1.0f, 0.45f, 1.0f);
+	private static final Vector4f AURA_NEUTRAL = new Vector4f(0.35f, 0.6f, 1.0f, 1.0f);
+	private static final Vector4f AURA_HOSTILE = new Vector4f(1.0f, 0.3f, 0.3f, 1.0f);
+	/** Base alpha for the translucent aura sphere fill (scaled by aura power). */
+	private static final float AURA_FILL_ALPHA = 0.12f;
 	private static TacticalMapGUIDrawer instance;
 	public final Vector3f labelOffset;
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap = new ConcurrentHashMap<>();
@@ -1499,11 +1502,13 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
 		Vector3f camPos = loadCameraRelativeModelview();
-		GL11.glLineWidth(1.5f);
 		int myFac = GameClient.getClientPlayerState().getFactionId();
 
-		// Pass 1: depth-tested — solid arcs where the sphere isn't occluded by geometry.
+		// Translucent shell: render both faces (we may be inside the sphere) and don't write depth, so the
+		// fill never occludes markers or z-fights with the ship; keep depth TEST so nearer solids cut it.
+		GlUtil.glDisable(GL11.GL_CULL_FACE);
 		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
+		GL11.glDepthMask(false);
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid) continue;
 			SegmentController e = indicator.getEntity();
@@ -1512,32 +1517,16 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			if(a == null || a.radius <= 0.0f) continue;
 			Vector4f base = auraColor(e, myFac);
 			float power = Math.max(0.0f, Math.min(1.0f, a.powerFraction));
-			GlUtil.glColor4f(base.x, base.y, base.z, base.w * (0.4f + 0.6f * power));
 			GlUtil.glPushMatrix();
 			multCameraRelative(indicator.entityTransform, camPos);
-			drawWireframeSphere(a.radius);
+			GlUtil.glColor4f(base.x, base.y, base.z, AURA_FILL_ALPHA * (0.5f + 0.5f * power));
+			drawSolidSphere(a.radius, 16, 24);
 			GlUtil.glPopMatrix();
 		}
 
-		// Pass 2: no depth test — faint ghost arcs through occluding geometry.
-		GlUtil.glDisable(GL11.GL_DEPTH_TEST);
-		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(!indicator.screenPosValid) continue;
-			SegmentController e = indicator.getEntity();
-			if(e == null) continue;
-			AuraState a = auras.get(e.getId());
-			if(a == null || a.radius <= 0.0f) continue;
-			Vector4f base = auraColor(e, myFac);
-			GlUtil.glColor4f(base.x, base.y, base.z, base.w * 0.18f);
-			GlUtil.glPushMatrix();
-			multCameraRelative(indicator.entityTransform, camPos);
-			drawWireframeSphere(a.radius);
-			GlUtil.glPopMatrix();
-		}
-
-		GL11.glLineWidth(1.0f);
+		GL11.glDepthMask(true);
+		GlUtil.glEnable(GL11.GL_CULL_FACE);
 		GlUtil.glColor4f(1, 1, 1, 1);
-		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
 		GlUtil.glPopMatrix(); // modelview
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPopMatrix();
@@ -1562,26 +1551,25 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Emits three orthogonal great circles (the classic wireframe-sphere gizmo) of the given radius, centred at
 	 * the current modelview origin. Cheap and reads clearly as a sphere from any angle on the tactical map.
 	 */
-	private static void drawWireframeSphere(float r) {
-		final int seg = 32;
-		GL11.glBegin(GL11.GL_LINE_LOOP); // XY plane
-		for(int i = 0; i < seg; i++) {
-			double ang = 2.0 * Math.PI * i / seg;
-			GL11.glVertex3f((float) (r * Math.cos(ang)), (float) (r * Math.sin(ang)), 0.0f);
+	/**
+	 * Emits a filled UV sphere of radius {@code r} as latitude/longitude quad strips, centred at the current
+	 * modelview origin. Meant to be drawn translucently (blend on, depth-write off, cull off).
+	 */
+	private static void drawSolidSphere(float r, int lat, int lon) {
+		for(int i = 0; i < lat; i++) {
+			double lat0 = Math.PI * (-0.5 + (double) i / lat);
+			double lat1 = Math.PI * (-0.5 + (double) (i + 1) / lat);
+			float y0 = (float) Math.sin(lat0), rad0 = (float) Math.cos(lat0);
+			float y1 = (float) Math.sin(lat1), rad1 = (float) Math.cos(lat1);
+			GL11.glBegin(GL11.GL_QUAD_STRIP);
+			for(int j = 0; j <= lon; j++) {
+				double lng = 2.0 * Math.PI * (double) j / lon;
+				float x = (float) Math.cos(lng), z = (float) Math.sin(lng);
+				GL11.glVertex3f(r * x * rad0, r * y0, r * z * rad0);
+				GL11.glVertex3f(r * x * rad1, r * y1, r * z * rad1);
+			}
+			GL11.glEnd();
 		}
-		GL11.glEnd();
-		GL11.glBegin(GL11.GL_LINE_LOOP); // XZ plane
-		for(int i = 0; i < seg; i++) {
-			double ang = 2.0 * Math.PI * i / seg;
-			GL11.glVertex3f((float) (r * Math.cos(ang)), 0.0f, (float) (r * Math.sin(ang)));
-		}
-		GL11.glEnd();
-		GL11.glBegin(GL11.GL_LINE_LOOP); // YZ plane
-		for(int i = 0; i < seg; i++) {
-			double ang = 2.0 * Math.PI * i / seg;
-			GL11.glVertex3f(0.0f, (float) (r * Math.cos(ang)), (float) (r * Math.sin(ang)));
-		}
-		GL11.glEnd();
 	}
 
 	/**

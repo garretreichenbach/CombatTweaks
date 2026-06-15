@@ -22,7 +22,7 @@ public class AuraBaseEffect extends ConfigEffectGroup {
 			configElement.stackType = ModifierStackType.SET;
 			configElement.priority = 0;
 			StatusEffectFloatValue value = new StatusEffectFloatValue();
-			value.value.set(ConfigManager.getSystemConfig().auraBaseChamberRangeSet.value.floatValue());
+			value.value.set(ConfigManager.getSystemConfig().auraBaseChamberRangeSet.getValue().floatValue());
 			configElement.value = value;
 			elements.add(configElement);
 		}

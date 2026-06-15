@@ -21,7 +21,7 @@ public class WarheadPreChargerEffect2 extends ConfigEffectGroup {
 			configElement.stackType = ModifierStackType.ADD;
 			configElement.priority = 2;
 			StatusEffectFloatValue value = new StatusEffectFloatValue();
-			value.value.set(ConfigManager.getSystemConfig().warheadPreChargerEffect2RadiusAdd.value.floatValue());
+			value.value.set(ConfigManager.getSystemConfig().warheadPreChargerEffect2RadiusAdd.getValue().floatValue());
 			configElement.value = value;
 			elements.add(configElement);
 		}
@@ -32,7 +32,7 @@ public class WarheadPreChargerEffect2 extends ConfigEffectGroup {
 			configElement.stackType = ModifierStackType.MULT;
 			configElement.priority = 2;
 			StatusEffectFloatValue value = new StatusEffectFloatValue();
-			value.value.set(ConfigManager.getSystemConfig().warheadPreChargerEffect2DamageMultiplier.value.floatValue());
+			value.value.set(ConfigManager.getSystemConfig().warheadPreChargerEffect2DamageMultiplier.getValue().floatValue());
 			configElement.value = value;
 			elements.add(configElement);
 		}
@@ -43,7 +43,7 @@ public class WarheadPreChargerEffect2 extends ConfigEffectGroup {
 			configElement.stackType = ModifierStackType.ADD;
 			configElement.priority = 2;
 			StatusEffectFloatValue value = new StatusEffectFloatValue();
-			value.value.set(ConfigManager.getSystemConfig().warheadPreChargerEffect2VolatilityAdd.value.floatValue());
+			value.value.set(ConfigManager.getSystemConfig().warheadPreChargerEffect2VolatilityAdd.getValue().floatValue());
 			configElement.value = value;
 			elements.add(configElement);
 		}

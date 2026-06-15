@@ -22,7 +22,7 @@ public class AuraRangeBoostEffect1 extends ConfigEffectGroup {
 			configElement.stackType = ModifierStackType.ADD;
 			configElement.priority = 1;
 			StatusEffectFloatValue value = new StatusEffectFloatValue();
-			value.value.set(ConfigManager.getSystemConfig().auraRangeBoostEffect1Add.value.floatValue());
+			value.value.set(ConfigManager.getSystemConfig().auraRangeBoostEffect1Add.getValue().floatValue());
 			configElement.value = value;
 			elements.add(configElement);
 		}

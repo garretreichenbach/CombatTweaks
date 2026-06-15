@@ -33,6 +33,7 @@ import videogoose.combattweaks.listener.MiningSalvageListener;
 import videogoose.combattweaks.listener.ShipAIShootListenerImpl;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
 import videogoose.combattweaks.system.armor.ArmorHPUnit;
+import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
 
 public class EventManager {
 
