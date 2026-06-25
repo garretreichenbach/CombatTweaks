@@ -3,6 +3,8 @@ package videogoose.combattweaks.listener;
 import api.listener.fastevents.segmentpiece.DamageReductionByArmorCalcListener;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
+import org.schema.game.common.controller.elements.ShieldAddOn;
+import org.schema.game.common.controller.elements.ShieldContainerInterface;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
@@ -12,8 +14,13 @@ public class DamageReductionByArmorCalcListenerImpl implements DamageReductionBy
 	@Override
 	public float onDamageReductionByArmor(SegmentController controller, float damageBeforeReduction, float damageAfterReduction) {
 		if(controller instanceof ManagedUsableSegmentController<?>) {
-			// Second aura-takedown path: damaging a ship that is projecting an active aura bleeds its aura power
-			// proportional to the hit, so sustained fire eventually drops the aura even without an Aura Disruptor.
+			// Only spend Armor HP (and bleed aura power) when the target's shields are actually down. The engine
+			// fires this armor-reduction calc post-shield for cannons/beams, but for MISSILE explosions it runs
+			// as a pre-pass BEFORE shields are applied — so without this guard armor HP would drain "through" a
+			// full shield. When shields are up, leave the damage to the shield and don't touch armor HP.
+			if(hasActiveShields(controller)) {
+				return damageAfterReduction;
+			}
 			attriteAura(controller, damageBeforeReduction);
 			ArmorHPCollection armorHPCollection = ArmorHPCollection.getCollection(controller);
 			if(armorHPCollection != null) {
@@ -21,6 +28,27 @@ public class DamageReductionByArmorCalcListenerImpl implements DamageReductionBy
 			}
 		}
 		return damageAfterReduction;
+	}
+
+	/** Whether the target structure currently has shields up (damage should hit the shield, not Armor HP). */
+	private boolean hasActiveShields(SegmentController controller) {
+		try {
+			SegmentController root = controller.railController != null && controller.railController.getRoot() != null
+					? controller.railController.getRoot() : controller;
+			if(!(root instanceof ManagedUsableSegmentController<?>)) {
+				return false;
+			}
+			Object man = ((ManagedUsableSegmentController<?>) root).getManagerContainer();
+			if(man instanceof ShieldContainerInterface) {
+				ShieldAddOn shield = ((ShieldContainerInterface) man).getShieldAddOn();
+				if(shield == null) {
+					return false;
+				}
+				return root.isUsingLocalShields() ? shield.isUsingLocalShieldsAtLeastOneActive() : shield.getShields() > 0;
+			}
+		} catch(Exception ignored) {
+		}
+		return false;
 	}
 
 	/** Drains an active projector's aura power by a configured fraction of the incoming damage. */
