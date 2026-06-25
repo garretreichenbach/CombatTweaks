@@ -26,7 +26,7 @@ public class ShieldAuraCapacityChamber1 extends ChamberBlock {
 
 	@Override
 	public void postInitData() {
-		BlockRegistry.AURA_PROJECTOR_CHAMBER.getInfo().chamberChildren.add(getId());
+		BlockRegistry.SUPPORT_AURA_CHAMBER.getInfo().chamberChildren.add(getId());
 		setUpgrade((ChamberBlock) BlockRegistry.SHIELD_AURA_CAPACITY_CHAMBER_2.elementInterface);
 	}
 

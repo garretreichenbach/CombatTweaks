@@ -93,6 +93,7 @@ public class OrderQueueManager {
 	public void clear(int shipId) {
 		queues.remove(shipId);
 		active.remove(shipId);
+		AIUtils.clearNoFireTarget(shipId); // explicit idle ends escort/defend protection
 	}
 
 	/** How many orders are still queued behind the active one (for HUD/label feedback). */
@@ -154,18 +155,25 @@ public class OrderQueueManager {
 		switch(order.type) {
 			case MOVE:
 				AIUtils.setMoveToTarget(shipId, order.targetId);
+				// Escorting a friendly/neutral: never fire on it (persists past arrival; see AIUtils.noFireTargets).
+				AIUtils.setNoFireTarget(shipId, order.targetId);
 				break;
 			case MINE:
 				MineManager.getInstance().addMine(shipId, order.targetId);
+				AIUtils.clearNoFireTarget(shipId);
 				break;
 			case ATTACK:
 				AIUtils.setAttackTarget(shipId, order.targetId);
+				AIUtils.clearNoFireTarget(shipId); // now fighting — drop any escort no-fire protection
 				break;
 			case DEFEND:
 				DefenseManager.getInstance().addDefense(shipId, order.targetId);
+				// Defenders must never fire on the ship they protect (closes the threat-gone re-acquire window too).
+				AIUtils.setNoFireTarget(shipId, order.targetId);
 				break;
 			case REPAIR:
 				RepairManager.getInstance().addRepair(shipId, order.targetId);
+				AIUtils.clearNoFireTarget(shipId);
 				break;
 		}
 	}
@@ -179,6 +187,7 @@ public class OrderQueueManager {
 				if(!(GameCommon.getGameObject(shipId) instanceof SegmentController)) {
 					it.remove();
 					queues.remove(shipId); // ship gone — drop its queue
+					AIUtils.clearNoFireTarget(shipId);
 					continue;
 				}
 				QueuedOrder order = entry.getValue();

@@ -52,6 +52,22 @@ public class SystemConfig extends SimpleConfigContainer {
 	public final SimpleConfigDouble auraMinSizePercent =
 			new SimpleConfigDouble(this, "aura_min_size_percent", 0.15, "Minimum projector/target reactor-level ratio for an aura to affect a ship (smaller ships can't aura much larger ones).");
 
+	public final SimpleConfigDouble auraDisruptorBeamPowerPerUnit =
+			new SimpleConfigDouble(this, "aura_disruptor_beam_power_per_unit", 1.0, "Aura Disruptor beam power contributed per module block (multiplied into the aura-power drain on hit).");
+
+	public final SimpleConfigDouble auraDisruptorBeamPowerConsumptionPerUnit =
+			new SimpleConfigDouble(this, "aura_disruptor_beam_power_consumption_per_unit", 12.0, "Reactor power consumed per Aura Disruptor module block while firing.");
+
+	public final SimpleConfigDouble auraDamageAttritionFactor =
+			new SimpleConfigDouble(this, "aura_damage_attrition_factor", 0.05, "Fraction of incoming damage that bleeds an active projector's aura power when its ship is hit (the second takedown path alongside the Aura Disruptor). 0 disables damage attrition.");
+
+	// --- Offensive/debuff auras (applied to ENEMY ships inside the sphere) ---
+	public final SimpleConfigDouble shieldDampenAuraMult =
+			new SimpleConfigDouble(this, "shield_dampen_aura_mult", 0.75, "Shield Dampen aura: multiplier applied to the shield capacity of enemies inside the sphere (<1 reduces it).");
+
+	public final SimpleConfigDouble weaponRangeDampenAuraMult =
+			new SimpleConfigDouble(this, "weapon_range_dampen_aura_mult", 0.7, "Weapon Range Dampen aura: multiplier applied to the weapon range of enemies inside the sphere (<1 reduces it).");
+
 	// --- Warhead Pre-Charger chambers (ported from BetterChambers) ---
 	public final SimpleConfigDouble warheadPreChargerEffect1RadiusAdd =
 			new SimpleConfigDouble(this, "warhead_pre_charger_effect_1_radius_add", 5.0, "Warhead Pre-Charger tier 1: warhead radius added.");

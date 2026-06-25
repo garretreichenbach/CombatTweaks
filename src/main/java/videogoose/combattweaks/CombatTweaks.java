@@ -75,8 +75,9 @@ public class CombatTweaks extends StarMod {
 
 	@Override
 	public void onUniversalRegistryLoad() {
-		// Reserve the Aura Projector's player-usable id so the activatable addon gets a stable, synced id.
-		UniversalRegistry.registerURV(UniversalRegistry.RegistryType.PLAYER_USABLE_ID, getSkeleton(), "AuraProjectorChamber");
+		// Reserve each aura projector's player-usable id so the activatable addons get stable, synced ids.
+		UniversalRegistry.registerURV(UniversalRegistry.RegistryType.PLAYER_USABLE_ID, getSkeleton(), "SupportAuraChamber");
+		UniversalRegistry.registerURV(UniversalRegistry.RegistryType.PLAYER_USABLE_ID, getSkeleton(), "OffenseAuraChamber");
 	}
 
 	@Override

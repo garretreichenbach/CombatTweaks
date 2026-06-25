@@ -47,6 +47,16 @@ public class AIUtils {
 	/** Ships currently ordered to attack → their target entity id (no manager tracks attack, unlike mine/defend/repair). */
 	private static final Map<Integer, Integer> attackOrders = new ConcurrentHashMap<>();
 
+	/**
+	 * Per-ship entity it must <em>never</em> fire on — the friendly/neutral it was ordered to move-to (escort) or
+	 * defend. A neutral escort/protect target isn't a faction-friend, so the engine's own friendly-fire guard
+	 * ({@code doShooting}) doesn't spare it; without this an escorting ship shoots the very ship it's accompanying.
+	 * Deliberately <b>not</b> cleared by {@link #clearAllOrders} (which the order queue runs on every move
+	 * completion) so the protection persists after a one-shot move ends and the ship idles next to the escortee;
+	 * it's cleared only by a subsequent attack/mine/repair/idle order (see {@code OrderQueueManager}).
+	 */
+	private static final Map<Integer, Integer> noFireTargets = new ConcurrentHashMap<>();
+
 	/** Per-ship timestamp (ms) of when it was first seen without a fleet, for the drop grace period. */
 	private static final Map<Integer, Long> unfleetedSince = new ConcurrentHashMap<>();
 	/**
@@ -130,6 +140,21 @@ public class AIUtils {
 	/** The entity this ship is ordered to attack, or null if it has no attack order. */
 	public static Integer getAttackTarget(int shipId) {
 		return attackOrders.get(shipId);
+	}
+
+	/** Mark {@code targetId} as the entity {@code shipId} must not fire on (its move-to/defend subject). */
+	public static void setNoFireTarget(int shipId, int targetId) {
+		noFireTargets.put(shipId, targetId);
+	}
+
+	/** Clear a ship's no-fire (escort/protect) subject — called when it's given an attack/mine/repair/idle order. */
+	public static void clearNoFireTarget(int shipId) {
+		noFireTargets.remove(shipId);
+	}
+
+	/** The entity this ship must not fire on (the friendly/neutral it's escorting or defending), or null. */
+	public static Integer getNoFireTarget(int shipId) {
+		return noFireTargets.get(shipId);
 	}
 
 	/**

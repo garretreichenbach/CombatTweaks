@@ -4,6 +4,7 @@ import api.common.GameCommon;
 import api.common.GameServer;
 import api.listener.fastevents.ShipAIEntityAttemptToShootListener;
 import api.utils.game.SegmentControllerUtils;
+import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.elements.beam.repair.RepairBeamCollectionManager;
 import org.schema.game.common.controller.elements.beam.repair.RepairElementManager;
@@ -17,6 +18,10 @@ import org.schema.schine.graphicsengine.core.Timer;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
+import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
+import videogoose.combattweaks.system.weapon.auradisruptor.AuraDisruptorBeamCollectionManager;
+import videogoose.combattweaks.system.weapon.auradisruptor.AuraDisruptorBeamElementManager;
+import videogoose.combattweaks.system.weapon.auradisruptor.AuraDisruptorBeamUnit;
 import videogoose.combattweaks.utils.AIUtils;
 
 import java.util.Map;
@@ -34,6 +39,11 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 	public void doShooting(ShipAIEntity shipAIEntity, AIControllerStateUnit<?> aiControllerStateUnit, Timer timer) {
 		if(!shipAIEntity.isOnServer()) {
 			return;
+		}
+		try {
+			handleAuraDisruptor(shipAIEntity, aiControllerStateUnit, timer);
+		} catch(Exception exception) {
+			CombatTweaks.getInstance().logException("Error firing Aura Disruptor AI", exception);
 		}
 		try {
 			RepairElementManager elementManager = SegmentControllerUtils.getElementManager(shipAIEntity.getEntity(), RepairElementManager.class);
@@ -157,5 +167,52 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 		boolean sameFaction = repairer.getFactionId() != 0 && repairer.getFactionId() == target.getFactionId();
 		boolean ally = GameCommon.getGameState().getFactionManager().isFriend(repairer.getFactionId(), target.getFactionId());
 		return (sameFaction || ally) && AIUtils.needsRepair(target);
+	}
+
+	// --- Aura Disruptor AI (merged from BetterChambers' AuraDisruptorShootListener) ---
+
+	/** Fires any mounted Aura Disruptor at the current target if it is an enemy with an active Aura Projector; otherwise drops the target. */
+	private void handleAuraDisruptor(ShipAIEntity shipAIEntity, AIControllerStateUnit<?> aiControllerStateUnit, Timer timer) {
+		AuraDisruptorBeamElementManager elementManager = SegmentControllerUtils.getElementManager(shipAIEntity.getEntity(), AuraDisruptorBeamElementManager.class);
+		if(elementManager == null || elementManager.totalSize <= 0) {
+			return;
+		}
+		if(isValidDisruptorTarget(shipAIEntity)) {
+			for(AuraDisruptorBeamCollectionManager collectionManager : elementManager.getCollectionManagers()) {
+				for(AuraDisruptorBeamUnit unit : collectionManager.getElementCollections()) {
+					if(unit.size() > 0 && !unit.isReloading(timer.currentTime) && unit.canUse(timer.currentTime, false)) {
+						unit.fire(aiControllerStateUnit, timer);
+					}
+				}
+			}
+		} else {
+			clearDisruptorTarget(shipAIEntity);
+		}
+	}
+
+	/** Whether the AI's current target is an enemy ship carrying an active Aura Projector worth disrupting. */
+	private boolean isValidDisruptorTarget(ShipAIEntity shipAIEntity) {
+		try {
+			SimpleGameObject target = ((TargetProgram<?>) shipAIEntity.getEntity().getAiConfiguration().getAiEntityState().getCurrentProgram()).getTarget();
+			if(target instanceof ManagedUsableSegmentController<?> segmentController) {
+				int myFaction = shipAIEntity.getEntity().getFactionId();
+				int targetFaction = segmentController.getFactionId();
+				if(myFaction > 0 && targetFaction > 0 && myFaction != targetFaction
+						&& GameCommon.getGameState().getFactionManager().isEnemy(myFaction, targetFaction)) {
+					AuraProjectorAddOn addOn = AuraProjectorAddOn.getActiveAura((ManagedUsableSegmentController<?>) segmentController);
+					return addOn != null && addOn.isActive();
+				}
+			}
+		} catch(Exception ignored) {
+		}
+		return false;
+	}
+
+	private void clearDisruptorTarget(ShipAIEntity shipAIEntity) {
+		try {
+			((TargetProgram<?>) shipAIEntity.getEntity().getAiConfiguration().getAiEntityState().getCurrentProgram()).setTarget(null);
+		} catch(Exception exception) {
+			CombatTweaks.getInstance().logException("Failed to change target for Aura Disruptor", exception);
+		}
 	}
 }

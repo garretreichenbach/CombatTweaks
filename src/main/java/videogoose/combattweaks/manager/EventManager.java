@@ -20,11 +20,13 @@ import api.mod.StarLoader;
 import api.utils.game.SegmentControllerUtils;
 import org.lwjgl.input.Keyboard;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
+import org.schema.game.common.controller.elements.ManagerModuleCollection;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
 import org.schema.game.common.controller.elements.VoidElementManager;
 import org.schema.game.common.data.element.ElementKeyMap;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.effect.ConfigGroupRegistry;
+import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.gui.elements.AdvancedStructureStatsArmor;
 import videogoose.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
 import videogoose.combattweaks.listener.AuraProjectorAddOnUseListener;
@@ -34,6 +36,9 @@ import videogoose.combattweaks.listener.ShipAIShootListenerImpl;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
 import videogoose.combattweaks.system.armor.ArmorHPUnit;
 import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
+import videogoose.combattweaks.system.aura.OffenseAuraAddOn;
+import videogoose.combattweaks.system.aura.SupportAuraAddOn;
+import videogoose.combattweaks.system.weapon.auradisruptor.AuraDisruptorBeamElementManager;
 
 public class EventManager {
 
@@ -104,23 +109,22 @@ public class EventManager {
 			}
 		}, instance);
 
-		// Attach the Aura Projector addon to every ship's manager container so it can be player-activated.
+		// Attach both aura projector addons (support + offense) to every ship's manager container so either can be
+		// player-activated. They're mutually exclusive at the chamber level, so at most one is ever usable.
 		StarLoader.registerListener(RegisterAddonsEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(RegisterAddonsEvent event) {
-				event.addModule(new AuraProjectorAddOn(event.getContainer()));
+				event.addModule(new SupportAuraAddOn(event.getContainer()));
+				event.addModule(new OffenseAuraAddOn(event.getContainer()));
 			}
 		}, instance);
 
-		// Recompute aura range/effects when a ship's reactor (chambers) changes.
+		// Recompute aura range/effects when a ship's reactor (chambers) changes — for whichever aura it runs.
 		StarLoader.registerListener(ReactorRecalibrateEvent.class, new Listener<>() {
 			@Override
 			public void onEvent(ReactorRecalibrateEvent event) {
 				if(event.getImplementation().getSegmentController() instanceof ManagedUsableSegmentController<?>) {
-					AuraProjectorAddOn projector = SegmentControllerUtils.getAddon((ManagedUsableSegmentController<?>) event.getImplementation().getSegmentController(), AuraProjectorAddOn.class);
-					if(projector != null) {
-						projector.onReactorRecalibrate(event);
-					}
+					AuraProjectorAddOn.recalibrateAll((ManagedUsableSegmentController<?>) event.getImplementation().getSegmentController(), event);
 				}
 			}
 		}, instance);
@@ -144,6 +148,8 @@ public class EventManager {
 						return getCollectionManager().needsUpdate();
 					}
 				});
+				// Attach the Aura Disruptor weapon system (computer/module pair) so ships can mount and fire it.
+				event.addModuleCollection(new ManagerModuleCollection(new AuraDisruptorBeamElementManager(event.getSegmentController()), BlockRegistry.AURA_DISRUPTOR_COMPUTER.getId(), BlockRegistry.AURA_DISRUPTOR_MODULE.getId()));
 				if(event.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
 					ArmorHPCollection.enqueueRecalc(event.getSegmentController());
 				}

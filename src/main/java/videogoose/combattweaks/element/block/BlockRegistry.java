@@ -4,9 +4,12 @@ import api.config.BlockConfig;
 import org.schema.game.common.data.element.ElementInformation;
 import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber1;
 import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber2;
+import videogoose.combattweaks.element.block.chamber.offense.aura.OffenseAuraChamber;
+import videogoose.combattweaks.element.block.chamber.offense.aura.ShieldDampenAuraChamber;
+import videogoose.combattweaks.element.block.chamber.offense.aura.WeaponRangeDampenAuraChamber;
 import videogoose.combattweaks.element.block.chamber.offense.warhead.WarheadPreChargerChamber1;
 import videogoose.combattweaks.element.block.chamber.offense.warhead.WarheadPreChargerChamber2;
-import videogoose.combattweaks.element.block.chamber.support.aura.AuraProjectorChamber;
+import videogoose.combattweaks.element.block.chamber.support.aura.SupportAuraChamber;
 import videogoose.combattweaks.element.block.chamber.support.aura.range.AuraRangeBoostChamber1;
 import videogoose.combattweaks.element.block.chamber.support.aura.range.AuraRangeBoostChamber2;
 import videogoose.combattweaks.element.block.chamber.support.aura.shieldaura.ShieldAuraCapacityChamber1;
@@ -35,12 +38,17 @@ public enum BlockRegistry {
 	WARHEAD_PRE_CHARGER_CHAMBER_1(new WarheadPreChargerChamber1()),
 	WARHEAD_PRE_CHARGER_CHAMBER_2(new WarheadPreChargerChamber2()),
 
-	//Support chambers
-	AURA_PROJECTOR_CHAMBER(new AuraProjectorChamber()),
+	//Support chambers — Support Aura (buffs allies)
+	SUPPORT_AURA_CHAMBER(new SupportAuraChamber()),
 	SHIELD_AURA_CAPACITY_CHAMBER_1(new ShieldAuraCapacityChamber1()),
 	SHIELD_AURA_CAPACITY_CHAMBER_2(new ShieldAuraCapacityChamber2()),
 	AURA_RANGE_BOOST_CHAMBER_1(new AuraRangeBoostChamber1()),
 	AURA_RANGE_BOOST_CHAMBER_2(new AuraRangeBoostChamber2()),
+
+	//Offense chambers — Offense Aura (debuffs enemies). Base must precede its sub-chambers.
+	OFFENSE_AURA_CHAMBER(new OffenseAuraChamber()),
+	SHIELD_DAMPEN_AURA_CHAMBER(new ShieldDampenAuraChamber()),
+	WEAPON_RANGE_DAMPEN_AURA_CHAMBER(new WeaponRangeDampenAuraChamber()),
 
 	//Weapons
 	AURA_DISRUPTOR_COMPUTER(new AuraDisruptorComputer()),

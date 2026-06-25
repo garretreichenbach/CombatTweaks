@@ -133,6 +133,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f AURA_FRIENDLY = new Vector4f(0.3f, 1.0f, 0.45f, 1.0f);
 	private static final Vector4f AURA_NEUTRAL = new Vector4f(0.35f, 0.6f, 1.0f, 1.0f);
 	private static final Vector4f AURA_HOSTILE = new Vector4f(1.0f, 0.3f, 0.3f, 1.0f);
+	/** Offensive/debuff auras read as a danger colour (orange) regardless of who projects them. */
+	private static final Vector4f AURA_OFFENSE = new Vector4f(1.0f, 0.5f, 0.1f, 1.0f);
 	/** Base alpha for the translucent aura sphere fill (scaled by aura power). */
 	private static final float AURA_FILL_ALPHA = 0.12f;
 	private static TacticalMapGUIDrawer instance;
@@ -1515,7 +1517,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			if(e == null) continue;
 			AuraState a = auras.get(e.getId());
 			if(a == null || a.radius <= 0.0f) continue;
-			Vector4f base = auraColor(e, myFac);
+			Vector4f base = auraColor(e, a, myFac);
 			float power = Math.max(0.0f, Math.min(1.0f, a.powerFraction));
 			GlUtil.glPushMatrix();
 			multCameraRelative(indicator.entityTransform, camPos);
@@ -1536,8 +1538,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
 	}
 
-	/** Aura sphere colour from the projector's faction relation to the viewer (green/red/yellow). */
-	private Vector4f auraColor(SegmentController projector, int myFac) {
+	/**
+	 * Aura sphere colour. Offensive/debuff auras always read as a distinct danger colour; friendly support auras
+	 * are coloured by the projector's faction relation to the viewer (green/red/yellow).
+	 */
+	private Vector4f auraColor(SegmentController projector, AuraState aura, int myFac) {
+		if(aura.auraKind == AuraState.KIND_OFFENSE) return AURA_OFFENSE;
 		int eFac = projector.getFactionId();
 		if(eFac != 0 && myFac != 0) {
 			FactionRelation.RType rel = GameCommon.getGameState().getFactionManager().getRelation(myFac, eFac);

@@ -8,16 +8,18 @@ import api.utils.addon.SimpleAddOn;
 import api.utils.game.PlayerUtils;
 import api.utils.game.SegmentControllerUtils;
 import api.utils.sound.AudioUtils;
+import it.unimi.dsi.fastutil.objects.ObjectCollection;
 import org.schema.game.client.data.GameClientState;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
+import org.schema.game.common.controller.PlayerUsableInterface;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.elements.ManagerContainer;
 import org.schema.game.common.controller.elements.effectblock.EffectElementManager;
 import org.schema.game.common.controller.elements.power.reactor.tree.ReactorElement;
 import org.schema.game.common.data.ManagedSegmentController;
 import org.schema.game.common.data.blockeffects.config.ConfigEntityManager;
+import org.schema.game.common.data.element.ElementInformation;
 import org.schema.game.common.data.player.PlayerState;
-import org.schema.game.common.data.player.faction.FactionManager;
 import org.schema.game.common.data.player.faction.FactionRelation;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.GameServerState;
@@ -25,9 +27,7 @@ import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.network.objects.Sendable;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.effect.ConfigEffectGroup;
-import videogoose.combattweaks.effect.ConfigGroupRegistry;
 import videogoose.combattweaks.effect.StatusEffectRegistry;
-import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.manager.AuraManager;
 import videogoose.combattweaks.manager.ConfigManager;
 import videogoose.combattweaks.utils.EntityUtils;
@@ -38,30 +38,88 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Player-activatable Aura Projector. While active it applies its support effects (shield capacity) to friendly
- * ships inside its range and maintains an "aura power" pool that the Aura Disruptor (and ship damage, Phase 3)
- * drain. Its current sphere is reported to {@link AuraManager} so the tactical map can draw it as a bounding
- * sphere. Ported and modernized from BetterChambers; the old client pulse rendering is replaced by the
- * persistent sphere sync.
+ * Abstract base for a player-activatable aura projector. While active it applies its effect groups to ships of a
+ * particular faction relation inside its range and maintains an "aura power" pool that the Aura Disruptor and ship
+ * damage drain. Its current sphere is reported to {@link AuraManager} so the tactical map can draw it.
+ * <p>
+ * Concrete roles supply the base chamber, the faction relation they target, the aura kind (for sphere colour),
+ * and which sub-chambers map to which effect groups:
+ * <ul>
+ *   <li>{@link SupportAuraAddOn} — buffs friends (support reactor tree)</li>
+ *   <li>{@link OffenseAuraAddOn} — debuffs enemies (offense reactor tree)</li>
+ * </ul>
+ * The two are mutually exclusive on a ship, so at most one is ever active. Both addon instances are attached to
+ * every ship; the one whose base chamber is absent stays non-usable and never touches {@link AuraManager}.
+ * Ported and modernized from BetterChambers; the old client pulse rendering is replaced by persistent sphere sync.
  */
-public class AuraProjectorAddOn extends SimpleAddOn {
+public abstract class AuraProjectorAddOn extends SimpleAddOn {
 
 	public static final int UPDATE_TIMER = 300;
-	private final ArrayList<ConfigEffectGroup> effectsToApply = new ArrayList<>();
+	protected final ArrayList<ConfigEffectGroup> effectsToApply = new ArrayList<>();
 	private final ConcurrentHashMap<SegmentController, Boolean> targetingEntities = new ConcurrentHashMap<>();
 	private final float disruptionPowerMultiplier;
 	private final float auraRegenPercentPerUpdate;
-	private boolean usable;
+	protected boolean usable;
 	private int ticks;
 	private float maxRange;
 	private double auraPower;
 	private double auraMaxPower;
 
-	public AuraProjectorAddOn(ManagerContainer<?> managerContainer) {
-		super(managerContainer, BlockRegistry.AURA_PROJECTOR_CHAMBER.getId(), CombatTweaks.getInstance(), "AuraProjectorChamber");
+	protected AuraProjectorAddOn(ManagerContainer<?> managerContainer, short baseChamberId, String reservedId) {
+		super(managerContainer, baseChamberId, CombatTweaks.getInstance(), reservedId);
 		onReactorRecalibrate(null);
 		disruptionPowerMultiplier = (float) ConfigManager.getSystemConfig().auraDisruptorPowerMultiplier.value.doubleValue();
 		auraRegenPercentPerUpdate = (float) ConfigManager.getSystemConfig().auraRegenPercentPerUpdate.value.doubleValue();
+	}
+
+	// --- Role hooks supplied by concrete subclasses ---
+
+	/** The base chamber that gates this aura (its presence makes the addon usable). */
+	protected abstract ElementInformation getBaseChamberInfo();
+
+	/** The faction relation of ships this aura affects (FRIEND for buffs, ENEMY for debuffs). */
+	protected abstract FactionRelation.RType getTargetRelation();
+
+	/** One of {@link AuraState}'s KIND_* constants, used to colour the tactical-map sphere. */
+	protected abstract int getAuraKind();
+
+	/** Populate {@link #effectsToApply} from whichever sub-chambers are present. Called only while active. */
+	protected abstract void collectEffects();
+
+	/**
+	 * Finds the active (or, failing that, usable) aura projector on a ship regardless of role. Needed because
+	 * {@code SegmentControllerUtils.getAddon(.., Class)} matches by exact class, which would miss subclasses; this
+	 * iterates the player-usables and matches by {@code instanceof}.
+	 */
+	public static AuraProjectorAddOn getActiveAura(ManagedSegmentController<?> ent) {
+		if(ent == null || ent.getManagerContainer() == null) {
+			return null;
+		}
+		AuraProjectorAddOn usableFallback = null;
+		ObjectCollection<PlayerUsableInterface> usables = ent.getManagerContainer().getPlayerUsable();
+		for(PlayerUsableInterface i : usables) {
+			if(i instanceof AuraProjectorAddOn aura) {
+				if(aura.isActive()) {
+					return aura;
+				}
+				if(aura.isPlayerUsable()) {
+					usableFallback = aura;
+				}
+			}
+		}
+		return usableFallback;
+	}
+
+	/** Recalibrate every aura projector on a ship (both roles) in response to a reactor change. */
+	public static void recalibrateAll(ManagedUsableSegmentController<?> ent, ReactorRecalibrateEvent event) {
+		if(ent == null || ent.getManagerContainer() == null) {
+			return;
+		}
+		for(PlayerUsableInterface i : ent.getManagerContainer().getPlayerUsable()) {
+			if(i instanceof AuraProjectorAddOn aura) {
+				aura.onReactorRecalibrate(event);
+			}
+		}
 	}
 
 	private static boolean canAffect(SegmentController controllerA, SegmentController controllerB) {
@@ -90,7 +148,7 @@ public class AuraProjectorAddOn extends SimpleAddOn {
 			if(controller.getManagerContainer() == null || controller.getManagerContainer().getPowerInterface() == null || controller.getManagerContainer().getPowerInterface().getActiveReactor() == null) {
 				return;
 			}
-			ReactorElement auraBase = SegmentControllerUtils.getChamberFromElement(controller, BlockRegistry.AURA_PROJECTOR_CHAMBER.getInfo());
+			ReactorElement auraBase = SegmentControllerUtils.getChamberFromElement(controller, getBaseChamberInfo());
 			if(auraBase != null && auraBase.isAllValidOrUnspecified()) {
 				usable = true;
 				effectsToApply.clear();
@@ -101,14 +159,7 @@ public class AuraProjectorAddOn extends SimpleAddOn {
 					if(configManager.getModules().containsKey(StatusEffectRegistry.AURA_RANGE)) {
 						maxRange = (configManager.getModules().get(StatusEffectRegistry.AURA_RANGE).getFloatValue()) * (Integer) ServerConfig.SECTOR_SIZE.getCurrentState();
 					}
-					ReactorElement shieldAuraCap1 = SegmentControllerUtils.getChamberFromElement(getManagerUsableSegmentController(), BlockRegistry.SHIELD_AURA_CAPACITY_CHAMBER_1.getInfo());
-					if(shieldAuraCap1 != null && shieldAuraCap1.isAllValidOrUnspecified()) {
-						effectsToApply.add(ConfigGroupRegistry.SHIELD_AURA_CAPACITY_EFFECT_1.configEffectGroup);
-					}
-					ReactorElement shieldAuraCap2 = SegmentControllerUtils.getChamberFromElement(getManagerUsableSegmentController(), BlockRegistry.SHIELD_AURA_CAPACITY_CHAMBER_2.getInfo());
-					if(shieldAuraCap2 != null && shieldAuraCap2.isAllValidOrUnspecified()) {
-						effectsToApply.add(ConfigGroupRegistry.SHIELD_AURA_CAPACITY_EFFECT_2.configEffectGroup);
-					}
+					collectEffects();
 				} else {
 					removeEntityEffects();
 				}
@@ -226,11 +277,6 @@ public class AuraProjectorAddOn extends SimpleAddOn {
 	}
 
 	@Override
-	public String getName() {
-		return "Aura Projector";
-	}
-
-	@Override
 	public boolean isDeactivatableManually() {
 		return isActive();
 	}
@@ -258,6 +304,7 @@ public class AuraProjectorAddOn extends SimpleAddOn {
 						target.getConfigManager().removeEffectAndSend(configGroup, true, target.getNetworkObject());
 					}
 				}
+				targetingEntities.remove(target);
 			}
 		}
 		if(GameServer.getServerState() != null) {
@@ -305,16 +352,16 @@ public class AuraProjectorAddOn extends SimpleAddOn {
 							}
 							int currentFactionId = getSegmentController().getFactionId();
 							int entityFactionId = entity.getFactionId();
-							if(currentFactionId > 0 && entityFactionId > 0 && Objects.requireNonNull(GameCommon.getGameState()).getFactionManager().getRelation(currentFactionId, entityFactionId) == FactionRelation.RType.FRIEND) {
+							if(currentFactionId > 0 && entityFactionId > 0 && Objects.requireNonNull(GameCommon.getGameState()).getFactionManager().getRelation(currentFactionId, entityFactionId) == getTargetRelation()) {
 								float distance = EntityUtils.getDistance(entity, getSegmentController());
 								if(distance <= maxRange && !targetingEntities.containsKey(entity)) {
 									entity.getConfigManager().addEffectAndSend(configGroup, true, entity.getNetworkObject());
 									targetingEntities.put(entity, true);
 								}
+							} else {
+								entity.getConfigManager().removeEffectAndSend(configGroup, true, entity.getNetworkObject());
+								targetingEntities.remove(entity);
 							}
-						} else {
-							entity.getConfigManager().removeEffectAndSend(configGroup, true, entity.getNetworkObject());
-							targetingEntities.remove(entity);
 						}
 					}
 				}
@@ -336,8 +383,9 @@ public class AuraProjectorAddOn extends SimpleAddOn {
 				clearAura();
 				if(getState() instanceof GameServerState) {
 					AudioUtils.serverPlaySound("0022_spaceship user - special synthetic weapon recharged 1", 10.0f, 1.0f, getAttachedPlayers());
+					String disruptorName = shootingEntity != null ? shootingEntity.getName() : "enemy fire";
 					for(PlayerState playerState : getAttachedPlayers()) {
-						playerState.sendServerMessagePlayerWarning(new Object[] {"Aura Projector disrupted by \"" + shootingEntity.getName() + "\"!"});
+						playerState.sendServerMessagePlayerWarning(new Object[] {"Aura Projector disrupted by \"" + disruptorName + "\"!"});
 					}
 				} else {
 					AudioUtils.clientPlaySound("0022_spaceship user - special synthetic weapon recharged 1", 10.0f, 1.0f);
@@ -363,20 +411,20 @@ public class AuraProjectorAddOn extends SimpleAddOn {
 
 	/** Push the current sphere (radius + power fraction) to the server-side AuraManager for client rendering. */
 	private void reportAura() {
-		if(!isOnServer()) {
+		if(!isOnServer() || !usable) {
 			return;
 		}
 		try {
 			SegmentController sc = getSegmentController();
 			float frac = auraMaxPower > 0 ? (float) (auraPower / auraMaxPower) : 1.0f;
-			AuraManager.getInstance().report(new AuraState(sc.getId(), sc.getSectorId(), maxRange, AuraState.KIND_SUPPORT, frac));
+			AuraManager.getInstance().report(new AuraState(sc.getId(), sc.getSectorId(), maxRange, getAuraKind(), frac));
 		} catch(Exception ignored) {
 		}
 	}
 
 	/** Stop advertising this projector's aura to clients. */
 	private void clearAura() {
-		if(!isOnServer()) {
+		if(!isOnServer() || !usable) {
 			return;
 		}
 		try {

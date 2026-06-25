@@ -1,9 +1,11 @@
 package videogoose.combattweaks.mixin;
 
+import api.common.GameCommon;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.controller.elements.beam.harvest.SalvageElementManager;
 import org.schema.game.common.data.SimpleGameObject;
+import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.common.data.player.ControllerStateInterface;
 import org.schema.game.server.ai.AIControllerStateUnit;
 import org.schema.game.server.ai.ShipAIEntity;
@@ -116,6 +118,23 @@ public abstract class ShipAIEntityMixin {
 			SegmentController root = ship.railController != null ? ship.railController.getRoot() : null;
 			if(root != null) {
 				orderId = root.getId();
+			}
+			// Never fire on the specific friendly/neutral entity this ship was ordered to escort (move-to) or
+			// defend — even after a one-shot move has completed and the ship is idling right next to it. The
+			// engine's own friendly-fire guard only spares faction-FRIENDS, so a NEUTRAL escortee would otherwise
+			// be shot; we cancel the shot when the currently-acquired target is that escortee and it isn't an
+			// enemy. Enemies acquired normally (and any other target) still get engaged.
+			Integer noFire = AIUtils.getNoFireTarget(orderId);
+			if(noFire != null) {
+				SimpleTransformableSendableObject<?> acquired = unit.getAquiredTarget();
+				// Cancel only for a NEUTRAL escortee: faction-friends are already spared by the engine (and may be
+				// auto-repaired, which we keep), and a genuine enemy should still be engaged.
+				if(acquired != null && acquired.getId() == noFire
+						&& !GameCommon.getGameState().getFactionManager().isFriend(acquired.getFactionId(), ship.getFactionId())
+						&& !GameCommon.getGameState().getFactionManager().isEnemy(ship, acquired)) {
+					ci.cancel();
+					return;
+				}
 			}
 			// Repair orders are handled entirely by the engine's doShooting now: it skips offensive weapons
 			// against a friendly target and fires the repair beams at a damaged ally. We deliberately do NOT
