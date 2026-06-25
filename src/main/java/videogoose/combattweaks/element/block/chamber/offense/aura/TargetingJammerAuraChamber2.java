@@ -5,25 +5,26 @@ import videogoose.combattweaks.element.block.chamber.ChamberBlock;
 import videogoose.combattweaks.manager.ResourceManager;
 
 /**
- * Offense Aura sub-chamber: makes the projector dampen the shield capacity of enemies inside the sphere. The
- * debuff itself is applied at runtime by {@code OffenseAuraAddOn}, so no passive config group is attached here.
+ * Offense Aura sub-chamber (tier 2): a stronger Targeting Jammer that scatters affected enemies' AI fire even
+ * more. The upgrade target of {@link TargetingJammerAuraChamber1}; the debuff is applied at runtime by
+ * {@code OffenseAuraAddOn}.
  */
-public class ShieldDampenAuraChamber extends ChamberBlock {
+public class TargetingJammerAuraChamber2 extends ChamberBlock {
 
-	public ShieldDampenAuraChamber() {
-		super("Shield Dampen Aura");
+	public TargetingJammerAuraChamber2() {
+		super("Targeting Jammer Aura 2");
 	}
 
 	@Override
 	public void initData() {
 		super.initData();
-		blockInfo.setDescription("Reduces the shield capacity of enemy ships affected by this aura.");
+		blockInfo.setDescription("Strongly disrupts the AI targeting of enemy ships in this aura, badly scattering their turret, drone and point-defense fire.");
 		blockInfo.setPlacable(false);
 		blockInfo.setInRecipe(false);
 		blockInfo.reactorHp = 20;
 		blockInfo.shoppable = false;
 		blockInfo.chamberRoot = BlockRegistry.REACTOR_OFFENSE_CHAMBER.getId();
-		blockInfo.chamberCapacity = 0.08f;
+		blockInfo.chamberCapacity = 0.12f;
 	}
 
 	@Override

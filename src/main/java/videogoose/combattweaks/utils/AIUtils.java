@@ -57,6 +57,14 @@ public class AIUtils {
 	 */
 	private static final Map<Integer, Integer> noFireTargets = new ConcurrentHashMap<>();
 
+	/**
+	 * Ships on a <em>Supporting Fire</em> order: they engage their attack target but <b>hold position</b> instead
+	 * of running the engine's close/orbit/strafe dance. The flag is read by the engaging-state movement mixin to
+	 * skip the orbital {@code moveTo} (firing and target-facing are left intact). Set alongside the attack target
+	 * and cleared whenever the attack target is cleared (see {@link #clearTarget}).
+	 */
+	private static final java.util.Set<Integer> supportingFire = ConcurrentHashMap.newKeySet();
+
 	/** Per-ship timestamp (ms) of when it was first seen without a fleet, for the drop grace period. */
 	private static final Map<Integer, Long> unfleetedSince = new ConcurrentHashMap<>();
 	/**
@@ -155,6 +163,20 @@ public class AIUtils {
 	/** The entity this ship must not fire on (the friendly/neutral it's escorting or defending), or null. */
 	public static Integer getNoFireTarget(int shipId) {
 		return noFireTargets.get(shipId);
+	}
+
+	/** Mark (or clear) a ship as holding position while engaging — the Supporting Fire order. */
+	public static void setSupportingFire(int shipId, boolean on) {
+		if(on) {
+			supportingFire.add(shipId);
+		} else {
+			supportingFire.remove(shipId);
+		}
+	}
+
+	/** Whether the ship is on a Supporting Fire order (engage but hold position, no orbit/strafe). */
+	public static boolean isSupportingFire(int shipId) {
+		return supportingFire.contains(shipId);
 	}
 
 	/**
@@ -579,6 +601,7 @@ public class AIUtils {
 			((NetworkShip) ship.getNetworkObject()).targetPosition.set(ship.getWorldTransform().origin);
 		}
 		attackOrders.remove(ship.getId()); // no longer attacking under our command
+		supportingFire.remove(ship.getId()); // and no longer holding position to support
 	}
 
 	public static void clearTarget(int shipId) {

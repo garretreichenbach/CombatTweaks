@@ -8,7 +8,7 @@ import videogoose.combattweaks.manager.ResourceManager;
 public class AuraRangeBoostChamber1 extends ChamberBlock {
 
 	public AuraRangeBoostChamber1() {
-		super("Aura Range Boost 1");
+		super("Support Aura Range Boost 1");
 	}
 
 	@Override

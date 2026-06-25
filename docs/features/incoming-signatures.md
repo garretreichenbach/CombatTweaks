@@ -21,7 +21,7 @@ Signature detail is not perfect intelligence. How much you can read depends on:
 
 ## Configuration
 
-Incoming signatures are controlled from the in-map [settings panel](tactical-map.md#settings-panel) and the client [configuration](../getting-started/configuration.md):
+Incoming signatures are controlled from the in-map [settings panel](tactical-map.md#settings-panel) and the client [configuration](configuration.md):
 
 - **Signatures** toggle — show or hide the system.
 - **Signature range** — how many sectors out to scan for inbound contacts. A larger range gives earlier warning but means more scanning work on the server.

@@ -57,6 +57,29 @@ public class TacticalMapRadial extends RadialMenuDialog {
 		};
 	}
 
+	/** The supporting-fire action: engage the target but hold position (no orbit/strafe). */
+	private GUICallback makeSupportingFireCallback() {
+		return new GUICallback() {
+			@Override
+			public void callback(GUIElement callingGuiElement, MouseEvent event) {
+				if(event.pressedLeftMouse()) {
+					for(SegmentController selected : drawer.selectedEntities) {
+						if(selected instanceof Ship && !target.getEntity().equals(selected)) {
+							PacketUtil.sendPacketToServer(new SendSupportingFirePacket((Ship) selected, target.getEntity(), isQueueModifier()));
+						}
+					}
+					if(!isQueueModifier()) drawer.clearSelected();
+					deactivate();
+				}
+			}
+
+			@Override
+			public boolean isOccluded() {
+				return false;
+			}
+		};
+	}
+
 	@Override
 	public RadialMenu createMenu(RadialMenuDialog radialMenuDialog) {
 		RadialMenu menu = new RadialMenu(getState(), "TacticalMapRadial", radialMenuDialog, 800, 600, 130, FontLibrary.getBOLDBlender20());
@@ -156,11 +179,13 @@ public class TacticalMapRadial extends RadialMenuDialog {
 				if(isEnemy) {
 					// Hostile — order attack directly.
 					menu.addItem("Order Attack", makeAttackCallback(), null);
+					menu.addItem("Supporting Fire", makeSupportingFireCallback(), null);
 				} else {
 					// Neutral — attacking hurts your standing and can aggro them, so require a confirmation
 					// step via a sub-radial rather than firing on a stray click.
 					RadialMenu confirm = menu.addItemAsSubMenu("Order Attack", null);
 					confirm.addItem("Confirm: Attack Neutral", makeAttackCallback(), null);
+					confirm.addItem("Confirm: Supporting Fire", makeSupportingFireCallback(), null);
 				}
 			} else {
 				// Ally/own faction ship — offer both defend and repair

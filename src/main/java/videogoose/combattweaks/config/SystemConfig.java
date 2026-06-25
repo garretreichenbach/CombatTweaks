@@ -61,12 +61,14 @@ public class SystemConfig extends SimpleConfigContainer {
 	public final SimpleConfigDouble auraDamageAttritionFactor =
 			new SimpleConfigDouble(this, "aura_damage_attrition_factor", 0.05, "Fraction of incoming damage that bleeds an active projector's aura power when its ship is hit (the second takedown path alongside the Aura Disruptor). 0 disables damage attrition.");
 
-	// --- Offensive/debuff auras (applied to ENEMY ships inside the sphere) ---
-	public final SimpleConfigDouble shieldDampenAuraMult =
-			new SimpleConfigDouble(this, "shield_dampen_aura_mult", 0.75, "Shield Dampen aura: multiplier applied to the shield capacity of enemies inside the sphere (<1 reduces it).");
+	// --- Offense Aura ECW (Targeting Jammer; applied to ENEMY ships inside the sphere) ---
+	// Multiplier on enemy AI shooting precision (AI_ACCURACY_TURRET/DRONE/POINT_DEFENSE). <1 widens their shot
+	// deviation so AI-controlled fire misses more; only affects AI shooters, not manually-piloted ships.
+	public final SimpleConfigDouble targetingJammerAuraAccuracyMult1 =
+			new SimpleConfigDouble(this, "targeting_jammer_aura_accuracy_mult_1", 0.6, "Targeting Jammer aura tier 1: multiplier on affected enemies' AI targeting precision (0.6 = ~40% worse AI accuracy). Lower = more scatter.");
 
-	public final SimpleConfigDouble weaponRangeDampenAuraMult =
-			new SimpleConfigDouble(this, "weapon_range_dampen_aura_mult", 0.7, "Weapon Range Dampen aura: multiplier applied to the weapon range of enemies inside the sphere (<1 reduces it).");
+	public final SimpleConfigDouble targetingJammerAuraAccuracyMult2 =
+			new SimpleConfigDouble(this, "targeting_jammer_aura_accuracy_mult_2", 0.4, "Targeting Jammer aura tier 2: multiplier on affected enemies' AI targeting precision (0.4 = ~60% worse AI accuracy). Lower = more scatter.");
 
 	// --- Warhead Pre-Charger chambers (ported from BetterChambers) ---
 	public final SimpleConfigDouble warheadPreChargerEffect1RadiusAdd =

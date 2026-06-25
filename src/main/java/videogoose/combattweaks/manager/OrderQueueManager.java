@@ -30,15 +30,24 @@ import java.util.concurrent.TimeUnit;
  */
 public class OrderQueueManager {
 
-	public enum OrderType {MOVE, MINE, ATTACK, DEFEND, REPAIR}
+	public enum OrderType {MOVE, MINE, ATTACK, DEFEND, REPAIR, SUPPORTING_FIRE, MOVE_TO_POSITION}
 
 	private static final class QueuedOrder {
 		final OrderType type;
 		final int targetId;
+		/** For MOVE_TO_POSITION: the world point to fly to (null for entity-target orders). */
+		final javax.vecmath.Vector3f position;
+		final int sectorId;
 
 		QueuedOrder(OrderType type, int targetId) {
+			this(type, targetId, null, -1);
+		}
+
+		QueuedOrder(OrderType type, int targetId, javax.vecmath.Vector3f position, int sectorId) {
 			this.type = type;
 			this.targetId = targetId;
+			this.position = position;
+			this.sectorId = sectorId;
 		}
 	}
 
@@ -166,6 +175,11 @@ public class OrderQueueManager {
 				AIUtils.setAttackTarget(shipId, order.targetId);
 				AIUtils.clearNoFireTarget(shipId); // now fighting — drop any escort no-fire protection
 				break;
+			case SUPPORTING_FIRE:
+				AIUtils.setAttackTarget(shipId, order.targetId);
+				AIUtils.setSupportingFire(shipId, true); // engage but hold position (no orbit/strafe)
+				AIUtils.clearNoFireTarget(shipId);
+				break;
 			case DEFEND:
 				DefenseManager.getInstance().addDefense(shipId, order.targetId);
 				// Defenders must never fire on the ship they protect (closes the threat-gone re-acquire window too).
@@ -196,7 +210,7 @@ public class OrderQueueManager {
 				// dropped a commanded neutral target and it went idle next to it. Guarded by isInAttackCycle so
 				// it never interrupts a live search/engagement (and setAttackTarget is itself idempotent when
 				// the target is already set). Attack is the only order type without such a maintenance pass.
-				if(order.type == OrderType.ATTACK
+				if((order.type == OrderType.ATTACK || order.type == OrderType.SUPPORTING_FIRE)
 						&& GameCommon.getGameObject(order.targetId) instanceof SegmentController) {
 					boolean inCycle = AIUtils.isInAttackCycle(shipId);
 					if(CTLog.debugEnabled() && GameCommon.getGameObject(shipId) instanceof org.schema.game.common.controller.Ship s) {
@@ -229,7 +243,7 @@ public class OrderQueueManager {
 					MineManager.getInstance().getAssignedTarget(shipId) == null;
 			case REPAIR -> RepairManager.getInstance().getAssignedTarget(shipId) == null
 					|| !(GameCommon.getGameObject(order.targetId) instanceof SegmentController);
-			case ATTACK ->
+			case ATTACK, SUPPORTING_FIRE ->
 				// Target destroyed / no longer exists.
 					!(GameCommon.getGameObject(order.targetId) instanceof SegmentController);
 			default ->

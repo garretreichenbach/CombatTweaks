@@ -85,11 +85,15 @@ public class CombatTweaks extends StarMod {
 		String key = "combattweaks";
 		String label = "CombatTweaks";
 		registrar.registerFromResource(key, label, "Overview", "guides/index.md", this);
-		registrar.registerFromResource(key, label, "Configuration", "guides/getting-started/configuration.md", this);
+		registrar.registerFromResource(key, label, "Configuration", "guides/features/configuration.md", this);
 		registrar.registerFromResource(key, label, "Tactical Map", "guides/features/tactical-map.md", this);
 		registrar.registerFromResource(key, label, "Fleet Orders", "guides/features/fleet-orders.md", this);
 		registrar.registerFromResource(key, label, "Incoming Signatures", "guides/features/incoming-signatures.md", this);
 		registrar.registerFromResource(key, label, "Armor HP System", "guides/features/armor-hp.md", this);
+		registrar.registerFromResource(key, label, "Auras", "guides/features/auras.md", this);
+		registrar.registerFromResource(key, label, "Aura Disruptor", "guides/features/aura-disruptor.md", this);
+		registrar.registerFromResource(key, label, "Warhead Pre-Charger", "guides/features/warhead-pre-charger.md", this);
+		registrar.registerFromResource(key, label, "Thrust Blast", "guides/features/thrust-blast.md", this);
 	}
 
 	@Override
@@ -104,9 +108,11 @@ public class CombatTweaks extends StarMod {
 		PacketUtil.registerPacket(SendMinePacket.class);
 		PacketUtil.registerPacket(SendRepairPacket.class);
 		PacketUtil.registerPacket(SendMoveToPacket.class);
+		PacketUtil.registerPacket(SendThrustBlastPacket.class);
+		PacketUtil.registerPacket(SendSupportingFirePacket.class);
 		PacketUtil.registerPacket(SendArmorHPSyncPacket.class);
 		PacketUtil.registerPacket(SendAuraSyncPacket.class);
 		PacketUtil.registerPacket(SendIncomingSignaturesPacket.class);
-		PacketUtil.registerPacket(videogoose.combattweaks.network.client.RequestArmorSyncPacket.class);
+		PacketUtil.registerPacket(RequestArmorSyncPacket.class);
 	}
 }

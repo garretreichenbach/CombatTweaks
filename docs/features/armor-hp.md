@@ -26,4 +26,4 @@ Both chambers stack additively, providing a significant improvement to armor dur
 
 ## Configuration
 
-All armor HP values can be tuned in `system_config.yml`. See the [Configuration](../getting-started/configuration.md) page for the full list of options.
+All armor HP values can be tuned in `system_config.yml`. See the [Configuration](configuration.md) page for the full list of options.

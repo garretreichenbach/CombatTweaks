@@ -4,8 +4,8 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayFIFOQueue;
 import org.schema.game.common.data.blockeffects.config.ConfigGroup;
 import videogoose.combattweaks.effect.defense.armor.ArmorHPAbsorptionEffect1;
 import videogoose.combattweaks.effect.defense.armor.ArmorHPAbsorptionEffect2;
-import videogoose.combattweaks.effect.offense.aura.ShieldDampenAuraEffect;
-import videogoose.combattweaks.effect.offense.aura.WeaponRangeDampenAuraEffect;
+import videogoose.combattweaks.effect.offense.aura.TargetingJammerAuraEffect1;
+import videogoose.combattweaks.effect.offense.aura.TargetingJammerAuraEffect2;
 import videogoose.combattweaks.effect.offense.warhead.WarheadPreChargerEffect1;
 import videogoose.combattweaks.effect.offense.warhead.WarheadPreChargerEffect2;
 import videogoose.combattweaks.effect.support.aura.AuraBaseEffect;
@@ -28,9 +28,9 @@ public enum ConfigGroupRegistry {
 	SHIELD_AURA_CAPACITY_EFFECT_1(new ShieldAuraCapacityEffect1()),
 	SHIELD_AURA_CAPACITY_EFFECT_2(new ShieldAuraCapacityEffect2()),
 
-	// Applied at runtime by the Offense Aura to enemy ships inside the sphere.
-	SHIELD_DAMPEN_AURA_EFFECT(new ShieldDampenAuraEffect()),
-	WEAPON_RANGE_DAMPEN_AURA_EFFECT(new WeaponRangeDampenAuraEffect()),
+	// Applied at runtime by the Offense Aura to enemy ships inside the sphere (ECW: jams AI targeting accuracy).
+	TARGETING_JAMMER_AURA_EFFECT_1(new TargetingJammerAuraEffect1()),
+	TARGETING_JAMMER_AURA_EFFECT_2(new TargetingJammerAuraEffect2()),
 
 	//Offense — Warhead Pre-Charger (ported from BetterChambers)
 	WARHEAD_PRE_CHARGER_EFFECT_1(new WarheadPreChargerEffect1()),

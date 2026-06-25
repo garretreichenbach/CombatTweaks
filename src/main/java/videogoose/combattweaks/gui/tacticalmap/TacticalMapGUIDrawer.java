@@ -370,6 +370,62 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		activeAuras = map;
 	}
 
+	/**
+	 * Which aura kinds the local player's piloted ship currently sits inside, from the synced aura set:
+	 * index 0 = a friendly support (buff) aura, index 1 = a hostile offense (ECW) aura. Drives the HUD aura
+	 * indicator. Client-side and approximate — mirrors the server's range + faction-relation test, not the finer
+	 * no-stacking / reactor-size gates, so it reads "you are in an aura field" rather than "an effect was applied".
+	 */
+	public boolean[] getLocalPlayerAuraStatus() {
+		boolean[] status = new boolean[2];
+		java.util.Map<Integer, AuraState> auras = activeAuras;
+		if(auras == null || auras.isEmpty()) {
+			return status;
+		}
+		try {
+			SegmentController ship = GameClient.getClientState().getShip();
+			if(ship == null) {
+				return status;
+			}
+			Transform st = ship.getWorldTransformOnClient();
+			if(st == null) {
+				return status;
+			}
+			Vector3f shipPos = st.origin;
+			int myFac = ship.getFactionId();
+			for(AuraState a : auras.values()) {
+				if(a.radius <= 0.0f) {
+					continue;
+				}
+				org.schema.schine.network.objects.Sendable s = GameClient.getClientState().getLocalAndRemoteObjectContainer().getLocalObjects().get(a.entityId);
+				if(!(s instanceof SegmentController proj) || proj.getId() == ship.getId()) {
+					continue;
+				}
+				Transform pt = proj.getWorldTransformOnClient();
+				if(pt == null) {
+					continue;
+				}
+				Vector3f p = pt.origin;
+				float dx = shipPos.x - p.x, dy = shipPos.y - p.y, dz = shipPos.z - p.z;
+				if((dx * dx + dy * dy + dz * dz) > a.radius * a.radius) {
+					continue;
+				}
+				int pFac = proj.getFactionId();
+				if(pFac <= 0 || myFac <= 0) {
+					continue;
+				}
+				FactionRelation.RType rel = GameCommon.getGameState().getFactionManager().getRelation(pFac, myFac);
+				if(a.auraKind == AuraState.KIND_SUPPORT && rel == FactionRelation.RType.FRIEND) {
+					status[0] = true;
+				} else if(a.auraKind == AuraState.KIND_OFFENSE && rel == FactionRelation.RType.ENEMY) {
+					status[1] = true;
+				}
+			}
+		} catch(Exception ignored) {
+		}
+		return status;
+	}
+
 	public void addSelection(TacticalMapEntityIndicator indicator) {
 		selectedEntities.add(indicator.getEntity());
 		if(shaderOverlay != null) {

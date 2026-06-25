@@ -11,6 +11,7 @@
 		"FleetStateMixin",
 		"ShipAIEntityMixin",
 		"ShipGameStateMixin",
+		"EngagingTargetSteadyMixin",
 		"FleetMiningMixin",
 		"FactionManagerMixin",
 		"Vector3fToolsMixin"

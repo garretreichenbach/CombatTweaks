@@ -65,7 +65,7 @@ Every armor block contributes to a shared Armor HP pool that absorbs damage befo
 
 ## Configuration
 
-The mod generates its config files on first run. See the [Configuration guide](docs/getting-started/configuration.md) for the full list of keys, including the client `config.yml` tactical-map options (grid, signatures, status rings, label detail, view distance, …) and the server-synced `system_config.yml` armor-balance values.
+The mod generates its config files on first run. See the [Configuration guide](docs/features/configuration.md) for the full list of keys, including the client `config.yml` tactical-map options (grid, signatures, status rings, label detail, view distance, …) and the server-synced `system_config.yml` armor-balance values.
 
 ## Installation
 

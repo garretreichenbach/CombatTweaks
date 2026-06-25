@@ -9,8 +9,11 @@ import videogoose.combattweaks.effect.ConfigGroupRegistry;
 import videogoose.combattweaks.element.block.BlockRegistry;
 
 /**
- * Hostile Offense Aura: debuffs enemy ships inside the sphere (shield dampen, weapon-range dampen). Gated by the
- * Offense Aura base chamber in the reactor offense tree.
+ * Hostile Offense Aura (ECW): jams the AI targeting of enemy ships inside the sphere via the Targeting Jammer
+ * sub-chambers, so their AI-controlled turrets/drones/point-defense scatter their fire. Gated by the Offense Aura
+ * base chamber in the reactor offense tree. Deliberately an electronic-warfare effect rather than a flat stat
+ * debuff (see aura-balance-philosophy): it spares manually-piloted ships and is countered by attrition under
+ * fire and the Aura Disruptor.
  */
 public class OffenseAuraAddOn extends AuraProjectorAddOn {
 
@@ -35,13 +38,13 @@ public class OffenseAuraAddOn extends AuraProjectorAddOn {
 
 	@Override
 	protected void collectEffects() {
-		ReactorElement shieldDampen = SegmentControllerUtils.getChamberFromElement(getManagerUsableSegmentController(), BlockRegistry.SHIELD_DAMPEN_AURA_CHAMBER.getInfo());
-		if(shieldDampen != null && shieldDampen.isAllValidOrUnspecified()) {
-			effectsToApply.add(ConfigGroupRegistry.SHIELD_DAMPEN_AURA_EFFECT.configEffectGroup);
+		ReactorElement jammer1 = SegmentControllerUtils.getChamberFromElement(getManagerUsableSegmentController(), BlockRegistry.TARGETING_JAMMER_AURA_CHAMBER_1.getInfo());
+		if(jammer1 != null && jammer1.isAllValidOrUnspecified()) {
+			effectsToApply.add(ConfigGroupRegistry.TARGETING_JAMMER_AURA_EFFECT_1.configEffectGroup);
 		}
-		ReactorElement weaponRangeDampen = SegmentControllerUtils.getChamberFromElement(getManagerUsableSegmentController(), BlockRegistry.WEAPON_RANGE_DAMPEN_AURA_CHAMBER.getInfo());
-		if(weaponRangeDampen != null && weaponRangeDampen.isAllValidOrUnspecified()) {
-			effectsToApply.add(ConfigGroupRegistry.WEAPON_RANGE_DAMPEN_AURA_EFFECT.configEffectGroup);
+		ReactorElement jammer2 = SegmentControllerUtils.getChamberFromElement(getManagerUsableSegmentController(), BlockRegistry.TARGETING_JAMMER_AURA_CHAMBER_2.getInfo());
+		if(jammer2 != null && jammer2.isAllValidOrUnspecified()) {
+			effectsToApply.add(ConfigGroupRegistry.TARGETING_JAMMER_AURA_EFFECT_2.configEffectGroup);
 		}
 	}
 

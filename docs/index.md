@@ -15,6 +15,9 @@ CombatTweaks brings bird's-eye fleet command to StarMade without leaving your co
 - **Selection Panel** — A pinnable, scrollable fleet status list with shield/armor/reactor bars and live order readouts.
 - **In-Map Settings** — A top-left panel of toggles (status rings, label detail, signatures, grid, and more) that persists between sessions.
 - **Armor HP System** — A shared armor durability pool that absorbs damage before it reaches your reactor, with diminishing bleed-through as armor is lost and tunable absorption chambers.
+- **Auras** — Spherical projector fields rendered (and targetable) on the tactical map: friendly Support auras that buff allies, and Offense (ECW) auras that jam enemy AI targeting. Shut them down with sustained fire or the Aura Disruptor.
+- **Reactor Chambers** — Ported combat chambers including the Warhead Pre-Charger (supercharged warheads) and the aura projector trees.
+- **Thrust Blast** — Double-tap a movement key in flight for a burst of speed.
 
 ## Feature Guides
 
@@ -22,3 +25,7 @@ CombatTweaks brings bird's-eye fleet command to StarMade without leaving your co
 - [Fleet Orders](features/fleet-orders.md) — issuing, queueing, and reading orders.
 - [Incoming Signatures](features/incoming-signatures.md) — the early-warning contact system.
 - [Armor HP System](features/armor-hp.md) — how armor durability and bleed-through work.
+- [Auras](features/auras.md) — Support and Offense (ECW) projector fields, no-stacking, and takedown.
+- [Aura Disruptor](features/aura-disruptor.md) — the weapon that drains enemy auras.
+- [Warhead Pre-Charger](features/warhead-pre-charger.md) — the warhead-supercharging chamber.
+- [Thrust Blast](features/thrust-blast.md) — the double-tap speed burst.

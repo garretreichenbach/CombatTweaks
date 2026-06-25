@@ -5,8 +5,10 @@ import org.schema.game.common.data.element.ElementInformation;
 import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber1;
 import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber2;
 import videogoose.combattweaks.element.block.chamber.offense.aura.OffenseAuraChamber;
-import videogoose.combattweaks.element.block.chamber.offense.aura.ShieldDampenAuraChamber;
-import videogoose.combattweaks.element.block.chamber.offense.aura.WeaponRangeDampenAuraChamber;
+import videogoose.combattweaks.element.block.chamber.offense.aura.TargetingJammerAuraChamber1;
+import videogoose.combattweaks.element.block.chamber.offense.aura.TargetingJammerAuraChamber2;
+import videogoose.combattweaks.element.block.chamber.offense.aura.range.OffenseAuraRangeBoostChamber1;
+import videogoose.combattweaks.element.block.chamber.offense.aura.range.OffenseAuraRangeBoostChamber2;
 import videogoose.combattweaks.element.block.chamber.offense.warhead.WarheadPreChargerChamber1;
 import videogoose.combattweaks.element.block.chamber.offense.warhead.WarheadPreChargerChamber2;
 import videogoose.combattweaks.element.block.chamber.support.aura.SupportAuraChamber;
@@ -45,10 +47,12 @@ public enum BlockRegistry {
 	AURA_RANGE_BOOST_CHAMBER_1(new AuraRangeBoostChamber1()),
 	AURA_RANGE_BOOST_CHAMBER_2(new AuraRangeBoostChamber2()),
 
-	//Offense chambers — Offense Aura (debuffs enemies). Base must precede its sub-chambers.
+	//Offense chambers — Offense Aura (ECW: jams enemy AI targeting). Base must precede its sub-chambers.
 	OFFENSE_AURA_CHAMBER(new OffenseAuraChamber()),
-	SHIELD_DAMPEN_AURA_CHAMBER(new ShieldDampenAuraChamber()),
-	WEAPON_RANGE_DAMPEN_AURA_CHAMBER(new WeaponRangeDampenAuraChamber()),
+	TARGETING_JAMMER_AURA_CHAMBER_1(new TargetingJammerAuraChamber1()),
+	TARGETING_JAMMER_AURA_CHAMBER_2(new TargetingJammerAuraChamber2()),
+	OFFENSE_AURA_RANGE_BOOST_CHAMBER_1(new OffenseAuraRangeBoostChamber1()),
+	OFFENSE_AURA_RANGE_BOOST_CHAMBER_2(new OffenseAuraRangeBoostChamber2()),
 
 	//Weapons
 	AURA_DISRUPTOR_COMPUTER(new AuraDisruptorComputer()),

@@ -1,4 +1,4 @@
-package videogoose.combattweaks.element.block.chamber.offense.aura;
+package videogoose.combattweaks.element.block.chamber.offense.aura.range;
 
 import videogoose.combattweaks.effect.ConfigGroupRegistry;
 import videogoose.combattweaks.element.block.BlockRegistry;
@@ -6,34 +6,33 @@ import videogoose.combattweaks.element.block.chamber.ChamberBlock;
 import videogoose.combattweaks.manager.ResourceManager;
 
 /**
- * Base chamber for the hostile Offense Aura (debuffs enemy ships inside the projected sphere). Lives under the
- * reactor <b>offense</b> tree, and shares the {@code AURA_BASE_EFFECT} range status with the Support Aura.
- * Mutually exclusive with the Support Aura so a ship picks one aura role.
+ * Offense-tree range booster (tier 1): enlarges the sphere of an Offense Aura. Reuses the shared
+ * {@code AURA_RANGE_BOOST_EFFECT_1} (which adds to the reactor's Aura Range), mirroring the support tree's range
+ * boost so an offense-aura ship can grow its field without investing in the support tree. Upgrades to tier 2.
  */
-public class OffenseAuraChamber extends ChamberBlock {
+public class OffenseAuraRangeBoostChamber1 extends ChamberBlock {
 
-	public OffenseAuraChamber() {
-		super("Offense Aura");
+	public OffenseAuraRangeBoostChamber1() {
+		super("Offense Aura Range Boost 1");
 	}
 
 	@Override
 	public void initData() {
 		super.initData();
-		blockInfo.setDescription("Base chamber for hostile electronic-warfare auras; disrupts enemy ships inside the sphere.");
+		blockInfo.setDescription("Boosts the maximum range of an active Offense Aura.");
 		blockInfo.setPlacable(false);
 		blockInfo.setInRecipe(false);
 		blockInfo.reactorHp = 20;
 		blockInfo.shoppable = false;
-		blockInfo.chamberConfigGroupsLowerCase.add(ConfigGroupRegistry.AURA_BASE_EFFECT.toString());
+		blockInfo.chamberConfigGroupsLowerCase.add(ConfigGroupRegistry.AURA_RANGE_BOOST_EFFECT_1.toString());
 		blockInfo.chamberRoot = BlockRegistry.REACTOR_OFFENSE_CHAMBER.getId();
-		blockInfo.chamberCapacity = 0.02f;
+		blockInfo.chamberCapacity = 0.04f;
 	}
 
 	@Override
 	public void postInitData() {
 		BlockRegistry.REACTOR_OFFENSE_CHAMBER.getInfo().chamberChildren.add(getId());
-		// One aura role per ship: a reactor can't run both the support and offense aura base chambers.
-		addExclusives((ChamberBlock) BlockRegistry.SUPPORT_AURA_CHAMBER.elementInterface);
+		setUpgrade((ChamberBlock) BlockRegistry.OFFENSE_AURA_RANGE_BOOST_CHAMBER_2.elementInterface);
 	}
 
 	@Override

@@ -305,6 +305,8 @@ public abstract class AuraProjectorAddOn extends SimpleAddOn {
 					}
 				}
 				targetingEntities.remove(target);
+				// Free the no-stacking claim so another aura of this kind can cover the now-out-of-range ship.
+				AuraManager.getInstance().release(target.getId(), getAuraKind(), getSegmentController().getId());
 			}
 		}
 		if(GameServer.getServerState() != null) {
@@ -355,8 +357,11 @@ public abstract class AuraProjectorAddOn extends SimpleAddOn {
 							if(currentFactionId > 0 && entityFactionId > 0 && Objects.requireNonNull(GameCommon.getGameState()).getFactionManager().getRelation(currentFactionId, entityFactionId) == getTargetRelation()) {
 								float distance = EntityUtils.getDistance(entity, getSegmentController());
 								if(distance <= maxRange && !targetingEntities.containsKey(entity)) {
-									entity.getConfigManager().addEffectAndSend(configGroup, true, entity.getNetworkObject());
-									targetingEntities.put(entity, true);
+									// No stacking: only affect this ship if no other aura of our kind already claims it.
+									if(AuraManager.getInstance().tryClaim(entity.getId(), getAuraKind(), getSegmentController().getId())) {
+										entity.getConfigManager().addEffectAndSend(configGroup, true, entity.getNetworkObject());
+										targetingEntities.put(entity, true);
+									}
 								}
 							} else {
 								entity.getConfigManager().removeEffectAndSend(configGroup, true, entity.getNetworkObject());
@@ -422,13 +427,14 @@ public abstract class AuraProjectorAddOn extends SimpleAddOn {
 		}
 	}
 
-	/** Stop advertising this projector's aura to clients. */
+	/** Stop advertising this projector's aura to clients and free all of its no-stacking claims. */
 	private void clearAura() {
 		if(!isOnServer() || !usable) {
 			return;
 		}
 		try {
 			AuraManager.getInstance().clear(getSegmentController().getId());
+			AuraManager.getInstance().releaseAll(getSegmentController().getId());
 		} catch(Exception ignored) {
 		}
 	}

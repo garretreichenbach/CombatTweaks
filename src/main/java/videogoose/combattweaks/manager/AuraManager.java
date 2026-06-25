@@ -32,6 +32,13 @@ public class AuraManager {
 
 	/** entityId -> latest reported aura (includes the projector's sectorId for scoping the broadcast). */
 	private final ConcurrentHashMap<Integer, AuraState> active = new ConcurrentHashMap<>();
+	/**
+	 * No-stacking registry: key = (affected ship id, aura kind), value = the projector ship id currently affecting
+	 * it. A ship can be claimed by at most one aura <em>per kind</em>, so it carries at most one support aura and
+	 * one offense aura at a time. Projectors claim a target before applying effects and release it when the target
+	 * leaves range or the aura stops; stale claims (owner unloaded) are pruned each tick.
+	 */
+	private final ConcurrentHashMap<Long, Integer> claims = new ConcurrentHashMap<>();
 	private final ScheduledExecutorService scheduler;
 	/** True once we've broadcast the empty state to all players, so we don't spam empty packets while idle. */
 	private boolean clearedClients;
@@ -66,6 +73,32 @@ public class AuraManager {
 		active.remove(entityId);
 	}
 
+	private static long claimKey(int targetId, int kind) {
+		return ((long) targetId << 2) | (kind & 0x3L);
+	}
+
+	/**
+	 * Try to claim {@code targetId} for an aura of {@code kind} on behalf of {@code projectorId}. Succeeds (and
+	 * records/refreshes the claim) if the target isn't already claimed for that kind by a <em>different</em>
+	 * projector — enforcing one aura of each kind per ship (no stacking).
+	 *
+	 * @return true if this projector may apply its effects to the target, false if another aura already owns it
+	 */
+	public boolean tryClaim(int targetId, int kind, int projectorId) {
+		Integer owner = claims.putIfAbsent(claimKey(targetId, kind), projectorId);
+		return owner == null || owner == projectorId;
+	}
+
+	/** Release one target's claim, but only if this projector currently owns it. */
+	public void release(int targetId, int kind, int projectorId) {
+		claims.remove(claimKey(targetId, kind), projectorId);
+	}
+
+	/** Release every claim held by this projector (called when its aura stops). */
+	public void releaseAll(int projectorId) {
+		claims.values().removeIf(owner -> owner == projectorId);
+	}
+
 	// -------------------------------------------------------------------------
 
 	private void tick() {
@@ -76,6 +109,11 @@ public class AuraManager {
 			// Drop auras whose projector has unloaded/despawned without an explicit clear.
 			active.keySet().removeIf(id -> {
 				Sendable s = GameServer.getServerState().getLocalAndRemoteObjectContainer().getLocalObjects().get(id);
+				return !(s instanceof SegmentController);
+			});
+			// Drop no-stacking claims whose owning projector has unloaded, so its targets free up for other auras.
+			claims.values().removeIf(ownerId -> {
+				Sendable s = GameServer.getServerState().getLocalAndRemoteObjectContainer().getLocalObjects().get(ownerId);
 				return !(s instanceof SegmentController);
 			});
 

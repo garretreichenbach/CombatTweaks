@@ -1,9 +1,9 @@
 {
 	"name": "CombatTweaks",
 	"author": "VideoGoose",
-	"description": "Useful combat-related game additions.",
+	"description": "RTS-style tactical fleet command, an armor HP defense layer, and combat reactor systems: projector auras (support buffs + ECW jamming) with takedown counterplay, the Aura Disruptor, Warhead Pre-Charger chambers, and Thrust Blast.",
 	"version": "2.3.0",
-	"starmade_version": "0.303.27",
+	"starmade_version": "0.303.4",
 	"client_mod": false,
 	"server_mod": false,
 	"main_class": "videogoose.combattweaks.CombatTweaks",

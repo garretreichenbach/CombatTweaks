@@ -17,8 +17,11 @@ import api.listener.events.register.RegisterConfigGroupsEvent;
 import api.listener.events.systems.ReactorRecalibrateEvent;
 import api.listener.fastevents.FastListenerCommon;
 import api.mod.StarLoader;
+import api.network.packets.PacketUtil;
+import api.utils.game.PlayerUtils;
 import api.utils.game.SegmentControllerUtils;
 import org.lwjgl.input.Keyboard;
+import org.schema.schine.input.KeyboardMappings;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleCollection;
 import org.schema.game.common.controller.elements.ManagerModuleSingle;
@@ -33,6 +36,7 @@ import videogoose.combattweaks.listener.AuraProjectorAddOnUseListener;
 import videogoose.combattweaks.listener.DamageReductionByArmorCalcListenerImpl;
 import videogoose.combattweaks.listener.MiningSalvageListener;
 import videogoose.combattweaks.listener.ShipAIShootListenerImpl;
+import videogoose.combattweaks.network.client.SendThrustBlastPacket;
 import videogoose.combattweaks.system.armor.ArmorHPCollection;
 import videogoose.combattweaks.system.armor.ArmorHPUnit;
 import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
@@ -45,6 +49,15 @@ public class EventManager {
 	public static ShipAIShootListenerImpl shipAIShootListener;
 	public static DamageReductionByArmorCalcListenerImpl damageReductionByArmorCalcListener;
 	public static MiningSalvageListener miningSalvageListener;
+
+	/** Movement keys whose in-flight double-tap fires a Thrust Blast (ported from BetterChambers). */
+	private static final KeyboardMappings[] THRUST_BLAST_KEYS = {
+			KeyboardMappings.FORWARD_SHIP, KeyboardMappings.BACKWARDS_SHIP, KeyboardMappings.UP_SHIP,
+			KeyboardMappings.DOWN_SHIP, KeyboardMappings.STRAFE_LEFT_SHIP, KeyboardMappings.STRAFE_RIGHT_SHIP};
+	private static final long THRUST_DOUBLE_TAP_MS = 300;
+	/** Last movement key seen and its timestamp, for double-tap detection. */
+	private static int lastThrustKey = -1;
+	private static long lastThrustKeyMs = 0;
 
 	public static void initialize(CombatTweaks instance) {
 
@@ -101,6 +114,34 @@ public class EventManager {
 			}
 		}, instance);
 
+
+		// Thrust Blast: double-tapping a movement key while piloting in flight fires the vanilla Take-Off effect.
+		StarLoader.registerListener(KeyPressEvent.class, new Listener<>() {
+			@Override
+			public void onEvent(KeyPressEvent event) {
+				try {
+					int key = KeyboardMappings.getEventKeySingle(event.getRawEvent());
+					if(lastThrustKey == key) {
+						if(lastThrustKeyMs > 0 && System.currentTimeMillis() - lastThrustKeyMs < THRUST_DOUBLE_TAP_MS) {
+							if(GameClient.getClientState() != null
+									&& GameClient.getClientState().isInFlightMode()
+									&& PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> control) {
+								for(KeyboardMappings mapping : THRUST_BLAST_KEYS) {
+									if(mapping.getMapping() == key && mapping.isDown(GameClient.getClientState())) {
+										PacketUtil.sendPacketToServer(new SendThrustBlastPacket(control));
+										break;
+									}
+								}
+							}
+						}
+						lastThrustKeyMs = System.currentTimeMillis();
+					}
+					lastThrustKey = key;
+				} catch(Exception exception) {
+					CombatTweaks.getInstance().logException("Error processing thrust blast key press", exception);
+				}
+			}
+		}, instance);
 
 		StarLoader.registerListener(RegisterConfigGroupsEvent.class, new Listener<>() {
 			@Override

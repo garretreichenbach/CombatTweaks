@@ -5,19 +5,20 @@ import videogoose.combattweaks.element.block.chamber.ChamberBlock;
 import videogoose.combattweaks.manager.ResourceManager;
 
 /**
- * Offense Aura sub-chamber: makes the projector reduce the weapon range of enemies inside the sphere. The debuff
- * itself is applied at runtime by {@code OffenseAuraAddOn}, so no passive config group is attached here.
+ * Offense Aura sub-chamber (tier 1): makes the projector jam the AI targeting of enemies inside the sphere, so
+ * their turrets/drones/point-defense miss more. The debuff is applied at runtime by {@code OffenseAuraAddOn}, so
+ * no passive config group is attached here. Upgrades to {@link TargetingJammerAuraChamber2}.
  */
-public class WeaponRangeDampenAuraChamber extends ChamberBlock {
+public class TargetingJammerAuraChamber1 extends ChamberBlock {
 
-	public WeaponRangeDampenAuraChamber() {
-		super("Weapon Range Dampen Aura");
+	public TargetingJammerAuraChamber1() {
+		super("Targeting Jammer Aura 1");
 	}
 
 	@Override
 	public void initData() {
 		super.initData();
-		blockInfo.setDescription("Reduces the weapon range of enemy ships affected by this aura.");
+		blockInfo.setDescription("Disrupts the AI targeting of enemy ships in this aura, scattering their turret, drone and point-defense fire.");
 		blockInfo.setPlacable(false);
 		blockInfo.setInRecipe(false);
 		blockInfo.reactorHp = 20;
@@ -29,6 +30,7 @@ public class WeaponRangeDampenAuraChamber extends ChamberBlock {
 	@Override
 	public void postInitData() {
 		BlockRegistry.OFFENSE_AURA_CHAMBER.getInfo().chamberChildren.add(getId());
+		setUpgrade((ChamberBlock) BlockRegistry.TARGETING_JAMMER_AURA_CHAMBER_2.elementInterface);
 	}
 
 	@Override
