@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d1c2b"/>
+      <stop offset="1" stop-color="#050a12"/>
+    </linearGradient>
+  </defs>
+
+  <!-- panel background -->
+  <rect x="0" y="0" width="256" height="256" rx="46" fill="url(#bg)"/>
+  <rect x="3" y="3" width="250" height="250" rx="43" fill="none" stroke="#1d3a52" stroke-width="2"/>
+  <circle cx="128" cy="128" r="96" fill="#0a3550" opacity="0.45"/>
+
+  <!-- range rings -->
+  <circle cx="128" cy="128" r="88" fill="none" stroke="#2f6e8f" stroke-width="2.5" opacity="0.55"/>
+  <circle cx="128" cy="128" r="60" fill="none" stroke="#2f6e8f" stroke-width="2" opacity="0.45"/>
+  <circle cx="128" cy="128" r="32" fill="none" stroke="#2f6e8f" stroke-width="2" opacity="0.35"/>
+
+  <!-- crosshair -->
+  <line x1="128" y1="28" x2="128" y2="228" stroke="#3f88ad" stroke-width="2" opacity="0.30"/>
+  <line x1="28" y1="128" x2="228" y2="128" stroke="#3f88ad" stroke-width="2" opacity="0.30"/>
+
+  <!-- radar sweep wedge -->
+  <path d="M128,128 L128,40 A88,88 0 0 1 196,84 Z" fill="#4fc3f7" opacity="0.10"/>
+
+  <!-- friendly fleet chevron -->
+  <path d="M128,90 L158,158 L128,142 L98,158 Z" fill="#4ade80" stroke="#0d1c2b" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- hostile / offense contact -->
+  <circle cx="180" cy="80" r="8" fill="#ff8a1e"/>
+  <circle cx="180" cy="80" r="13" fill="none" stroke="#ff8a1e" stroke-width="2" opacity="0.6"/>
+</svg>
