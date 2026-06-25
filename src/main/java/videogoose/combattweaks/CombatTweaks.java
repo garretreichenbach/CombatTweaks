@@ -108,6 +108,7 @@ public class CombatTweaks extends StarMod {
 		PacketUtil.registerPacket(SendMinePacket.class);
 		PacketUtil.registerPacket(SendRepairPacket.class);
 		PacketUtil.registerPacket(SendMoveToPacket.class);
+		PacketUtil.registerPacket(SendMoveToPositionPacket.class);
 		PacketUtil.registerPacket(SendThrustBlastPacket.class);
 		PacketUtil.registerPacket(SendSupportingFirePacket.class);
 		PacketUtil.registerPacket(SendArmorHPSyncPacket.class);

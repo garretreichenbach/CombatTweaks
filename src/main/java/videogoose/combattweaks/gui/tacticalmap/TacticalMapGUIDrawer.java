@@ -28,6 +28,7 @@ import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.Camera;
 import org.schema.schine.graphicsengine.core.*;
+import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.graphicsengine.core.settings.ContextFilter;
 import org.schema.schine.graphicsengine.core.settings.EngineSettings;
 import org.schema.schine.graphicsengine.forms.BoundingBox;
@@ -57,10 +58,7 @@ import javax.vecmath.Vector3f;
 import javax.vecmath.Vector4f;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -155,6 +153,29 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Camera world position from the last {@link #computeScreenPositions} pass; reused to project grid labels.
 	 */
 	private final Vector3f lastCamPos = new Vector3f();
+
+	// --- Move-to-position placement (Phase 6a). State is written by TacticalMapControlManager and rendered here. ---
+	/** Set by the radial menu to ask the control manager to enter placement mode. */
+	public boolean requestMoveToPositionPlacement;
+	/** Set by the Esc handler to ask the control manager to cancel placement (keeps the map open). */
+	public boolean requestCancelPlacement;
+	/** True while the player is placing a move-to-position point. */
+	public boolean placementActive;
+	/** 1 = choosing X/Z on the reference plane, 2 = choosing altitude along the stalk. */
+	public int placementStage;
+	/** Reference plane height (selected fleet's centroid Y). */
+	public float placePlaneY;
+	/** Current placement point (world). X/Z are fixed after stage 1; Y is live in stage 2. */
+	public float placeX, placeY, placeZ;
+	/** Whether the cursor yields a valid placement point this frame (drives whether the gizmo draws). */
+	public boolean placeValid;
+	/** Fleet centroid (world) for the range rings. */
+	public final Vector3f placeFleetCentroid = new Vector3f();
+	public boolean placeFleetCentroidValid;
+	/** Scratch buffer for {@code gluUnProject}. */
+	private final FloatBuffer GL_OBJ_COORDS = BufferUtils.createFloatBuffer(3);
+	/** Camera position captured at the start of the placement-preview pass (for camera-relative draws). */
+	private final Vector3f placeCamPos = new Vector3f();
 	/**
 	 * Reusable scratch for reading an entity's sector coords in {@link #getEntityDisplay}.
 	 */
@@ -424,6 +445,241 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		} catch(Exception ignored) {
 		}
 		return status;
+	}
+
+	// --- Move-to-position placement: screen->world ray math + preview rendering (Phase 6a) ---
+
+	/**
+	 * Builds a world-space ray from a screen pixel (GL window coords, origin bottom-left — i.e. {@code Mouse.getX/Y()}).
+	 * Uses the projection/modelview/viewport captured in {@link #computeScreenPositions()} (camera-relative), then
+	 * adds the camera position back so the result is in world space. Returns false if the matrices aren't ready.
+	 */
+	public boolean screenToWorldRay(float winX, float winY, Vector3f outOrigin, Vector3f outDir) {
+		if(GL_VIEWPORT.get(2) <= 0) {
+			return false;
+		}
+		GL_OBJ_COORDS.clear();
+		if(!Project.gluUnProject(winX, winY, 0.0f, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_OBJ_COORDS)) {
+			return false;
+		}
+		float nx = GL_OBJ_COORDS.get(0), ny = GL_OBJ_COORDS.get(1), nz = GL_OBJ_COORDS.get(2);
+		GL_OBJ_COORDS.clear();
+		if(!Project.gluUnProject(winX, winY, 1.0f, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_OBJ_COORDS)) {
+			return false;
+		}
+		float fx = GL_OBJ_COORDS.get(0), fy = GL_OBJ_COORDS.get(1), fz = GL_OBJ_COORDS.get(2);
+		outOrigin.set(nx + lastCamPos.x, ny + lastCamPos.y, nz + lastCamPos.z);
+		outDir.set(fx - nx, fy - ny, fz - nz);
+		if(outDir.lengthSquared() < 1.0e-9f) {
+			return false;
+		}
+		outDir.normalize();
+		return true;
+	}
+
+	/** World point where the cursor ray meets the horizontal plane {@code y = planeY} (stage 1), or null. */
+	public Vector3f intersectHorizontalPlane(float winX, float winY, float planeY) {
+		Vector3f o = new Vector3f(), d = new Vector3f();
+		if(!screenToWorldRay(winX, winY, o, d)) {
+			return null;
+		}
+		if(Math.abs(d.y) < 1.0e-6f) {
+			return null; // ray parallel to the plane
+		}
+		float t = (planeY - o.y) / d.y;
+		if(t < 0) {
+			return null; // plane is behind the camera
+		}
+		return new Vector3f(o.x + d.x * t, planeY, o.z + d.z * t);
+	}
+
+	/**
+	 * Altitude (world Y) for stage 2: the Y of the closest point on the vertical line through {@code (px, pz)} to
+	 * the cursor ray. Lets the player slide the point up/down the stalk by moving the mouse. Null if undefined.
+	 */
+	public Float heightOnVerticalLine(float winX, float winY, float px, float pz) {
+		Vector3f o = new Vector3f(), d = new Vector3f();
+		if(!screenToWorldRay(winX, winY, o, d)) {
+			return null;
+		}
+		// Closest-point-of-two-lines between the ray (o,d) and the vertical line (L0=(px,0,pz), u=(0,1,0)).
+		float a = d.dot(d);          // d·d (~1, d is normalized)
+		float b = d.y;               // d·u
+		float w0x = o.x - px, w0y = o.y, w0z = o.z - pz; // w0 = o - L0
+		float dDotW0 = d.x * w0x + d.y * w0y + d.z * w0z;
+		float uDotW0 = w0y;          // u·w0
+		float denom = a - b * b;     // a*c - b*b, with c = u·u = 1
+		if(Math.abs(denom) < 1.0e-6f) {
+			return null; // ray parallel to the vertical line
+		}
+		return (a * uDotW0 - b * dDotW0) / denom;
+	}
+
+	private void drawPlacementPreview() {
+		if(!placementActive) {
+			return;
+		}
+		float s = getSectorSize();
+		GlUtil.glDisable(GL11.GL_LIGHTING);
+		GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		GlUtil.glEnable(GL11.GL_COLOR_MATERIAL);
+		GlUtil.glEnable(GL11.GL_BLEND);
+		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPushMatrix();
+		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
+		GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glPushMatrix();
+		GlUtil.glLoadIdentity();
+		placeCamPos.set(loadCameraRelativeModelview());
+		GL11.glLineWidth(2.0f);
+		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
+		GL11.glDepthMask(false);
+
+		// Range rings on the reference plane around the fleet centroid, each labelled with its distance.
+		if(placeFleetCentroidValid && s > 0) {
+			float[] radii = {s * 0.5f, s, s * 2.0f};
+			for(float r : radii) {
+				drawPlanarCircle(placeFleetCentroid.x, placePlaneY, placeFleetCentroid.z, r, 0.25f, 0.6f, 1.0f, 0.45f);
+			}
+			// Distance labels lie flat on the plane at each ring's near edge (not billboarded).
+			GlUtil.glEnable(GL11.GL_TEXTURE_2D);
+			for(float r : radii) {
+				drawPlanarRingLabel(placeFleetCentroid.x, placePlaneY, placeFleetCentroid.z, r, s);
+			}
+			GlUtil.glDisable(GL11.GL_TEXTURE_2D);
+		}
+		if(placeValid) {
+			float markerR = Math.max(20.0f, s * 0.03f);
+			// Plane shadow marker + a guide line from the fleet centroid to it.
+			drawPlanarCircle(placeX, placePlaneY, placeZ, markerR, 1.0f, 1.0f, 1.0f, 0.7f);
+			if(placeFleetCentroidValid) {
+				GlUtil.glColor4f(0.6f, 0.8f, 1.0f, 0.5f);
+				GlUtil.glBegin(GL11.GL_LINES);
+				GL11.glVertex3f(placeFleetCentroid.x - placeCamPos.x, placePlaneY - placeCamPos.y, placeFleetCentroid.z - placeCamPos.z);
+				GL11.glVertex3f(placeX - placeCamPos.x, placePlaneY - placeCamPos.y, placeZ - placeCamPos.z);
+				GlUtil.glEnd();
+			}
+			// Vertical stalk from the plane to the chosen height + a marker at the destination point.
+			GlUtil.glColor4f(0.3f, 1.0f, 0.45f, 0.9f);
+			GlUtil.glBegin(GL11.GL_LINES);
+			GL11.glVertex3f(placeX - placeCamPos.x, placePlaneY - placeCamPos.y, placeZ - placeCamPos.z);
+			GL11.glVertex3f(placeX - placeCamPos.x, placeY - placeCamPos.y, placeZ - placeCamPos.z);
+			GlUtil.glEnd();
+			drawPlanarCircle(placeX, placeY, placeZ, markerR, 0.3f, 1.0f, 0.45f, 0.9f);
+		}
+
+		GL11.glDepthMask(true);
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GlUtil.glPopMatrix(); // modelview
+		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
+		GlUtil.glPopMatrix();
+		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
+		GlUtil.glDisable(GL11.GL_BLEND);
+		GlUtil.glEnable(GL11.GL_LIGHTING);
+		GlUtil.glEnable(GL11.GL_TEXTURE_2D);
+
+		if(placeValid) {
+			drawPlacementReadout(s);
+		}
+	}
+
+	/** A horizontal circle (in the XZ plane at world height {@code cyWorld}), drawn camera-relative. */
+	private void drawPlanarCircle(float cx, float cyWorld, float cz, float r, float cr, float cg, float cb, float ca) {
+		GlUtil.glColor4f(cr, cg, cb, ca);
+		GlUtil.glBegin(GL11.GL_LINE_LOOP);
+		int seg = 48;
+		for(int i = 0; i < seg; i++) {
+			double ang = 2.0 * Math.PI * i / seg;
+			float x = cx + (float) Math.cos(ang) * r;
+			float z = cz + (float) Math.sin(ang) * r;
+			GL11.glVertex3f(x - placeCamPos.x, cyWorld - placeCamPos.y, z - placeCamPos.z);
+		}
+		GlUtil.glEnd();
+	}
+
+	/**
+	 * Draws a distance label flat on the reference plane at a ring's near edge (the side toward the camera),
+	 * reading along the ring's tangent — i.e. painted on the "floor" rather than billboarded. Orientation/scale
+	 * are world-space; the scale constant may want in-game tuning.
+	 */
+	private void drawPlanarRingLabel(float cx, float planeY, float cz, float radius, float s) {
+		String txt = radius >= 1000.0f
+				? String.format(java.util.Locale.US, "%.1fkm", radius / 1000.0f)
+				: String.format(java.util.Locale.US, "%.0fm", radius);
+		// Near edge: the point on the ring toward the camera (most legible).
+		float dx = placeCamPos.x - cx, dz = placeCamPos.z - cz;
+		float dl = (float) Math.sqrt(dx * dx + dz * dz);
+		if(dl < 1.0e-3f) {
+			dx = 0;
+			dz = 1;
+			dl = 1;
+		}
+		dx /= dl;
+		dz /= dl;
+		float lx = cx + dx * radius, lz = cz + dz * radius;
+		// Lay the text flat: local X → ring tangent, local Z (out of the glyph plane) → world up, so it sits on
+		// the plane; local Y handled by the negative scale below (screen text grows downward).
+		Vector3f right = new Vector3f(dz, 0, -dx);
+		Vector3f up = new Vector3f(0, 1, 0);
+		Vector3f fwd = new Vector3f();
+		fwd.cross(right, up);
+		Transform t = new Transform();
+		t.setIdentity();
+		GlUtil.setRightVector(right, t);
+		GlUtil.setUpVector(up, t);
+		GlUtil.setForwardVector(fwd, t);
+		t.origin.set(lx - placeCamPos.x, planeY - placeCamPos.y, lz - placeCamPos.z);
+		GlUtil.glPushMatrix();
+		GlUtil.glMultMatrix(t);
+		float scale = Math.max(1.0f, s * 0.0009f); // world height of the text
+		GL11.glScalef(scale, -scale, scale);       // flip Y so the text isn't upside-down on the plane
+		GUITextOverlay o = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+		o.setTextSimple(txt);
+		o.updateTextSize();
+		o.getPos().set(-(int) (o.getMaxLineWidth() / 2.0f), 0, 0); // centre on the tangent point
+		o.draw();
+		TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(o);
+		GlUtil.glPopMatrix();
+	}
+
+	/** Small 2D panel near the cursor showing range/altitude of the placement point. */
+	private void drawPlacementReadout(float s) {
+		float dist, alt;
+		if(placeFleetCentroidValid) {
+			float dx = placeX - placeFleetCentroid.x, dz = placeZ - placeFleetCentroid.z;
+			dist = (float) Math.sqrt(dx * dx + dz * dz);
+			alt = placeY - placePlaneY;
+		} else {
+			dist = 0;
+			alt = 0;
+		}
+		String header = placementStage == 1 ? "Move To Position — pick spot (L-click)" : "Move To Position — set altitude (L-click)";
+		String body = String.format(Locale.US, "Range: %,.0fm  (%.2f sectors)%nAltitude: %+,.0fm", dist, s > 0 ? dist / s : 0, alt);
+		GUIElement.enableOrthogonal();
+		begin2D();
+		GUITextOverlay o = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+		o.setTextSimple(header + "\n" + body);
+		o.updateTextSize();
+		float pad = 8.0f;
+		float panelW = o.getMaxLineWidth() + pad * 2.0f;
+		float panelH = o.getTextHeight() + pad * 2.0f;
+		float px = org.lwjgl.input.Mouse.getX() + 22.0f;
+		float py = GLFrame.getHeight() - org.lwjgl.input.Mouse.getY() + 22.0f;
+		if(px + panelW > GLFrame.getWidth()) {
+			px = GLFrame.getWidth() - panelW - 4.0f;
+		}
+		if(py + panelH > GLFrame.getHeight()) {
+			py = GLFrame.getHeight() - panelH - 4.0f;
+		}
+		drawRoundedRect(px, py, panelW, panelH, 8.0f, PANEL_BG);
+		strokeRoundedRect(px, py, panelW, panelH, 8.0f, PANEL_BORDER);
+		o.getPos().set((int) (px + pad), (int) (py + pad), 0);
+		o.draw();
+		TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(o);
+		GlUtil.glColor4f(1, 1, 1, 1);
+		GUIElement.disableOrthogonal(); // balance enableOrthogonal()'s projection push (else GL stack overflow)
 	}
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
@@ -817,6 +1073,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Ctrl) Toggle Turret Mode", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Ctrl) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_1, "Select Control Group (Ctrl: Set) 1-0", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
 	}
@@ -1212,6 +1469,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawBoundingBoxWireframes();
 			drawAuraSpheres();
 			drawPaths();
+			drawPlacementPreview();
 			drawLabels();
 			drawSectorGridLabels();
 			drawIncomingSignatureLabels();
@@ -2472,6 +2730,17 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	/** Clickable pin-button rects {x, y, w, h, entityId}, rebuilt every panel draw for hit-testing. */
 	private final List<int[]> pinRects = new ArrayList<>();
 
+	// --- Numbered control groups + collapsible roster panes ---
+	private static final Vector4f GROUP_BTN = new Vector4f(0.18f, 0.20f, 0.26f, 0.92f);    // ungrouped button
+	private static final Vector4f GROUP_BTN_ON = new Vector4f(0.22f, 0.40f, 0.70f, 0.95f); // grouped button (blue)
+	/** Entity UID → control-group number (1–9). Session-scoped, UID-keyed like pins so it survives reselection. */
+	private final java.util.LinkedHashMap<String, Integer> entityGroups = new java.util.LinkedHashMap<>();
+	/** Collapsed state of each roster pane (header only when collapsed). */
+	private boolean leftPanelCollapsed;
+	private boolean rightPanelCollapsed;
+	/** Clickable group-button rects {x, y, w, h, entityId}, rebuilt every panel draw for hit-testing. */
+	private final List<int[]> groupBtnRects = new ArrayList<>();
+
 	/**
 	 * Per-roster scroll + geometry state, so the left (own/allied) and right (neutral/enemy) panels scroll
 	 * and hit-test independently. Rebuilt each frame by {@link #drawRosterPanel}.
@@ -2481,6 +2750,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		float scroll, maxScroll; // vertical scroll offset / its cap
 		boolean scrollable;
 		float thumbX, thumbY, thumbW, thumbH, trackTop, trackH; // scrollbar geometry for click-drag
+		float headerX, headerY, headerW, headerH; // clickable header strip (collapse toggle)
 	}
 
 	private final PanelScroll leftPanel = new PanelScroll();
@@ -2510,6 +2780,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 */
 	private void drawSelectionPanel() {
 		pinRects.clear();
+		groupBtnRects.clear();
 		validatePins();
 
 		// Partition pinned entities by faction; selected ships are always own/allied (left); the current
@@ -2536,6 +2807,65 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 		drawRosterPanel(false, leftOrder, leftPanel);
 		drawRosterPanel(true, rightOrder, rightPanel);
+	}
+
+	/** The control-group number (1–9) an entity belongs to, or 0 if ungrouped. */
+	private int groupOf(SegmentController e) {
+		if(e == null) {
+			return 0;
+		}
+		Integer g = entityGroups.get(e.getUniqueIdentifier());
+		return g == null ? 0 : g;
+	}
+
+	/** Per-row group button: cycle an entity's control-group 0→1→…→10→0 (0 = ungrouped). */
+	private void cycleEntityGroup(int entityId) {
+		TacticalMapEntityIndicator ind = drawMap.get(entityId);
+		if(ind == null || ind.getEntity() == null) {
+			return;
+		}
+		String uid = ind.getEntity().getUniqueIdentifier();
+		int g = (entityGroups.getOrDefault(uid, 0) + 1) % 11; // 0–10 (0 = ungrouped)
+		if(g == 0) {
+			entityGroups.remove(uid);
+		} else {
+			entityGroups.put(uid, g);
+		}
+	}
+
+	/** Assign every currently-selected ship to control group {@code n} (1–10), replacing that group's members. */
+	public void assignSelectionToGroup(int n) {
+		if(n < 1 || n > 10 || selectedEntities.isEmpty()) {
+			return;
+		}
+		entityGroups.values().removeIf(v -> v == n);
+		for(SegmentController e : selectedEntities) {
+			if(e != null) {
+				entityGroups.put(e.getUniqueIdentifier(), n);
+			}
+		}
+	}
+
+	/** Replace the current selection with the live members of control group {@code n} (1–10). No-op if empty. */
+	public void selectGroup(int n) {
+		if(n < 1 || n > 10) {
+			return;
+		}
+		List<SegmentController> members = new ArrayList<>();
+		for(TacticalMapEntityIndicator ind : drawMap.values()) {
+			SegmentController e = ind.getEntity();
+			if(e != null) {
+				Integer g = entityGroups.get(e.getUniqueIdentifier());
+				if(g != null && g == n) {
+					members.add(e);
+				}
+			}
+		}
+		if(members.isEmpty()) {
+			return; // pressing an empty group number keeps the current selection (standard RTS behaviour)
+		}
+		clearSelected();
+		selectedEntities.addAll(members);
 	}
 
 	/**
@@ -2605,15 +2935,20 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 
 		float pad = 8.0f;
-		float y = 188.0f;
+		float baseY = 188.0f;
+		float headerH = 22.0f;        // collapsible header strip (title + count + collapse marker)
 		float barGap = 5.0f;          // gap between the stat text and the bars
 		float barsH = bars ? SEL_BARS_H : 0.0f; // height of the three labelled bars
 		float rowGap = 12.0f;         // gap between rows
-		float btnW = 54.0f;
+		float pinBtnW = 54.0f;
+		float groupBtnW = 34.0f;
 		float btnH = 16.0f;
 		float btnGap = 10.0f;
+		float groupGap = 6.0f;
 		float scrollbarW = 6.0f, scrollbarGap = 6.0f;
 		float screenMargin = 28.0f;
+
+		boolean collapsed = rightSide ? rightPanelCollapsed : leftPanelCollapsed;
 
 		float totalH = 0.0f;
 		for(int th : heights) {
@@ -2621,96 +2956,134 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		totalH -= rowGap; // no trailing gap
 
-		// Cap the panel to the screen; scroll the content past that.
-		float panelTop = y - pad;
+		// Cap the rows area to the screen (below the header); scroll the content past that.
+		float panelTop = baseY - pad;
 		float maxPanelH = GLFrame.getHeight() - panelTop - 16.0f;
-		boolean scrollable = totalH + pad * 2.0f > maxPanelH;
-		float visibleH = scrollable ? maxPanelH - pad * 2.0f : totalH;
-		float panelH = visibleH + pad * 2.0f;
-		float panelW = contentW + btnGap + btnW + (scrollable ? scrollbarGap + scrollbarW : 0.0f) + pad * 2.0f;
+		float rowsAvail = maxPanelH - pad * 2.0f - headerH;
+		boolean scrollable = !collapsed && totalH > rowsAvail;
+		float visibleH = collapsed ? 0.0f : (scrollable ? rowsAvail : totalH);
+		float panelH = headerH + pad * 2.0f + visibleH;
+		float panelW = contentW + btnGap + groupBtnW + groupGap + pinBtnW + (scrollable ? scrollbarGap + scrollbarW : 0.0f) + pad * 2.0f;
 
 		// Anchor to the chosen edge; x is the content origin (panel left edge + pad).
 		float panelLeft = rightSide ? (GLFrame.getWidth() - screenMargin - panelW) : (screenMargin - pad);
 		float x = panelLeft + pad;
-		float btnX = x + contentW + btnGap;
+		float groupBtnX = x + contentW + btnGap;
+		float pinBtnX = groupBtnX + groupBtnW + groupGap;
+		float rowsTop = panelTop + pad + headerH;
 
 		st.scrollable = scrollable;
 		st.maxScroll = Math.max(0.0f, totalH - visibleH);
-		st.scroll = Math.max(0.0f, Math.min(st.scroll, st.maxScroll));
+		st.scroll = collapsed ? 0.0f : Math.max(0.0f, Math.min(st.scroll, st.maxScroll));
 		st.x = panelLeft;
 		st.y = panelTop;
 		st.w = panelW;
 		st.h = panelH;
+		st.headerX = panelLeft;
+		st.headerY = panelTop;
+		st.headerW = panelW;
+		st.headerH = pad + headerH; // the whole top strip toggles collapse
 
 		begin2D();
 		drawRoundedRect(panelLeft, panelTop, panelW, panelH, 10.0f, PANEL_BG);
 		strokeRoundedRect(panelLeft, panelTop, panelW, panelH, 10.0f, PANEL_BORDER);
 
-		// Clip the scrolling rows to the panel so they don't spill past it.
-		if(scrollable) {
-			GL11.glEnable(GL11.GL_SCISSOR_TEST);
-			GL11.glScissor((int) panelLeft, (int) (GLFrame.getHeight() - (panelTop + panelH)), (int) panelW, (int) panelH);
-		}
-		float startY = y - st.scroll;
-
-		// Quad pass: HP bars + pin-button backgrounds (record click rects only for visible buttons).
-		float rowY = startY;
-		for(int i = 0; i < ents.size(); i++) {
-			if(bars) {
-				fillHpStats(ents.get(i), tmpHp);
-				drawHpBars(x, rowY + heights.get(i) + barGap, contentW, tmpHp);
+		if(!collapsed) {
+			// Clip the scrolling rows to the area below the header so they don't spill past it.
+			if(scrollable) {
+				GL11.glEnable(GL11.GL_SCISSOR_TEST);
+				GL11.glScissor((int) panelLeft, (int) (GLFrame.getHeight() - (panelTop + panelH)), (int) panelW, (int) (visibleH + pad));
 			}
-			boolean pinned = pinnedUIDs.contains(ents.get(i).getUniqueIdentifier());
-			drawRoundedRect(btnX, rowY, btnW, btnH, 4.0f, pinned ? PIN_BTN_ON : PIN_BTN);
-			if(rowY + btnH > panelTop && rowY < panelTop + panelH) {
-				pinRects.add(new int[]{(int) btnX, (int) rowY, (int) btnW, (int) btnH, ents.get(i).getId()});
-			}
-			rowY += heights.get(i) + (bars ? barGap + barsH : 0.0f) + rowGap;
-		}
+			float startY = rowsTop - st.scroll;
 
-		// Text pass: stat blocks + pin-button labels (overlays manage their own texturing).
-		rowY = startY;
-		for(int i = 0; i < ents.size(); i++) {
-			GUITextOverlay overlay = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
-			overlay.setTextSimple(texts.get(i));
-			overlay.updateTextSize();
-			overlay.getPos().set((int) x, (int) rowY, 0);
-			overlay.draw();
-			TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(overlay);
-
-			if(bars) {
-				fillHpStats(ents.get(i), tmpHp);
-				drawHpBarLabels(x, rowY + heights.get(i) + barGap, tmpHp);
+			// Quad pass: HP bars + group/pin button backgrounds (record click rects only for visible buttons).
+			float rowY = startY;
+			for(int i = 0; i < ents.size(); i++) {
+				if(bars) {
+					fillHpStats(ents.get(i), tmpHp);
+					drawHpBars(x, rowY + heights.get(i) + barGap, contentW, tmpHp);
+				}
+				boolean rowVisible = rowY + btnH > rowsTop && rowY < panelTop + panelH;
+				int grp = groupOf(ents.get(i));
+				drawRoundedRect(groupBtnX, rowY, groupBtnW, btnH, 4.0f, grp > 0 ? GROUP_BTN_ON : GROUP_BTN);
+				if(rowVisible) {
+					groupBtnRects.add(new int[]{(int) groupBtnX, (int) rowY, (int) groupBtnW, (int) btnH, ents.get(i).getId()});
+				}
+				boolean pinned = pinnedUIDs.contains(ents.get(i).getUniqueIdentifier());
+				drawRoundedRect(pinBtnX, rowY, pinBtnW, btnH, 4.0f, pinned ? PIN_BTN_ON : PIN_BTN);
+				if(rowVisible) {
+					pinRects.add(new int[]{(int) pinBtnX, (int) rowY, (int) pinBtnW, (int) btnH, ents.get(i).getId()});
+				}
+				rowY += heights.get(i) + (bars ? barGap + barsH : 0.0f) + rowGap;
 			}
 
-			boolean pinned = pinnedUIDs.contains(ents.get(i).getUniqueIdentifier());
-			GUITextOverlay b = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
-			b.setTextSimple(pinned ? "Unpin" : "Pin");
-			b.updateTextSize();
-			b.getPos().set((int) (btnX + (btnW - b.getMaxLineWidth()) / 2.0f), (int) (rowY + 1), 0);
-			b.draw();
-			TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(b);
+			// Text pass: stat blocks + group/pin button labels (overlays manage their own texturing).
+			rowY = startY;
+			for(int i = 0; i < ents.size(); i++) {
+				GUITextOverlay overlay = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+				overlay.setTextSimple(texts.get(i));
+				overlay.updateTextSize();
+				overlay.getPos().set((int) x, (int) rowY, 0);
+				overlay.draw();
+				TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(overlay);
 
-			rowY += heights.get(i) + (bars ? barGap + barsH : 0.0f) + rowGap;
+				if(bars) {
+					fillHpStats(ents.get(i), tmpHp);
+					drawHpBarLabels(x, rowY + heights.get(i) + barGap, tmpHp);
+				}
+
+				int grp = groupOf(ents.get(i));
+				GUITextOverlay g = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+				g.setTextSimple(grp > 0 ? "G" + grp : "—");
+				g.updateTextSize();
+				g.getPos().set((int) (groupBtnX + (groupBtnW - g.getMaxLineWidth()) / 2.0f), (int) (rowY + 1), 0);
+				g.draw();
+				TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(g);
+
+				boolean pinned = pinnedUIDs.contains(ents.get(i).getUniqueIdentifier());
+				GUITextOverlay b = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+				b.setTextSimple(pinned ? "Unpin" : "Pin");
+				b.updateTextSize();
+				b.getPos().set((int) (pinBtnX + (pinBtnW - b.getMaxLineWidth()) / 2.0f), (int) (rowY + 1), 0);
+				b.draw();
+				TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(b);
+
+				rowY += heights.get(i) + (bars ? barGap + barsH : 0.0f) + rowGap;
+			}
+
+			if(scrollable) {
+				GL11.glDisable(GL11.GL_SCISSOR_TEST);
+				// Scrollbar track + thumb on the right edge (geometry stored so the thumb can be dragged).
+				float sbX = panelLeft + panelW - pad - scrollbarW;
+				float trackTop = rowsTop;
+				float trackH = visibleH;
+				drawRoundedRect(sbX, trackTop, scrollbarW, trackH, 3.0f, new Vector4f(0.15f, 0.17f, 0.22f, 0.85f));
+				float thumbH = Math.max(20.0f, trackH * (visibleH / totalH));
+				float thumbY = trackTop + (st.maxScroll > 0 ? (st.scroll / st.maxScroll) * (trackH - thumbH) : 0.0f);
+				drawRoundedRect(sbX, thumbY, scrollbarW, thumbH, 3.0f, new Vector4f(0.45f, 0.6f, 0.8f, 0.9f));
+				st.thumbX = sbX;
+				st.thumbY = thumbY;
+				st.thumbW = scrollbarW;
+				st.thumbH = thumbH;
+				st.trackTop = trackTop;
+				st.trackH = trackH;
+			}
 		}
 
-		if(scrollable) {
-			GL11.glDisable(GL11.GL_SCISSOR_TEST);
-			// Scrollbar track + thumb on the right edge (geometry stored so the thumb can be dragged).
-			float sbX = panelLeft + panelW - pad - scrollbarW;
-			float trackTop = panelTop + pad;
-			float trackH = visibleH;
-			drawRoundedRect(sbX, trackTop, scrollbarW, trackH, 3.0f, new Vector4f(0.15f, 0.17f, 0.22f, 0.85f));
-			float thumbH = Math.max(20.0f, trackH * (visibleH / totalH));
-			float thumbY = trackTop + (st.maxScroll > 0 ? (st.scroll / st.maxScroll) * (trackH - thumbH) : 0.0f);
-			drawRoundedRect(sbX, thumbY, scrollbarW, thumbH, 3.0f, new Vector4f(0.45f, 0.6f, 0.8f, 0.9f));
-			st.thumbX = sbX;
-			st.thumbY = thumbY;
-			st.thumbW = scrollbarW;
-			st.thumbH = thumbH;
-			st.trackTop = trackTop;
-			st.trackH = trackH;
-		}
+		// Header (drawn on top): title + count on the left, collapse marker on the right. Click toggles collapse.
+		GUITextOverlay h = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+		h.setTextSimple((rightSide ? "Targets (" : "Fleet (") + ents.size() + ")");
+		h.updateTextSize();
+		h.getPos().set((int) x, (int) (panelTop + pad - 1), 0);
+		h.draw();
+		TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(h);
+
+		GUITextOverlay c = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
+		c.setTextSimple(collapsed ? "[+]" : "[-]");
+		c.updateTextSize();
+		c.getPos().set((int) (panelLeft + panelW - pad - c.getMaxLineWidth()), (int) (panelTop + pad - 1), 0);
+		c.draw();
+		TacticalMapIndicatorPool.getInstance().releaseLabelOverlay(c);
 
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GUIElement.disableOrthogonal();
@@ -2752,6 +3125,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		return p.scrollable && mx >= p.thumbX && mx <= p.thumbX + p.thumbW && my >= p.thumbY && my <= p.thumbY + p.thumbH;
 	}
 
+	private static boolean overRect(float x, float y, float w, float h, int mx, int my) {
+		return w > 0 && h > 0 && mx >= x && mx <= x + w && my >= y && my <= y + h;
+	}
+
 	/** While dragging a thumb, maps a mouse-Y to a scroll offset on the panel whose thumb was grabbed. */
 	public void scrollPanelToThumbY(int my) {
 		PanelScroll p = draggingScroll;
@@ -2781,6 +3158,22 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	/** If the click hits a pin button, toggle that entity's pinned state and return true (consume the click). */
 	public boolean handlePanelClick(int mx, int my) {
+		// Collapse/expand a roster pane when its header strip is clicked.
+		if(overRect(leftPanel.headerX, leftPanel.headerY, leftPanel.headerW, leftPanel.headerH, mx, my) && leftPanel.w > 0) {
+			leftPanelCollapsed = !leftPanelCollapsed;
+			return true;
+		}
+		if(overRect(rightPanel.headerX, rightPanel.headerY, rightPanel.headerW, rightPanel.headerH, mx, my) && rightPanel.w > 0) {
+			rightPanelCollapsed = !rightPanelCollapsed;
+			return true;
+		}
+		// Per-row group button cycles the entity's control group (0→1→…→9→0).
+		for(int[] r : groupBtnRects) {
+			if(mx >= r[0] && mx <= r[0] + r[2] && my >= r[1] && my <= r[1] + r[3]) {
+				cycleEntityGroup(r[4]);
+				return true;
+			}
+		}
 		for(int[] r : pinRects) {
 			if(mx >= r[0] && mx <= r[0] + r[2] && my >= r[1] && my <= r[1] + r[3]) {
 				TacticalMapEntityIndicator ind = drawMap.get(r[4]);

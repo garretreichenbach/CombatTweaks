@@ -99,7 +99,12 @@ public class EventManager {
 					if(GameClient.getClientPlayerState().getFirstControlledTransformableWOExc() != null && event.isKeyDown()) {
 						boolean isTacticalKey = event.isMapping(CombatTweaks.getInstance().tacticalMapKey);
 						if((event.getKey() == Keyboard.KEY_ESCAPE || isTacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
-							TacticalMapGUIDrawer.getInstance().toggleDraw();
+							if(event.getKey() == Keyboard.KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().placementActive) {
+								// Esc during placement cancels the placement and keeps the tactical map open.
+								TacticalMapGUIDrawer.getInstance().requestCancelPlacement = true;
+							} else {
+								TacticalMapGUIDrawer.getInstance().toggleDraw();
+							}
 						} else {
 							try {
 								if(isTacticalKey && event.isKeyDown() && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {

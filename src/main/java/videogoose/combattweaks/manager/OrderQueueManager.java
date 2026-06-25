@@ -6,10 +6,7 @@ import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.utils.AIUtils;
 import videogoose.combattweaks.utils.CTLog;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -98,6 +95,23 @@ public class OrderQueueManager {
 		}
 	}
 
+	/** Issue a move-to-empty-space order now, discarding any active/queued orders (no-shift). */
+	public void replaceMoveToPosition(int shipId, javax.vecmath.Vector3f position, int sectorId) {
+		queues.remove(shipId);
+		QueuedOrder order = new QueuedOrder(OrderType.MOVE_TO_POSITION, -1, new javax.vecmath.Vector3f(position), sectorId);
+		AIUtils.clearAllOrders(shipId);
+		execute(shipId, order);
+		active.put(shipId, order);
+	}
+
+	/** Append a move-to-empty-space order after the ship's current and queued orders (shift-held). */
+	public void enqueueMoveToPosition(int shipId, javax.vecmath.Vector3f position, int sectorId) {
+		queues.computeIfAbsent(shipId, k -> new ArrayDeque<>()).add(new QueuedOrder(OrderType.MOVE_TO_POSITION, -1, new javax.vecmath.Vector3f(position), sectorId));
+		if(active.get(shipId) == null) {
+			advance(shipId);
+		}
+	}
+
 	/** Drop all orders for a ship (e.g. on an explicit Idle order). */
 	public void clear(int shipId) {
 		queues.remove(shipId);
@@ -117,7 +131,7 @@ public class OrderQueueManager {
 	 * array if the ship has no orders. Snapshot copy — safe to read from the render thread.
 	 */
 	public int[] getOrderTargetIds(int shipId) {
-		java.util.List<Integer> ids = new java.util.ArrayList<>();
+	List<Integer> ids = new ArrayList<>();
 		QueuedOrder act = active.get(shipId);
 		if(act != null) {
 			ids.add(act.targetId);
@@ -166,6 +180,14 @@ public class OrderQueueManager {
 				AIUtils.setMoveToTarget(shipId, order.targetId);
 				// Escorting a friendly/neutral: never fire on it (persists past arrival; see AIUtils.noFireTargets).
 				AIUtils.setNoFireTarget(shipId, order.targetId);
+				break;
+			case MOVE_TO_POSITION:
+				if(order.position != null) {
+					// Rebase into the ship's sector frame at execution time (correct across sector boundaries).
+					javax.vecmath.Vector3f dest = AIUtils.toShipSectorFrame(shipId, order.position, order.sectorId);
+					MoveManager.getInstance().addMove(shipId, dest);
+				}
+				AIUtils.clearNoFireTarget(shipId); // moving to empty space — no escortee to spare
 				break;
 			case MINE:
 				MineManager.getInstance().addMine(shipId, order.targetId);
@@ -237,7 +259,7 @@ public class OrderQueueManager {
 	/** Whether the active order has finished, so the next queued one should start. */
 	private boolean isComplete(int shipId, QueuedOrder order) {
 		return switch(order.type) {
-			case MOVE -> MoveManager.getInstance().isArrived(shipId);
+			case MOVE, MOVE_TO_POSITION -> MoveManager.getInstance().isArrived(shipId);
 			case MINE ->
 				// MineManager drops the assignment once the asteroid is mined out or gone.
 					MineManager.getInstance().getAssignedTarget(shipId) == null;

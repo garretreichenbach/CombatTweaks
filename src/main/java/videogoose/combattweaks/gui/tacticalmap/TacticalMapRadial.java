@@ -80,13 +80,34 @@ public class TacticalMapRadial extends RadialMenuDialog {
 		};
 	}
 
+	/** Enters the tactical-map "move to empty space" placement mode (handled by the control manager). */
+	private GUICallback makeMoveToPositionCallback() {
+		return new GUICallback() {
+			@Override
+			public void callback(GUIElement callingGuiElement, MouseEvent event) {
+				if(event.pressedLeftMouse()) {
+					drawer.requestMoveToPositionPlacement = true;
+					deactivate();
+				}
+			}
+
+			@Override
+			public boolean isOccluded() {
+				return false;
+			}
+		};
+	}
+
 	@Override
 	public RadialMenu createMenu(RadialMenuDialog radialMenuDialog) {
 		RadialMenu menu = new RadialMenu(getState(), "TacticalMapRadial", radialMenuDialog, 800, 600, 130, FontLibrary.getBOLDBlender20());
 
 		if(target == null) {
-			//Just show idle command
+			//Orders-only menu (middle-clicked empty space): idle, plus move-to-position when ships are selected.
 			setIdleCenter(menu);
+			if(!drawer.selectedEntities.isEmpty()) {
+				menu.addItem("Move To Position", makeMoveToPositionCallback(), null);
+			}
 			menu.onInit();
 			return menu;
 		}
@@ -254,6 +275,9 @@ public class TacticalMapRadial extends RadialMenuDialog {
 				return false;
 			}
 		}, null);
+		if(hasSelection) {
+			menu.addItem("Move To Position", makeMoveToPositionCallback(), null);
+		}
 		menu.onInit();
 		return menu;
 	}

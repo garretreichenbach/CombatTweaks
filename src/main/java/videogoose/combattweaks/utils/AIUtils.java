@@ -9,7 +9,9 @@ import api.utils.game.SegmentControllerUtils;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.controller.elements.WeaponElementManagerInterface;
 import org.schema.game.common.controller.elements.beam.repair.RepairElementManager;
+import org.schema.common.util.linAlg.Vector3i;
 import org.schema.game.common.data.world.Sector;
+import org.schema.game.server.data.ServerConfig;
 import org.schema.game.common.data.world.SimpleTransformableSendableObject;
 import org.schema.game.server.data.GameServerState;
 import org.schema.game.common.controller.ai.AIConfiguationElements;
@@ -562,6 +564,34 @@ public class AIUtils {
 		SegmentController target = EntityUtils.getEntityById(targetId);
 		if(ship instanceof Ship && target != null) {
 			setRepairTarget((Ship) ship, target);
+		}
+	}
+
+	/**
+	 * Rebases a world point given in {@code sourceSectorId}'s local frame into the ship's current sector frame.
+	 * StarMade world-transform origins are sector-local, so the offset between two sectors' frames is their
+	 * sector-coordinate delta times the sector size. Lets a move-to-position placed in the player's sector be
+	 * flown to correctly even when the commanded ship sits in a different sector (resolved at execution time, so
+	 * a queued move stays correct if the ship crosses a boundary before the order runs). Returns the point
+	 * unchanged for a same-sector move or if anything can't be resolved.
+	 */
+	public static Vector3f toShipSectorFrame(int shipId, Vector3f point, int sourceSectorId) {
+		try {
+			SegmentController ship = EntityUtils.getEntityById(shipId);
+			if(ship == null || sourceSectorId < 0 || ship.getSectorId() == sourceSectorId) {
+				return point;
+			}
+			Sector shipSec = ((GameServerState) ship.getState()).getUniverse().getSector(ship.getSectorId());
+			Sector srcSec = ((GameServerState) ship.getState()).getUniverse().getSector(sourceSectorId);
+			if(shipSec == null || srcSec == null) {
+				return point;
+			}
+			int size = (Integer) ServerConfig.SECTOR_SIZE.getCurrentState();
+			Vector3i sp = shipSec.pos;
+			Vector3i src = srcSec.pos;
+			return new Vector3f(point.x + (src.x - sp.x) * size, point.y + (src.y - sp.y) * size, point.z + (src.z - sp.z) * size);
+		} catch(Exception ignored) {
+			return point;
 		}
 	}
 

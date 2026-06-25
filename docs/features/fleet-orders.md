@@ -5,11 +5,22 @@ Select one or more ships on the [Tactical Map](tactical-map.md), then open the r
 ## Orders
 
 - **Attack** (enemy ships) — engage and fire on the target. Attacking a neutral target requires a confirmation step.
+- **Supporting Fire** (enemy ships) — engage the target but **hold position** instead of closing to orbit range and strafing. The ship still turns to face the target and fires; it just stops the orbit/strafe dance, so it fights from where it is (typically at long range). Neutral targets require a confirmation step.
 - **Defend** (friendly ships) — escort the target and intercept nearby threats within ~2,000m.
 - **Move To** (any entity) — navigate to and hold position near the target.
+- **Move To Position** (empty space) — fly to an arbitrary point you place in 3D (see [below](#move-to-position-placement)).
 - **Mine** (asteroids) — approach and extract resources from the asteroid.
 - **Repair** (friendly ships) — approach and use repair beams on the target.
 - **Idle** (own ships) — clear all standing orders and return to default AI.
+
+### Move To Position placement
+
+With ships selected, choose **Move To Position** (from the radial — middle-click empty space, or any entity). The map enters a two-step placement mode:
+
+1. **Pick the spot** — move the cursor over the horizontal plane at your fleet's altitude; concentric **range rings** around the fleet and a live distance/altitude readout show how far you're sending them. **Left-click** to fix the horizontal position.
+2. **Set the altitude** — move the mouse up/down to slide the point along the vertical **stalk** above/below that spot; **right-drag** still rotates the camera so you can judge height. **Left-click** to commit.
+
+Press **Esc** to cancel. Hold **Shift** when committing to queue the move after existing orders.
 
 ## Issuing Orders
 

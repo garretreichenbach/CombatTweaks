@@ -84,6 +84,17 @@ A panel along the left edge lists your selected ships with shield/armor/reactor 
 
 - **Pin / unpin** ships with the per-row button to keep them on the panel even when not selected. Allied ships can be pinned too; your own ships always sort above allies. Pins persist across restarts, and any pin that can no longer be found is dropped automatically.
 - When the list grows past the screen, a **scrollbar** appears — scroll with the mouse wheel over the panel or drag the thumb.
+- **Collapse a panel** by clicking its header (the `Fleet (n)` / `Targets (n)` bar); the `[-]`/`[+]` marker shows its state. Handy for clearing the left/right roster out of the way during a busy fight.
+
+### Control Groups
+
+Assign ships to numbered groups (1–10) for instant re-selection:
+
+- **Ctrl + 1–0** assigns the current selection to that group (the `0` key is group 10).
+- **1–0** re-selects a group (pressing an unused number leaves your selection untouched).
+- The per-row button next to **Pin** shows a ship's group (`G3`) or `—` if ungrouped; click it to cycle the ship's group (1 → 2 → … → 10 → none) by mouse.
+
+While the tactical map is open the number keys drive control groups instead of the weapon/build hotbar, so they don't conflict. Group membership is keyed to the ship, so it survives reselection within a session.
 
 ## Heading & Order Paths
 

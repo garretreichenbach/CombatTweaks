@@ -2,6 +2,7 @@ package videogoose.combattweaks.gui.tacticalmap;
 
 import api.common.GameClient;
 import api.common.GameCommon;
+import api.network.packets.PacketUtil;
 import com.bulletphysics.linearmath.Transform;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
@@ -22,6 +23,7 @@ import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.input.KeyEventInterface;
 import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.manager.ConfigManager;
+import videogoose.combattweaks.network.client.SendMoveToPositionPacket;
 
 import javax.vecmath.Vector3f;
 
@@ -39,6 +41,8 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	public boolean turretTargetingMode;
 	private boolean wasADown;
 	private boolean wasSDown;
+	/** Edge state for the 1–10 control-group keys (index 1–10; key 0 maps to group 10). */
+	private final boolean[] groupKeyWasDown = new boolean[11];
 	/** The currently open radial menu, if any. Tracked so a new one closes the old instead of stacking. */
 	private TacticalMapRadial activeRadial;
 	/** Set while/after a radial is open to swallow the dismiss-click so it doesn't reopen a radial. */
@@ -49,6 +53,12 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	private int lastClickY;
 	private TacticalMapEntityIndicator pendingClickIndicator;
 	private long pendingClickTime;
+
+	// --- Move-to-position placement (Phase 6a) ---
+	/** True while placing a move-to-empty-space point. */
+	private boolean placing;
+	/** 1 = choosing X/Z on the plane, 2 = choosing altitude along the stalk. */
+	private int placeStage;
 
 	public TacticalMapControlManager(TacticalMapGUIDrawer guiDrawer) {
 		super(GameClient.getClientState());
@@ -74,6 +84,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	public void onSwitch(boolean active) {
 		guiDrawer.clearSelected();
 		if(!active) {
+			cancelPlacement(); // closing the map drops any in-progress move-to-position placement
 			// Leaving turret mode restores the main-ship view; clear turret state and the docked
 			// navigation filter so nothing carries over after the map is dismissed.
 			turretTargetingMode = false;
@@ -427,6 +438,21 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			wasADown = aDown;
 			wasSDown = sDown;
 
+			// Control groups: Ctrl+1..0 assigns the current selection to a group; 1..0 selects it (0 = group 10).
+			boolean ctrlForGroups = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL);
+			for(int n = 1; n <= 10; n++) {
+				int key = n < 10 ? Keyboard.KEY_1 + (n - 1) : Keyboard.KEY_0;
+				boolean down = Keyboard.isKeyDown(key);
+				if(down && !groupKeyWasDown[n]) {
+					if(ctrlForGroups) {
+						guiDrawer.assignSelectionToGroup(n);
+					} else {
+						guiDrawer.selectGroup(n);
+					}
+				}
+				groupKeyWasDown[n] = down;
+			}
+
 			// Skip camera movement when Ctrl or Meta is held to avoid conflicts with selection commands
 			if(!Keyboard.isKeyDown(Keyboard.KEY_LMETA) && !Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
 				if(Keyboard.isKeyDown(KeyboardMappings.FORWARD.getMapping())) {
@@ -481,6 +507,18 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			boolean isMiddleDown = Mouse.isButtonDown(2);
 			int mouseX = Mouse.getX();
 			int mouseY = GLFrame.getHeight() - Mouse.getY();
+
+			// Move-to-position placement intercepts mouse handling (camera pan/rotate/zoom above still run).
+			if(guiDrawer.requestMoveToPositionPlacement) {
+				guiDrawer.requestMoveToPositionPlacement = false;
+				beginPlacement();
+			}
+			if(placing) {
+				handlePlacement(isLeftDown, rightDown);
+				wasLeftMouseDown = isLeftDown;
+				wasMiddleMouseDown = isMiddleDown;
+				return;
+			}
 
 			// Cancel drag if RMB is held (camera rotation takes priority)
 			if(rightDown && guiDrawer.isDragSelecting) {
@@ -606,6 +644,132 @@ public class TacticalMapControlManager extends AbstractControlManager {
 
 	private boolean hasModifierKeyPressed() {
 		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_LMENU);
+	}
+
+	// --- Move-to-position placement (Phase 6a) ---
+
+	/** Enter placement mode: reference plane = selected fleet's centroid altitude. */
+	private void beginPlacement() {
+		Vector3f centroid = new Vector3f();
+		int n = 0;
+		for(SegmentController e : guiDrawer.selectedEntities) {
+			if(e == null) {
+				continue;
+			}
+			Transform t = e.getWorldTransformOnClient();
+			if(t != null) {
+				centroid.add(t.origin);
+				n++;
+			}
+		}
+		if(n == 0) {
+			return;
+		}
+		centroid.scale(1.0f / n);
+		placing = true;
+		placeStage = 1;
+		guiDrawer.isDragSelecting = false;
+		guiDrawer.placementActive = true;
+		guiDrawer.placementStage = 1;
+		guiDrawer.placePlaneY = centroid.y;
+		guiDrawer.placeFleetCentroid.set(centroid);
+		guiDrawer.placeFleetCentroidValid = true;
+		guiDrawer.placeValid = false;
+	}
+
+	/**
+	 * Two-stage placement input: stage 1 slides a point on the plane (left-click fixes X/Z); stage 2 slides it
+	 * along the vertical stalk (left-click commits). Right-click tap cancels; right-drag still rotates the camera.
+	 */
+	private void handlePlacement(boolean isLeftDown, boolean rightDown) {
+		// Esc-cancel is routed through the drawer flag (set by EventManager) so it doesn't also close the map.
+		if(guiDrawer.requestCancelPlacement) {
+			guiDrawer.requestCancelPlacement = false;
+			cancelPlacement();
+			return;
+		}
+		float winX = Mouse.getX();
+		float winY = Mouse.getY(); // GL window coords (origin bottom-left) for unprojection
+		if(placeStage == 1) {
+			Vector3f p = guiDrawer.intersectHorizontalPlane(winX, winY, guiDrawer.placePlaneY);
+			if(p != null) {
+				guiDrawer.placeX = p.x;
+				guiDrawer.placeZ = p.z;
+				guiDrawer.placeY = guiDrawer.placePlaneY;
+				guiDrawer.placeValid = true;
+				if(isLeftDown && !wasLeftMouseDown && !rightDown) {
+					placeStage = 2;
+					guiDrawer.placementStage = 2;
+				}
+			} else {
+				guiDrawer.placeValid = false;
+			}
+		} else {
+			Float h = guiDrawer.heightOnVerticalLine(winX, winY, guiDrawer.placeX, guiDrawer.placeZ);
+			if(h != null) {
+				guiDrawer.placeY = h;
+				guiDrawer.placeValid = true;
+			}
+			if(isLeftDown && !wasLeftMouseDown && !rightDown) {
+				commitPlacement();
+			}
+		}
+	}
+
+	private void cancelPlacement() {
+		placing = false;
+		placeStage = 1;
+		guiDrawer.placementActive = false;
+		guiDrawer.placeValid = false;
+		guiDrawer.placeFleetCentroidValid = false;
+	}
+
+	/**
+	 * Send the move-to-position order to every selected ship, then leave placement mode. Multiple ships keep
+	 * their current relative formation around the destination (each is offset from the point by its offset from
+	 * the fleet centroid) so they don't all pile onto the same spot; a single ship goes exactly to the point.
+	 */
+	private void commitPlacement() {
+		boolean queue = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
+		int sectorId = GameClient.getClientPlayerState() != null ? GameClient.getClientPlayerState().getCurrentSectorId() : -1;
+		Vector3f point = new Vector3f(guiDrawer.placeX, guiDrawer.placeY, guiDrawer.placeZ);
+
+		// Fleet centroid from current client positions, for formation-preserving offsets.
+		Vector3f centroid = new Vector3f();
+		int n = 0;
+		for(SegmentController sc : guiDrawer.selectedEntities) {
+			if(sc instanceof Ship) {
+				Transform t = sc.getWorldTransformOnClient();
+				if(t != null) {
+					centroid.add(t.origin);
+					n++;
+				}
+			}
+		}
+		if(n > 0) {
+			centroid.scale(1.0f / n);
+		}
+
+		for(SegmentController sc : guiDrawer.selectedEntities) {
+			if(!(sc instanceof Ship)) {
+				continue;
+			}
+			Vector3f dest = new Vector3f(point);
+			if(n > 1) {
+				// Spread: translate this ship's offset-from-centroid to the new point, keeping formation.
+				Transform t = sc.getWorldTransformOnClient();
+				if(t != null) {
+					dest.x += t.origin.x - centroid.x;
+					dest.y += t.origin.y - centroid.y;
+					dest.z += t.origin.z - centroid.z;
+				}
+			}
+			PacketUtil.sendPacketToServer(new SendMoveToPositionPacket(sc.getId(), dest, sectorId, queue));
+		}
+		if(!queue) {
+			guiDrawer.clearSelected();
+		}
+		cancelPlacement();
 	}
 
 	/**

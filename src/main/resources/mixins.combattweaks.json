@@ -12,6 +12,10 @@
 		"ShipAIEntityMixin",
 		"ShipGameStateMixin",
 		"EngagingTargetSteadyMixin",
+		"ShipExternalFlightControllerMixin",
+		"SegmentExternalControllerMixin",
+		"WeaponBottomBarMixin",
+		"BottomBarBuildMixin",
 		"FleetMiningMixin",
 		"FactionManagerMixin",
 		"Vector3fToolsMixin"
