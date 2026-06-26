@@ -1,7 +1,10 @@
 package videogoose.combattweaks.element.block;
 
+import api.common.GameCommon;
 import api.config.BlockConfig;
+import org.newdawn.slick.Game;
 import org.schema.game.common.data.element.ElementInformation;
+import org.schema.game.server.controller.gameConfig.GameConfig;
 import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber1;
 import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber2;
 import videogoose.combattweaks.element.block.chamber.offense.aura.OffenseAuraChamber;
@@ -71,8 +74,10 @@ public enum BlockRegistry {
 		for(BlockRegistry registry : values()) {
 			registry.elementInterface.postInitData();
 		}
-		for(BlockRegistry registry : values()) {
-			registry.elementInterface.initResources();
+		if(GameCommon.isOnSinglePlayer() || GameCommon.isClientConnectedToServer()) {
+			for(BlockRegistry registry : values()) {
+				registry.elementInterface.initResources();
+			}
 		}
 		for(BlockRegistry registry : values()) {
 			BlockConfig.add(registry.getInfo());

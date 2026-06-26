@@ -30,10 +30,6 @@ public class ResourceManager {
 	private static final HashMap<String, Shader> shaderMap = new HashMap<>();
 
 	public static void loadResources(CombatTweaks instance) {
-		// Decode block/icon art synchronously (as BetterChambers did): newBlockTexture/newIconTexture only build
-		// and cache scaled BufferedImages — no GL work — so they're safe off the graphics thread, AND the jar
-		// resource streams must be read here-and-now. Deferring this read onto the graphics-thread run queue
-		// (runOnGraphicsThread) lets the backing jar handle close first, which throws "Stream closed" mid-TGA.
 		loadAtlas(instance, "atlas0");
 		loadIcons(instance, "icons0");
 		// Shaders DO need the GL context, so those stay on the graphics thread.
@@ -110,7 +106,13 @@ public class ResourceManager {
 		}
 
 		public short getIconID() {
-			return (short) getIcon().getTextureId();
+			StarLoaderTexture t = getIcon();
+			// Icons only load on the client (onResourceLoad never fires on a dedicated server),
+			// but block registration runs server-side too — fall back to 0 when unloaded.
+			if(t == null) {
+				return 0;
+			}
+			return (short) t.getTextureId();
 		}
 	}
 
@@ -134,7 +136,13 @@ public class ResourceManager {
 		}
 
 		public short getTextureID() {
-			return (short) getTexture().getTextureId();
+			StarLoaderTexture t = getTexture();
+			// Textures only load on the client (onResourceLoad never fires on a dedicated server),
+			// but block registration runs server-side too — fall back to 0 when unloaded.
+			if(t == null) {
+				return 0;
+			}
+			return (short) t.getTextureId();
 		}
 	}
 }
