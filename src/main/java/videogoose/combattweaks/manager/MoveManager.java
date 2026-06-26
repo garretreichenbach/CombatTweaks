@@ -70,6 +70,20 @@ public class MoveManager {
 	 * densely packed areas without risking an infinite loop.
 	 */
 	private static final int MAX_RESOLVE_ITERS = 8;
+	/**
+	 * Per-tick retention factor for the velocity component perpendicular to the ship→destination line.
+	 * Applied after each {@code moveTo} to bleed off "cross-track" drift so the ship heads straight at the
+	 * destination instead of sailing past it on a curve. 0 = kill all sideways drift instantly, 1 = leave it
+	 * untouched (old behaviour). 0.5 halves it every control tick (~20 Hz), an e-fold every ~3 ticks (~150 ms).
+	 * See {@link #dampLateralDrift}.
+	 */
+	private static final float CROSS_TRACK_RETAIN = 0.5f;
+	/**
+	 * Per-tick retention factor for velocity pointing <em>away</em> from the destination (overshoot). Mirrors
+	 * the engine {@code stop()}'s 0.3 bleed so that, the moment the ship blows past its target, the receding
+	 * velocity is arrested hard rather than carrying it out into a slingshot loop.
+	 */
+	private static final float OVERSHOOT_RETAIN = 0.3f;
 
 	public static MoveManager getInstance() {
 		if(instance == null) {
@@ -344,6 +358,10 @@ public class MoveManager {
 	 * Direction-caching (the old DIRECTION_CHANGE_THRESHOLD guard) has also been
 	 * removed.  moveTo() must be called every tick for continuous thrust; skipping
 	 * calls based on direction was the primary reason ships moved so slowly.
+	 *
+	 * After thrusting we call {@link #dampLateralDrift} to scrub the sideways/overshoot
+	 * velocity moveTo() leaves behind — without it a ship sent on a diagonal "slingshots"
+	 * around the destination (see that method for the full explanation).
 	 */
 	private void applyMovement(ManagedUsableSegmentController<?> ship, ShipAIEntity aiEntity, Vector3f destination) {
 		if(ship.getNetworkObject() instanceof NetworkShip) {
@@ -374,5 +392,63 @@ public class MoveManager {
 		}
 
 		aiEntity.moveTo(GameServer.getServerState().getController().getTimer(), tmpMoveDir, true);
+
+		dampLateralDrift(ship, tmpMoveDir);
+	}
+
+	/**
+	 * Scrub the velocity that {@code moveTo} can't, so a commanded ship flies straight to its destination
+	 * instead of curving around it.
+	 *
+	 * <p><b>Why this is needed.</b> The engine's {@code moveTo} is an omnidirectional pure-pursuit: it thrusts
+	 * toward the target and relies on its own braking to keep velocity aligned. But that braking only meaningfully
+	 * decelerates within {@code dist < 2} world units — far below any real move distance — so a ship runs at
+	 * essentially full speed right up to the destination. On a <em>diagonal</em> approach, the slightest overshoot
+	 * leaves velocity with a component <em>perpendicular</em> to the ship→destination line; pursuit then keeps
+	 * pulling the ship around that point and it orbits/slingshots rather than arriving. (A pure single-axis move
+	 * never shows this — its overshoot is purely head-on and brakes cleanly — which is exactly why the bug only
+	 * reproduces "with a horizontal and vertical component.")</p>
+	 *
+	 * <p><b>What it does.</b> We split the current linear velocity into the part along {@code toDest} (toward the
+	 * destination) and the part across it (the drift). The cross-track part is bled toward zero every tick
+	 * ({@link #CROSS_TRACK_RETAIN}) so the heading is forced back onto the straight line; any component pointing
+	 * away from the destination (an actual overshoot) is bled harder ({@link #OVERSHOOT_RETAIN}). The along-track
+	 * approach speed is left to {@code moveTo}/the {@code ARRIVAL_DISTANCE} stop, so this only removes the goofy
+	 * sideways motion, it doesn't slow a legitimate straight-line run.</p>
+	 */
+	private void dampLateralDrift(ManagedUsableSegmentController<?> ship, Vector3f toDest) {
+		float dist = toDest.length();
+		if(dist < 0.01f) return; // already on top of the destination — nothing meaningful to steer
+
+		Object phys = ship.getPhysicsDataContainer().getObject();
+		if(!(phys instanceof com.bulletphysics.dynamics.RigidBody body)) return;
+
+		Vector3f vel = body.getLinearVelocity(new Vector3f());
+
+		// Unit vector toward the destination.
+		Vector3f dir = new Vector3f(toDest);
+		dir.scale(1.0f / dist);
+
+		// Decompose velocity into along-track (toward dest) and cross-track (perpendicular drift).
+		float alongSpeed = vel.dot(dir);
+		Vector3f alongVel = new Vector3f(dir);
+		alongVel.scale(alongSpeed);
+		Vector3f crossVel = new Vector3f(vel);
+		crossVel.sub(alongVel); // perpendicular remainder
+
+		// Kill the sideways drift that curves the path...
+		crossVel.scale(CROSS_TRACK_RETAIN);
+		// ...and, if we're actually receding from the destination, arrest that hard so it can't fling us outward.
+		if(alongSpeed < 0) {
+			alongSpeed *= OVERSHOOT_RETAIN;
+		}
+
+		Vector3f corrected = new Vector3f(dir);
+		corrected.scale(alongSpeed);
+		corrected.add(crossVel);
+
+		if(!Float.isNaN(corrected.x) && !Float.isNaN(corrected.y) && !Float.isNaN(corrected.z)) {
+			body.setLinearVelocity(corrected);
+		}
 	}
 }
