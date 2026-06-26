@@ -626,9 +626,13 @@ public class AIUtils {
 			}
 		} catch(Exception ignored) {
 		}
+		// Zero the AI aim point, NOT the ship's own origin: targetPosition is the weapon aim/fire trigger
+		// (the client shoots whenever targetPosition.lengthSquared() > 0), and a sector-local origin is itself
+		// non-zero, so setting it to the origin would leave the ship "aiming" and firing at itself. (0,0,0)
+		// clears the firing solution outright.
 		if(ship.getNetworkObject() instanceof NetworkShip) {
 			((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
-			((NetworkShip) ship.getNetworkObject()).targetPosition.set(ship.getWorldTransform().origin);
+			((NetworkShip) ship.getNetworkObject()).targetPosition.set(0, 0, 0);
 		}
 		attackOrders.remove(ship.getId()); // no longer attacking under our command
 		supportingFire.remove(ship.getId()); // and no longer holding position to support

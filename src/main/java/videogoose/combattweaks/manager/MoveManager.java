@@ -364,9 +364,17 @@ public class MoveManager {
 	 * around the destination (see that method for the full explanation).
 	 */
 	private void applyMovement(ManagedUsableSegmentController<?> ship, ShipAIEntity aiEntity, Vector3f destination) {
+		// IMPORTANT: NetworkShip.targetPosition is the AI's *weapon aim point*, not a movement input — the
+		// engine drives movement from moveDir (and our direct moveTo below), and uses targetPosition only to
+		// aim guns and, on the client, to decide whether to shoot at all (ShipAIEntity.updateAIClient fires
+		// doShooting whenever targetPosition.lengthSquared() > 0). Writing the move destination here made a
+		// moving ship's weapons aim at — and fire toward — wherever it was heading. The server's own
+		// suppression can't catch it: that runs against the server MoveManager's order set, which the client
+		// singleton doesn't have, so the client fires unsuppressed. So we zero it: a ship merely moving has no
+		// firing solution. (The engine's idle FSM zeroes it each server tick too; we must not re-arm it.)
 		if(ship.getNetworkObject() instanceof NetworkShip) {
 			((NetworkShip) ship.getNetworkObject()).targetVelocity.set(0, 0, 0);
-			((NetworkShip) ship.getNetworkObject()).targetPosition.set(destination);
+			((NetworkShip) ship.getNetworkObject()).targetPosition.set(0, 0, 0);
 		}
 
 		Vector3f shipPos = ship.getWorldTransform().origin;
