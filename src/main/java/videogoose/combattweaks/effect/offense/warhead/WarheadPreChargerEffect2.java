@@ -4,6 +4,7 @@ import org.schema.game.common.data.blockeffects.config.EffectConfigElement;
 import org.schema.game.common.data.blockeffects.config.StatusEffectType;
 import org.schema.game.common.data.blockeffects.config.elements.ModifierStackType;
 import org.schema.game.common.data.blockeffects.config.parameter.StatusEffectFloatValue;
+import org.schema.game.common.data.blockeffects.config.parameter.StatusEffectIntValue;
 import videogoose.combattweaks.effect.ConfigEffectGroup;
 import videogoose.combattweaks.manager.ConfigManager;
 
@@ -20,8 +21,8 @@ public class WarheadPreChargerEffect2 extends ConfigEffectGroup {
 			configElement.init(StatusEffectType.WARHEAD_RADIUS);
 			configElement.stackType = ModifierStackType.ADD;
 			configElement.priority = 2;
-			StatusEffectFloatValue value = new StatusEffectFloatValue();
-			value.value.set(ConfigManager.getSystemConfig().warheadPreChargerEffect2RadiusAdd.getValue().floatValue());
+			StatusEffectIntValue value = new StatusEffectIntValue();
+			value.value.set((int) Math.round(ConfigManager.getSystemConfig().warheadPreChargerEffect2RadiusAdd.getValue()));
 			configElement.value = value;
 			elements.add(configElement);
 		}
