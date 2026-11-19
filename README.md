@@ -1,6 +1,6 @@
 # CombatTweaks
 
-A StarMade mod that adds real-time, RTS-style tactical fleet command and a passive armor HP defense layer. Command multiple ships — and individual turrets — through a tactical map overlay, read the battlefield at a glance, and build with armor that actually soaks damage.
+A StarMade mod that adds real-time, RTS-style tactical fleet command. Command multiple ships — and individual turrets — through a tactical map overlay, and read the battlefield at a glance.
 
 Full documentation is available on the [docs site](https://garretreichenbach.github.io/CombatTweaks/), and in-game through StarMade's **Guides** viewer (the mod registers its guides automatically).
 
@@ -52,20 +52,9 @@ Active orders are drawn as animated dotted paths: red for attack, green for defe
 
 Early-warning travel lines and labels for ships approaching or jumping in from nearby sectors. Each contact shows an estimated mass and relation (friendly/neutral/hostile/unknown); co-located contacts merge into one label. Accuracy scales with proximity and your recon advantage over the contact's stealth.
 
-### Armor HP System
-
-Every armor block contributes to a shared Armor HP pool that absorbs damage before it reaches reactor HP, with increasing bleed-through as armor integrity drops.
-
-- At full Armor HP, all post-armor damage is absorbed
-- As Armor HP drops, more damage bleeds through to the reactor
-- Total Armor HP scales sub-linearly with ship size, so larger ships benefit more per block
-- **Armor HP Absorption Chambers** lower bleed-through; Chamber 1 provides a base improvement and Chamber 2 stacks further
-
-**HUD bars** (always available): a vertical ship armor bar on the left, and a target armor bar on the target panel.
-
 ## Configuration
 
-The mod generates its config files on first run. See the [Configuration guide](docs/features/configuration.md) for the full list of keys, including the client `config.yml` tactical-map options (grid, signatures, status rings, label detail, view distance, …) and the server-synced `system_config.yml` armor-balance values.
+The mod generates its config files on first run. See the [Configuration guide](docs/features/configuration.md) for the full list of keys, including the client `config.yml` tactical-map options (grid, signatures, status rings, label detail, view distance, …) and the server-synced `system_config.yml` balance values.
 
 ## Installation
 

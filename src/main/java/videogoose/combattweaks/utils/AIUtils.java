@@ -34,7 +34,7 @@ import videogoose.combattweaks.manager.DefenseManager;
 import videogoose.combattweaks.manager.MineManager;
 import videogoose.combattweaks.manager.MoveManager;
 import videogoose.combattweaks.manager.RepairManager;
-import videogoose.combattweaks.system.armor.ArmorHPCollection;
+import org.schema.game.common.controller.elements.armorhp.ArmorHPCollection;
 import org.schema.common.util.linAlg.Vector3b;
 import org.schema.game.common.controller.SegmentBufferIteratorInterface;
 import org.schema.game.common.data.SegmentPiece;
@@ -288,7 +288,7 @@ public class AIUtils {
 
 	/**
 	 * Whether a repair target still has anything a repair ship can mend: reduced reactor HP, recorded
-	 * destroyed/damaged blocks, OR depleted CombatTweaks Armor HP. Returns false for a destroyed/overheating
+	 * destroyed/damaged blocks, OR depleted Armor HP. Returns false for a destroyed/overheating
 	 * target (reactor &le; 0 — nothing to save) and for a fully-intact one.
 	 *
 	 * <p>Armor HP is included deliberately: combat damage is mostly absorbed by the Armor HP pool (blocks stay

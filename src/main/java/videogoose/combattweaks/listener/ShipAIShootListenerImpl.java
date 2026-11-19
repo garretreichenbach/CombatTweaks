@@ -17,7 +17,7 @@ import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.schine.graphicsengine.core.Timer;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
-import videogoose.combattweaks.system.armor.ArmorHPCollection;
+import org.schema.game.common.controller.elements.armorhp.ArmorHPCollection;
 import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
 import videogoose.combattweaks.system.weapon.auradisruptor.AuraDisruptorBeamCollectionManager;
 import videogoose.combattweaks.system.weapon.auradisruptor.AuraDisruptorBeamElementManager;

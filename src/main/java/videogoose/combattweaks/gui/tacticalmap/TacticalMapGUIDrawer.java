@@ -2,7 +2,6 @@ package videogoose.combattweaks.gui.tacticalmap;
 
 import api.common.GameClient;
 import api.common.GameCommon;
-import api.network.packets.PacketUtil;
 import api.render.ModWorldDrawer;
 import api.player.PlayerUtils;
 import com.bulletphysics.linearmath.Transform;
@@ -48,9 +47,8 @@ import org.schema.game.common.controller.elements.ShieldLocal;
 import org.schema.game.common.controller.elements.ShieldLocalAddOn;
 import org.schema.game.common.data.ManagedSegmentController;
 import videogoose.combattweaks.manager.MoveManager;
-import videogoose.combattweaks.network.client.RequestArmorSyncPacket;
 import org.schema.game.common.data.player.faction.FactionRelation;
-import videogoose.combattweaks.system.armor.ArmorHPCollection;
+import org.schema.game.common.controller.elements.armorhp.ArmorHPCollection;
 import videogoose.combattweaks.system.aura.AuraState;
 import videogoose.combattweaks.system.signature.IncomingSignature;
 import videogoose.combattweaks.utils.AIUtils;
@@ -2484,8 +2482,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	private final HpStats tmpHp = new HpStats();
-	/** Per-entity throttle (ms) for on-demand armor-sync requests, so we ask the server at most occasionally. */
-	private final Map<Integer, Long> lastArmorRequest = new ConcurrentHashMap<>();
 
 	// ---- In-map display settings (toggled via the config panel, top-left) ------------------------------
 	private boolean cfgInit;
@@ -2601,19 +2597,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				}
 			}
 		} catch(Exception ignored) {
-		}
-		// Armor is synced on a slow heartbeat, so a just-shown entity may not have it yet — pull it on demand
-		// (throttled) so the armor ring/bar fills promptly instead of waiting up to a heartbeat interval.
-		if(out.armorMax <= 0) {
-			long now = System.currentTimeMillis();
-			Long last = lastArmorRequest.get(entity.getId());
-			if(last == null || now - last > 1500) {
-				lastArmorRequest.put(entity.getId(), now);
-				try {
-					PacketUtil.sendPacketToServer(new RequestArmorSyncPacket(entity.getId()));
-				} catch(Exception ignored) {
-				}
-			}
 		}
 		return true;
 	}

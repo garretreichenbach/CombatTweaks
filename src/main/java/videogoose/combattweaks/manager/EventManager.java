@@ -3,13 +3,8 @@ package videogoose.combattweaks.manager;
 import api.common.GameClient;
 import api.entity.SegmentControllerUtils;
 import api.event.EventResult;
-import api.event.block.SegmentPieceAddByMetadataListener;
-import api.event.block.SegmentPieceAddListener;
-import api.event.block.SegmentPieceRemoveListener;
 import api.event.entity.ShipJumpEngageListener;
 import api.event.gui.HudCreateListener;
-import api.event.gui.StructureStatsGroupsAddListener;
-import api.event.gui.TargetPanelCreateListener;
 import api.event.input.KeyPressListener;
 import api.event.lifecycle.ManagerContainerRegisterListener;
 import api.event.lifecycle.RegisterAddonsListener;
@@ -17,30 +12,21 @@ import api.event.lifecycle.RegisterConfigGroupsListener;
 import api.event.render.RegisterWorldDrawersListener;
 import api.event.systems.CustomAddOnUseListener;
 import api.event.systems.ReactorRecalibrateListener;
-import api.event.weapon.DamageReductionByArmorCalcListener;
 import api.event.weapon.ShipAIEntityAttemptToShootListener;
 import api.network.packets.PacketUtil;
 import api.player.PlayerUtils;
-import org.schema.game.common.controller.SegmentController;
 import org.schema.schine.graphicsengine.core.GLFW;
 import org.schema.schine.input.KeyboardMappings;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleCollection;
-import org.schema.game.common.controller.elements.ManagerModuleSingle;
-import org.schema.game.common.controller.elements.VoidElementManager;
-import org.schema.game.common.data.element.ElementKeyMap;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.effect.ConfigGroupRegistry;
 import videogoose.combattweaks.element.block.BlockRegistry;
-import videogoose.combattweaks.gui.elements.AdvancedStructureStatsArmor;
 import videogoose.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
 import videogoose.combattweaks.listener.AuraProjectorAddOnUseListener;
-import videogoose.combattweaks.listener.DamageReductionByArmorCalcListenerImpl;
 import videogoose.combattweaks.listener.MiningSalvageListener;
 import videogoose.combattweaks.listener.ShipAIShootListenerImpl;
 import videogoose.combattweaks.network.client.SendThrustBlastPacket;
-import videogoose.combattweaks.system.armor.ArmorHPCollection;
-import videogoose.combattweaks.system.armor.ArmorHPUnit;
 import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
 import videogoose.combattweaks.system.aura.OffenseAuraAddOn;
 import videogoose.combattweaks.system.aura.SupportAuraAddOn;
@@ -49,7 +35,6 @@ import videogoose.combattweaks.system.weapon.auradisruptor.AuraDisruptorBeamElem
 public class EventManager {
 
 	public static ShipAIShootListenerImpl shipAIShootListener;
-	public static DamageReductionByArmorCalcListenerImpl damageReductionByArmorCalcListener;
 	public static MiningSalvageListener miningSalvageListener;
 
 	/** Movement keys whose in-flight double-tap fires a Thrust Blast (ported from BetterChambers). */
@@ -64,7 +49,6 @@ public class EventManager {
 	public static void initialize(CombatTweaks instance) {
 
 		ShipAIEntityAttemptToShootListener.TYPE.register(shipAIShootListener = new ShipAIShootListenerImpl(), instance);
-		DamageReductionByArmorCalcListener.TYPE.register(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl(), instance);
 		CustomAddOnUseListener.TYPE.register(miningSalvageListener = new MiningSalvageListener(), instance);
 		CustomAddOnUseListener.TYPE.register(new AuraProjectorAddOnUseListener(), instance);
 
@@ -80,7 +64,6 @@ public class EventManager {
 			return EventResult.CONTINUE;
 		}, instance);
 
-		TargetPanelCreateListener.TYPE.register((panel, elements, isServer) -> HudManager.initializeTargetPanel(panel, elements), instance);
 
 		KeyPressListener.TYPE.register((event, isServer) -> {
 			if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
@@ -156,41 +139,8 @@ public class EventManager {
 		}, instance);
 
 		ManagerContainerRegisterListener.TYPE.register((context, isServer) -> {
-			VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager = new VoidElementManager<>(context.getSegmentController(), ArmorHPCollection.class);
-			context.addModuleCollection(new ManagerModuleSingle<>(armorHPManager, ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID) {
-				@Override
-				public boolean needsAnyUpdate() {
-					return getCollectionManager().needsUpdate();
-				}
-			});
 			// Attach the Aura Disruptor weapon system (computer/module pair) so ships can mount and fire it.
 			context.addModuleCollection(new ManagerModuleCollection(new AuraDisruptorBeamElementManager(context.getSegmentController()), BlockRegistry.AURA_DISRUPTOR_COMPUTER.getId(), BlockRegistry.AURA_DISRUPTOR_MODULE.getId()));
-			if(context.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
-				ArmorHPCollection.enqueueRecalc(context.getSegmentController());
-			}
 		}, instance);
-
-		StructureStatsGroupsAddListener.TYPE.register((stats, groups, isServer) -> groups.add(new AdvancedStructureStatsArmor(stats)), instance);
-
-		SegmentPieceAddByMetadataListener.TYPE.register((newType, orientation, x, y, z, absIndex, controller, onServer) -> onArmorChanged(newType, controller), instance);
-
-		SegmentPieceAddListener.TYPE.register((controller, newType, orientation, x, y, z, segment, updateSegmentBuffer, absIndex, isServer) -> onArmorChanged(newType, controller), instance);
-
-		SegmentPieceRemoveListener.TYPE.register((type, segmentSize, x, y, z, orientation, segment, preserveControl, isServer) -> onArmorChanged(type, segment.getSegmentController()), instance);
-	}
-
-	/** Queues an armor-HP recalc on the root entity when an armor block is added or removed. Hot path: cheap rejects first. */
-	private static void onArmorChanged(short type, SegmentController controller) {
-		if(!ElementKeyMap.isValidType(type) || !ElementKeyMap.getInfo(type).isArmor()) {
-			return;
-		}
-		if(!(controller instanceof ManagedUsableSegmentController<?>)) {
-			return;
-		}
-		if(controller.railController.isDocked()) {
-			ArmorHPCollection.enqueueRecalc(controller.railController.getRoot());
-		} else {
-			ArmorHPCollection.enqueueRecalc(controller);
-		}
 	}
 }

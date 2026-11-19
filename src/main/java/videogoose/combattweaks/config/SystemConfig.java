@@ -6,24 +6,6 @@ import api.config.simpleconfig.SimpleConfigDouble;
 
 public class SystemConfig extends SimpleConfigContainer {
 
-	public final SimpleConfigDouble armorHpValueMultiplier =
-			new SimpleConfigDouble(this, "armor_hp_value_multiplier", 1000.0, "Base multiplier applied to raw armor value totals");
-
-	public final SimpleConfigDouble armorHpScalingExponent =
-			new SimpleConfigDouble(this, "armor_hp_scaling_exponent", 0.75, "Sub-linear scaling exponent (1.0 = linear, lower = more diminishing returns for small ships)");
-
-	public final SimpleConfigDouble armorHpLostPerDamageAbsorbed =
-			new SimpleConfigDouble(this, "armor_hp_lost_per_damage_absorbed", 1.0, "Armor HP consumed per point of damage absorbed");
-
-	public final SimpleConfigDouble baseArmorHpBleedThroughStart =
-			new SimpleConfigDouble(this, "base_armor_hp_bleed_through_start", 0.9, "Controls bleed-through ramp rate (higher = bleed reaches 100% sooner)");
-
-	public final SimpleConfigDouble armorHpAbsorptionEffect1Sub =
-			new SimpleConfigDouble(this, "armor_hp_absorption_effect_1_sub", -7.5, "Chamber 1 bleed-through reduction");
-
-	public final SimpleConfigDouble armorHpAbsorptionEffect2Sub =
-			new SimpleConfigDouble(this, "armor_hp_absorption_effect_2_sub", -7.5, "Chamber 2 bleed-through reduction");
-
 	public final SimpleConfigDouble armorHpRepairFractionPerSecond =
 			new SimpleConfigDouble(this, "armor_hp_repair_fraction_per_second", 0.05, "Fraction of a repair target's max Armor HP restored per second by an active repair beam (0.05 = 5%/s, ~20s from empty to full).");
 

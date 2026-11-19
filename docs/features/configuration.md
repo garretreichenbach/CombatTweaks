@@ -26,13 +26,6 @@ Client-side settings that are not synced over the network — each player custom
 
 Gameplay balance values synced from server to clients. On a dedicated server, only the server's copy is used — clients receive the values automatically on login.
 
-- `armor_hp_value_multiplier` — default `20.0`. Base multiplier applied to raw armor value totals.
-- `armor_hp_scaling_exponent` — default `0.75`. Sub-linear scaling exponent (1.0 = linear, lower = more diminishing returns for small ships).
-- `armor_hp_lost_per_damage_absorbed` — default `1.0`. Armor HP consumed per point of damage absorbed.
-- `base_armor_hp_bleed_through_start` — default `0.7`. Controls bleed-through ramp rate (higher = bleed reaches 100% sooner).
-- `armor_hp_absorption_effect_1_sub` — default `-7.5`. Chamber 1 bleed-through reduction.
-- `armor_hp_absorption_effect_2_sub` — default `-7.5`. Chamber 2 bleed-through reduction.
-
 ### Auras
 
 See the [Auras](auras.md) and [Aura Disruptor](aura-disruptor.md) guides for what these affect.

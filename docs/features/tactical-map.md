@@ -46,7 +46,7 @@ When status display is enabled, markers carry up to three colored arcs showing l
 | Ring | Color | Meaning |
 |------|-------|---------|
 | Reactor HP | Green | Reactor hit points |
-| Armor HP | Grey | Shared armor HP pool |
+| Armor HP | Grey | StarMade's armor HP pool |
 | Shield | Amber | Shield strength |
 
 Your own ships always show their rings. Other ships only show rings while hovered, and enemy readouts are **recon-gated** — own and allied ships are always legible, while a jamming or cloaked enemy stays hidden until your scanners overcome it.
@@ -104,8 +104,3 @@ While the tactical map is open the number keys drive control groups instead of t
 ## Other HUD Elements
 
 While the tactical map is open, context-sensitive keybind hints are shown on the right side of the screen.
-
-Two armor HP bars are available at all times (not just in tactical-map mode):
-
-- **Ship Armor HP Bar** — a vertical bar on the left showing your current armor integrity.
-- **Target Armor HP Bar** — a bar on the target panel showing the selected target's armor integrity.

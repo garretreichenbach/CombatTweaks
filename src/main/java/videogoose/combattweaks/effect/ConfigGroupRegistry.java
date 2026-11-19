@@ -1,8 +1,6 @@
 package videogoose.combattweaks.effect;
 
 import org.schema.game.common.data.blockeffects.config.ConfigGroup;
-import videogoose.combattweaks.effect.defense.armor.ArmorHPAbsorptionEffect1;
-import videogoose.combattweaks.effect.defense.armor.ArmorHPAbsorptionEffect2;
 import videogoose.combattweaks.effect.offense.aura.TargetingJammerAuraEffect1;
 import videogoose.combattweaks.effect.offense.aura.TargetingJammerAuraEffect2;
 import videogoose.combattweaks.effect.offense.warhead.WarheadPreChargerEffect1;
@@ -15,10 +13,6 @@ import videogoose.combattweaks.effect.support.shield.ShieldAuraCapacityEffect2;
 import java.util.Collection;
 
 public enum ConfigGroupRegistry {
-	//Defense
-	ARMOR_HP_ABSORPTION_1(new ArmorHPAbsorptionEffect1()),
-	ARMOR_HP_ABSORPTION_2(new ArmorHPAbsorptionEffect2()),
-
 	//Aura (ported from BetterChambers)
 	AURA_BASE_EFFECT(new AuraBaseEffect()),
 	AURA_RANGE_BOOST_EFFECT_1(new AuraRangeBoostEffect1()),

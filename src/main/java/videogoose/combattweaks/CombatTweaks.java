@@ -14,7 +14,6 @@ import org.schema.schine.resource.ResourceLoader;
 import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.manager.*;
 import videogoose.combattweaks.network.client.*;
-import videogoose.combattweaks.network.server.SendArmorHPSyncPacket;
 import videogoose.combattweaks.network.server.SendAuraSyncPacket;
 import videogoose.combattweaks.network.server.SendIncomingSignaturesPacket;
 
@@ -89,7 +88,6 @@ public class CombatTweaks extends StarMod {
 		registrar.registerFromResource(key, label, "Tactical Map", "guides/features/tactical-map.md", this);
 		registrar.registerFromResource(key, label, "Fleet Orders", "guides/features/fleet-orders.md", this);
 		registrar.registerFromResource(key, label, "Incoming Signatures", "guides/features/incoming-signatures.md", this);
-		registrar.registerFromResource(key, label, "Armor HP System", "guides/features/armor-hp.md", this);
 		registrar.registerFromResource(key, label, "Auras", "guides/features/auras.md", this);
 		registrar.registerFromResource(key, label, "Aura Disruptor", "guides/features/aura-disruptor.md", this);
 		registrar.registerFromResource(key, label, "Warhead Pre-Charger", "guides/features/warhead-pre-charger.md", this);
@@ -111,9 +109,7 @@ public class CombatTweaks extends StarMod {
 		PacketUtil.registerPacket(this, SendMoveToPositionPacket.class);
 		PacketUtil.registerPacket(this, SendThrustBlastPacket.class);
 		PacketUtil.registerPacket(this, SendSupportingFirePacket.class);
-		PacketUtil.registerPacket(this, SendArmorHPSyncPacket.class);
 		PacketUtil.registerPacket(this, SendAuraSyncPacket.class);
 		PacketUtil.registerPacket(this, SendIncomingSignaturesPacket.class);
-		PacketUtil.registerPacket(this, RequestArmorSyncPacket.class);
 	}
 }

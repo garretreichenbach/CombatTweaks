@@ -4,8 +4,6 @@ import api.common.GameCommon;
 import api.block.BlockConfig;
 import org.schema.game.common.data.element.ElementInformation;
 import org.schema.game.server.controller.gameConfig.GameConfig;
-import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber1;
-import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber2;
 import videogoose.combattweaks.element.block.chamber.offense.aura.OffenseAuraChamber;
 import videogoose.combattweaks.element.block.chamber.offense.aura.TargetingJammerAuraChamber1;
 import videogoose.combattweaks.element.block.chamber.offense.aura.TargetingJammerAuraChamber2;
@@ -30,10 +28,6 @@ import videogoose.combattweaks.element.block.weapon.AuraDisruptorModule;
  * {@code initData()} must appear after it — the reactor parent chambers therefore precede their sub-chambers.
  */
 public enum BlockRegistry {
-	//Defense chambers
-	ARMOR_HP_ABSORPTION_CHAMBER_1(new ArmorHPAbsorptionChamber1()),
-	ARMOR_HP_ABSORPTION_CHAMBER_2(new ArmorHPAbsorptionChamber2()),
-
 	//Generic reactor chambers (parents — must precede their sub-chambers below)
 	REACTOR_OFFENSE_CHAMBER(new ReactorOffenseChamber()),
 	REACTOR_SUPPORT_CHAMBER(new ReactorSupportChamber()),
