@@ -44,6 +44,9 @@ public class MainConfig extends SimpleConfigContainer {
 	public final SimpleConfigBool tacticalMapShowAuras =
 			new SimpleConfigBool(this, "tactical_map_show_auras", true, "Draw bounding spheres on the tactical map around ships projecting combat auras.");
 
+	public final SimpleConfigBool auraShowInWorld =
+			new SimpleConfigBool(this, "aura_show_in_world", true, "Draw a pulse expanding from ships projecting combat auras in the normal flight view.");
+
 	// --- Aura behaviour ---
 	public final SimpleConfigBool auraAffectsRoot =
 			new SimpleConfigBool(this, "aura_affects_root", false, "Whether an Aura Projector also applies its aura to its own ship (the projector's rail root).");

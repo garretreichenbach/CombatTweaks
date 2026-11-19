@@ -20,6 +20,7 @@ Client-side settings that are not synced over the network — each player custom
 - `tactical_map_label_detail` — default `2.0`. Label detail: `0` minimal (name+faction), `1` normal (+distance/order), `2` full (+mass/speed/sector).
 - `tactical_map_pinned` — default empty. Pinned selection-panel entities (managed via the map's Pin buttons — not normally hand-edited).
 - `tactical_map_show_auras` — default `true`. Draw [aura](auras.md) bounding spheres on the tactical map.
+- `aura_show_in_world` — default `true`. Draw the [aura](auras.md) pulse in the normal flight view.
 - `aura_affects_root` — default `false`. Whether an Aura Projector also applies its aura to its own ship (rail root).
 
 ## system_config.yml (Server-synced)

@@ -16,8 +16,6 @@ import org.schema.game.server.ai.ShipAIEntity;
 import org.schema.game.server.ai.program.common.TargetProgram;
 import org.schema.schine.graphicsengine.core.Timer;
 import videogoose.combattweaks.CombatTweaks;
-import videogoose.combattweaks.manager.ConfigManager;
-import org.schema.game.common.controller.elements.armorhp.ArmorHPCollection;
 import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
 import videogoose.combattweaks.system.weapon.auradisruptor.AuraDisruptorBeamCollectionManager;
 import videogoose.combattweaks.system.weapon.auradisruptor.AuraDisruptorBeamElementManager;
@@ -29,8 +27,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListener {
 
-	/** Per-target wall-clock (ms) of the last Armor HP restore tick, so the refill is rate-correct under varying tick timing. */
-	private final Map<Integer, Long> lastArmorRepair = new ConcurrentHashMap<>();
 	/** Per-target wall-clock (ms) of the last damaged-block re-scan, throttled so the structure isn't iterated every tick. */
 	private final Map<Integer, Long> lastBlockScan = new ConcurrentHashMap<>();
 	private static final long BLOCK_RESCAN_INTERVAL_MS = 3000;
@@ -58,9 +54,6 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 						}
 					}
 					SegmentController repairTarget = getRepairTarget(shipAIEntity);
-					// The engine repair beam only mends reactor/blocks; recharge the target's Armor HP pool too
-					// (the main thing combat actually depletes, and what survives a restart).
-					restoreArmorHP(repairTarget);
 					// Re-record reduced-HP blocks while actually on station: the order-time scan often runs before
 					// the target's far segments load, so it misses most damage. Throttled, main-thread (safe to
 					// iterate segments here), and idempotent (healed blocks read full HP and aren't re-added).
@@ -84,30 +77,6 @@ public class ShipAIShootListenerImpl implements ShipAIEntityAttemptToShootListen
 		}
 		lastBlockScan.put(target.getId(), now);
 		AIUtils.recordExistingBlockDamage(target);
-	}
-
-	/** Restores a slice of the target's Armor HP, sized by the configured per-second fraction and real elapsed time. */
-	private void restoreArmorHP(SegmentController target) {
-		if(target == null) {
-			return;
-		}
-		try {
-			ArmorHPCollection armor = ArmorHPCollection.getCollection(target);
-			if(armor == null || armor.getMaxHP() <= 0 || armor.getCurrentHP() >= armor.getMaxHP()) {
-				lastArmorRepair.remove(target.getId());
-				return;
-			}
-			long now = System.currentTimeMillis();
-			Long last = lastArmorRepair.put(target.getId(), now);
-			if(last == null) {
-				return; // first repair tick on this target — establish the time baseline, restore from next tick
-			}
-			double elapsedSec = Math.min(1.0, (now - last) / 1000.0); // clamp so a lag spike can't dump a huge heal
-			double fraction = ConfigManager.getSystemConfig().armorHpRepairFractionPerSecond.getValue();
-			armor.setCurrentHP(armor.getCurrentHP() + fraction * armor.getMaxHP() * elapsedSec);
-		} catch(Exception exception) {
-			CombatTweaks.getInstance().logException("Error restoring armor HP during repair", exception);
-		}
 	}
 
 	private SegmentController getRepairTarget(ShipAIEntity shipAIEntity) {

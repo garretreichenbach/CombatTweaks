@@ -1,7 +1,6 @@
 package videogoose.combattweaks.manager;
 
 import api.render.texture.StarLoaderTexture;
-import org.schema.schine.graphicsengine.shader.Shader;
 import org.schema.schine.graphicsengine.texture.TGALoader;
 import videogoose.combattweaks.CombatTweaks;
 
@@ -11,7 +10,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 
 /**
- * Loads and caches the mod's GPU resources: block textures, build icons, UI sprites and shaders.
+ * Loads and caches the mod's GPU resources: block textures, build icons, and UI sprites.
  * <p>
  * Block art lives in {@code 16x16}-tile atlases ({@code textures/atlas0.png} + its {@code _NRM} normal map,
  * {@code icons/icons0.png}). Each tile is sliced out into a {@link StarLoaderTexture} indexed by its grid
@@ -27,17 +26,10 @@ public class ResourceManager {
 
 	private static final HashMap<Integer, StarLoaderTexture> textures = new HashMap<>();
 	private static final HashMap<Integer, StarLoaderTexture> icons = new HashMap<>();
-	private static final HashMap<String, Shader> shaderMap = new HashMap<>();
 
 	public static void loadResources(CombatTweaks instance) {
 		loadAtlas(instance, "atlas0");
 		loadIcons(instance, "icons0");
-		// Shaders DO need the GL context, so those stay on the graphics thread.
-		StarLoaderTexture.runOnGraphicsThread(() -> {
-			loadShader(instance, "tactical_ring");
-			loadShader(instance, "selection_outline");
-			loadShader(instance, "selection_tint");
-		});
 	}
 
 	private static void loadAtlas(CombatTweaks instance, String atlasName) {
@@ -74,18 +66,7 @@ public class ResourceManager {
 		}
 	}
 
-	private static void loadShader(CombatTweaks instance, String shaderName) {
-		try {
-			Shader shader = Shader.newModShader(instance.getSkeleton(), shaderName, instance.getClass().getResourceAsStream("/shaders/" + shaderName + ".vert"), instance.getClass().getResourceAsStream("/shaders/" + shaderName + ".frag"));
-			shaderMap.put(shaderName, shader);
-		} catch(Exception exception) {
-			instance.logException("Failed to load shader: " + shaderName, exception);
-		}
-	}
 
-	public static Shader getShader(String shaderName) {
-		return shaderMap.get(shaderName);
-	}
 
 	public static short getTextureID(int index) {
 		StarLoaderTexture t = textures.get(index);

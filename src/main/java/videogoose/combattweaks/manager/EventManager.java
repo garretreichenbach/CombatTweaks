@@ -9,6 +9,7 @@ import api.event.input.KeyPressListener;
 import api.event.lifecycle.ManagerContainerRegisterListener;
 import api.event.lifecycle.RegisterAddonsListener;
 import api.event.lifecycle.RegisterConfigGroupsListener;
+import api.event.lifecycle.ServerInitializeListener;
 import api.event.render.RegisterWorldDrawersListener;
 import api.event.systems.CustomAddOnUseListener;
 import api.event.systems.ReactorRecalibrateListener;
@@ -131,6 +132,9 @@ public class EventManager {
 				AuraProjectorAddOn.recalibrateAll(controller, implementation);
 			}
 		}, instance);
+
+		// Entity ids are reused across worlds, so drop auras/claims left over from a previous server in this JVM.
+		ServerInitializeListener.TYPE.register((controller, serverState, isServer) -> AuraManager.getInstance().reset(), instance);
 
 		RegisterWorldDrawersListener.TYPE.register((worldDrawer, drawers, isServer) -> {
 			if(TacticalMapGUIDrawer.getInstance() == null) {

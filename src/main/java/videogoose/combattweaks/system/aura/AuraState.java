@@ -23,6 +23,10 @@ public class AuraState {
 	public int auraKind = KIND_SUPPORT;
 	/** currentPower/maxPower (0..1) — drives draw intensity so disrupted auras render fainter. */
 	public float powerFraction = 1.0f;
+	/** Pool hit zero and is regenerating; the projector can't be re-activated yet. Sent with radius 0. */
+	public boolean collapsed;
+	/** Total mass of ships currently affected — lets the client match the server's power draw. */
+	public float targetMass;
 
 	public AuraState(int entityId) {
 		this.entityId = entityId;

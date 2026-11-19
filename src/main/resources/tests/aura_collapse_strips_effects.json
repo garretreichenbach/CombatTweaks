@@ -1,0 +1,125 @@
+{
+  "id": "aura/collapse_strips_effects",
+  "timeout": 900,
+  "faction": 900001,
+  "blocks": [
+    {
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        1,
+        1,
+        1
+      ],
+      "block": "REACTOR_POWER"
+    },
+    {
+      "from": [
+        2,
+        0,
+        0
+      ],
+      "to": [
+        3,
+        0,
+        0
+      ],
+      "block": "REACTOR_CONDUIT",
+      "orient": 4
+    },
+    {
+      "at": [
+        4,
+        0,
+        0
+      ],
+      "block": "videogoose.combattweaks~Support Aura"
+    },
+    {
+      "from": [
+        5,
+        0,
+        0
+      ],
+      "to": [
+        6,
+        0,
+        0
+      ],
+      "block": "REACTOR_CONDUIT",
+      "orient": 4
+    },
+    {
+      "at": [
+        7,
+        0,
+        0
+      ],
+      "block": "videogoose.combattweaks~Shield Aura Capacity 1"
+    }
+  ],
+  "aura": [
+    {
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "activate": true,
+      "collapseWhenCovering": true
+    }
+  ],
+  "entities": [
+    {
+      "id": "ally",
+      "offset": [
+        0,
+        0,
+        60
+      ],
+      "faction": 900001,
+      "blocks": [
+        {
+          "from": [
+            0,
+            0,
+            0
+          ],
+          "to": [
+            1,
+            1,
+            1
+          ],
+          "block": "REACTOR_POWER"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "entity": "ally",
+      "aura": [
+        0,
+        0,
+        0
+      ],
+      "measure": "cleared",
+      "group": "SHIELD_AURA_CAPACITY_EFFECT_1",
+      "count": 1,
+      "by": 900
+    },
+    {
+      "aura": [
+        0,
+        0,
+        0
+      ],
+      "measure": "recovering",
+      "count": 1,
+      "by": 900
+    }
+  ]
+}

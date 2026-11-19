@@ -1,5 +1,7 @@
 package videogoose.combattweaks;
 
+import api.event.faction.FactionRelationQueryListener;
+import org.schema.game.server.test.world.WorldTests;
 import api.block.BlockConfig;
 import api.mod.StarMod;
 import api.network.packets.PacketUtil;
@@ -15,6 +17,7 @@ import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.manager.*;
 import videogoose.combattweaks.network.client.*;
 import videogoose.combattweaks.network.server.SendAuraSyncPacket;
+import videogoose.combattweaks.test.AuraWorldTests;
 import videogoose.combattweaks.network.server.SendIncomingSignaturesPacket;
 
 import java.util.Collections;
@@ -53,6 +56,9 @@ public class CombatTweaks extends StarMod {
 		RepairManager.getInstance(); // Initialize repair manager
 		IncomingSignatureManager.getInstance(); // Initialize incoming-signature detector
 		AuraManager.getInstance(); // Initialize aura broadcaster
+		// In-world tests (/run_tests aura/*): the "aura" setup/expect keys and the test factions' relations.
+		WorldTests.addExtension(new AuraWorldTests());
+		FactionRelationQueryListener.TYPE.register(AuraWorldTests.RELATIONS, this);
 		registerPackets();
 		overwriteTextures();
 	}

@@ -1,0 +1,222 @@
+{
+  "id": "aura/no_stacking",
+  "timeout": 900,
+  "faction": 900001,
+  "blocks": [
+    {
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        1,
+        1,
+        1
+      ],
+      "block": "REACTOR_POWER"
+    },
+    {
+      "from": [
+        2,
+        0,
+        0
+      ],
+      "to": [
+        3,
+        0,
+        0
+      ],
+      "block": "REACTOR_CONDUIT",
+      "orient": 4
+    },
+    {
+      "at": [
+        4,
+        0,
+        0
+      ],
+      "block": "videogoose.combattweaks~Support Aura"
+    },
+    {
+      "from": [
+        5,
+        0,
+        0
+      ],
+      "to": [
+        6,
+        0,
+        0
+      ],
+      "block": "REACTOR_CONDUIT",
+      "orient": 4
+    },
+    {
+      "at": [
+        7,
+        0,
+        0
+      ],
+      "block": "videogoose.combattweaks~Shield Aura Capacity 1"
+    }
+  ],
+  "aura": [
+    {
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "activate": true
+    }
+  ],
+  "entities": [
+    {
+      "id": "ally",
+      "offset": [
+        0,
+        0,
+        60
+      ],
+      "faction": 900001,
+      "blocks": [
+        {
+          "from": [
+            0,
+            0,
+            0
+          ],
+          "to": [
+            1,
+            1,
+            1
+          ],
+          "block": "REACTOR_POWER"
+        }
+      ]
+    },
+    {
+      "id": "support2",
+      "offset": [
+        0,
+        0,
+        120
+      ],
+      "faction": 900001,
+      "blocks": [
+        {
+          "from": [
+            0,
+            0,
+            0
+          ],
+          "to": [
+            1,
+            1,
+            1
+          ],
+          "block": "REACTOR_POWER"
+        },
+        {
+          "from": [
+            2,
+            0,
+            0
+          ],
+          "to": [
+            3,
+            0,
+            0
+          ],
+          "block": "REACTOR_CONDUIT",
+          "orient": 4
+        },
+        {
+          "at": [
+            4,
+            0,
+            0
+          ],
+          "block": "videogoose.combattweaks~Support Aura"
+        },
+        {
+          "from": [
+            5,
+            0,
+            0
+          ],
+          "to": [
+            6,
+            0,
+            0
+          ],
+          "block": "REACTOR_CONDUIT",
+          "orient": 4
+        },
+        {
+          "at": [
+            7,
+            0,
+            0
+          ],
+          "block": "videogoose.combattweaks~Shield Aura Capacity 1"
+        }
+      ],
+      "aura": [
+        {
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "activate": true
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "aura": [
+        0,
+        0,
+        0
+      ],
+      "measure": "active",
+      "count": 1,
+      "by": 600
+    },
+    {
+      "entity": "support2",
+      "aura": [
+        0,
+        0,
+        0
+      ],
+      "measure": "active",
+      "count": 1,
+      "by": 600
+    },
+    {
+      "entity": "ally",
+      "aura": [
+        0,
+        0,
+        0
+      ],
+      "measure": "covered_by",
+      "count": 1,
+      "by": 900
+    },
+    {
+      "entity": "ally",
+      "aura": [
+        0,
+        0,
+        0
+      ],
+      "measure": "covered_by",
+      "max": 1
+    }
+  ]
+}

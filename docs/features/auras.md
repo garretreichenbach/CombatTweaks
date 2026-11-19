@@ -9,21 +9,54 @@ There are two roles, and a ship can run only **one** of them (the base chambers 
 
 ## Building a projector
 
-Install the base chamber for the role you want, then add its sub-chambers:
+Aura chambers hang off two placeable general chambers this mod adds: the **Reactor Support Chamber** and the **Reactor Offense Chamber**. Like vanilla chambers, each one needs a **Reactor Conduit** path back to the reactor; you then pick what it becomes in the **Reactor Menu** (`Insert`). A chamber whose conduit runs from another chamber, instead of from the reactor, is a child of that chamber and can only be specified from its branch of the tree.
 
-**Support Aura** (support tree)
+**Support Aura** (Reactor Support Chamber tree)
 
-- **Support Aura** — the base chamber. Required; sets the aura's base range.
-- **Shield Aura Capacity 1 / 2** — increase the shield capacity of allies inside the sphere.
-- **Support Aura Range Boost 1 / 2** — enlarge the sphere.
+- **Support Aura** — the base chamber. Required; projects the field and sets its base range.
+    - **Shield Aura Capacity 1 → 2** — a child of Support Aura: raises the shield capacity of allies inside the sphere. Tier 2 is an upgrade of tier 1.
+- **Support Aura Range Boost 1 → 2** — a separate branch off the Reactor Support Chamber: enlarges the sphere.
 
-**Offense Aura** (offense tree)
+```scene
+{ "height": 300,
+  "blocks": [ { "from": [0,0,0], "to": [2,2,2], "block": "REACTOR_POWER" } ],
+  "steps": [
+    { "text": "Start from your reactor.", "blocks": [] },
+    { "text": "Run a Reactor Conduit out of the reactor to a Reactor Support Chamber, then specify it as Support Aura in the reactor menu. This is the projector.",
+      "blocks": [ { "from": [1,3,1], "to": [1,4,1], "block": "REACTOR_CONDUIT", "orient": 2 },
+                  { "from": [0,5,0], "to": [2,5,2], "block": "videogoose.combattweaks~Reactor Support Chamber" } ] },
+    { "text": "A conduit from the Support Aura chamber to a second Reactor Support Chamber makes it a child of the aura: specify it as Shield Aura Capacity 1, and upgrade it to 2 later.",
+      "blocks": [ { "from": [1,6,1], "to": [1,7,1], "block": "REACTOR_CONDUIT", "orient": 2 },
+                  { "from": [0,8,0], "to": [2,8,2], "block": "videogoose.combattweaks~Reactor Support Chamber" } ] },
+    { "text": "Range Boost branches off the Reactor Support Chamber itself, so give it its own conduit line from the reactor.",
+      "blocks": [ { "from": [3,1,1], "to": [4,1,1], "block": "REACTOR_CONDUIT", "orient": 4 },
+                  { "from": [5,0,0], "to": [5,2,2], "block": "videogoose.combattweaks~Reactor Support Chamber" } ] } ] }
+```
 
-- **Offense Aura** — the base chamber. Required; sets the aura's base range.
-- **Targeting Jammer 1 / 2** — degrade the AI targeting accuracy of enemies inside the sphere (see [ECW](#electronic-warfare-ecw)).
-- **Offense Aura Range Boost 1 / 2** — enlarge the sphere.
+**Offense Aura** (Reactor Offense Chamber tree)
 
-Once built, the aura is a player-activatable ability like other reactor chamber effects — activate it to project the field, deactivate to drop it.
+- **Offense Aura** — the base chamber. Required; projects the field and sets its base range.
+    - **Targeting Jammer Aura 1 → 2** — children of Offense Aura: degrade the AI targeting accuracy of enemies inside the sphere (see [ECW](#electronic-warfare-ecw)).
+- **Offense Aura Range Boost 1 → 2** — a separate branch off the Reactor Offense Chamber: enlarges the sphere.
+
+```scene
+{ "height": 300,
+  "blocks": [ { "from": [0,0,0], "to": [2,2,2], "block": "REACTOR_POWER" } ],
+  "steps": [
+    { "text": "The Offense Aura is built the same way, from Reactor Offense Chambers. Conduit to one and specify it as Offense Aura.",
+      "blocks": [ { "from": [1,3,1], "to": [1,4,1], "block": "REACTOR_CONDUIT", "orient": 2 },
+                  { "from": [0,5,0], "to": [2,5,2], "block": "videogoose.combattweaks~Reactor Offense Chamber" } ] },
+    { "text": "Chain a child chamber off the aura and specify it as Targeting Jammer Aura 1 (upgrade to 2 later).",
+      "blocks": [ { "from": [1,6,1], "to": [1,7,1], "block": "REACTOR_CONDUIT", "orient": 2 },
+                  { "from": [0,8,0], "to": [2,8,2], "block": "videogoose.combattweaks~Reactor Offense Chamber" } ] },
+    { "text": "Offense Aura Range Boost gets its own line from the reactor, like the support version.",
+      "blocks": [ { "from": [3,1,1], "to": [4,1,1], "block": "REACTOR_CONDUIT", "orient": 4 },
+                  { "from": [5,0,0], "to": [5,2,2], "block": "videogoose.combattweaks~Reactor Offense Chamber" } ] } ] }
+```
+
+Support Aura and Offense Aura are **mutually exclusive**: a ship can project one or the other, never both.
+
+Once built, the aura is a player-activatable ability like other reactor chamber effects — activate it to project the field, deactivate to drop it. AI-controlled ships turn theirs on by themselves when something in range qualifies.
 
 ## Range
 
@@ -47,14 +80,14 @@ Because it only touches **AI-controlled** fire, a manually-piloted ship is immun
 
 ## Shutting an aura down
 
-Every active projector maintains an **aura power** pool. When it runs out, the aura drops until it regenerates (`aura_regen_percent_per_update`, default `5%` per update). There are two ways to drain it:
+Every projector maintains an **aura power** pool equal to its aura chamber's HP. When it runs out, the aura **collapses**: its effects drop immediately and it can't be re-activated until the pool has regenerated to full (`aura_regen_percent_per_update`, default `5%` of max per update, whether or not the aura is up). Reactor changes don't refill the pool. There are two ways to drain it:
 
 - **Attrition** — damaging the projecting ship bleeds aura power in proportion to the hit (`aura_damage_attrition_factor`, default `0.05`). Focus fire on the projector and its aura collapses.
 - **Aura Disruptor** — a dedicated support beam that drains aura power directly without having to break the hull. See the [Aura Disruptor](aura-disruptor.md) page.
 
 ## On the tactical map
 
-Active auras render as translucent bounding spheres around their projector, so you can spot an enemy projector and prioritize it. Support auras are colored by faction relation (friendly/neutral/hostile); Offense auras read as a distinct orange "danger" sphere regardless of who casts them. The sphere fades as the aura's power is drained, giving a visual read on how close it is to collapsing. Toggle them with `tactical_map_show_auras`.
+Active auras render as translucent bounding spheres around their projector, so you can spot an enemy projector and prioritize it. Support auras are colored by faction relation (friendly/neutral/hostile); Offense auras read as a distinct orange "danger" sphere regardless of who casts them. The sphere fades as the aura's power is drained, giving a visual read on how close it is to collapsing. Each aura also emits a pulse — a shell expanding from the projector to the sphere's edge every couple of seconds — both on the map and in the normal flight view, so you can see an aura you're flying into. Toggle the map spheres with `tactical_map_show_auras` and the in-world pulse with `aura_show_in_world`.
 
 ## HUD indicator
 

@@ -9,6 +9,17 @@ The Aura Disruptor is a computer + module weapon group, like other beam weapons:
 - **Aura Disruptor Computer** — the control block; bind a group of modules to it.
 - **Aura Disruptor Module** — the beam emitters. More modules = more disruptor power per shot.
 
+```scene
+{ "height": 240,
+  "blocks": [ { "at": [0,0,1], "block": "videogoose.combattweaks~Aura Disruptor Computer" } ],
+  "steps": [
+    { "text": "Place an Aura Disruptor Computer.", "blocks": [] },
+    { "text": "Build a group of Aura Disruptor Modules and link them to the computer (select the computer with C, link with V). Click the computer here to see its links.",
+      "blocks": [ { "from": [1,0,0], "to": [4,0,2], "block": "videogoose.combattweaks~Aura Disruptor Module", "controller": [0,0,1] } ] },
+    { "text": "More modules mean more drain per shot, and more reactor power while firing.",
+      "blocks": [ { "from": [1,1,0], "to": [4,1,2], "block": "videogoose.combattweaks~Aura Disruptor Module", "controller": [0,0,1] } ] } ] }
+```
+
 It fires as a support beam (it deals no block damage) and consumes reactor power while firing (`aura_disruptor_beam_power_consumption_per_unit`, default `12` per module).
 
 ## What it does

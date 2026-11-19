@@ -6,9 +6,6 @@ import api.config.simpleconfig.SimpleConfigDouble;
 
 public class SystemConfig extends SimpleConfigContainer {
 
-	public final SimpleConfigDouble armorHpRepairFractionPerSecond =
-			new SimpleConfigDouble(this, "armor_hp_repair_fraction_per_second", 0.05, "Fraction of a repair target's max Armor HP restored per second by an active repair beam (0.05 = 5%/s, ~20s from empty to full).");
-
 	public final SimpleConfigDouble auraBaseChamberRangeSet =
 			new SimpleConfigDouble(this, "aura_base_chamber_range_set", 0.2, "Base aura range set by the Aura Projector chamber, as a fraction of sector size.");
 
@@ -29,7 +26,7 @@ public class SystemConfig extends SimpleConfigContainer {
 			new SimpleConfigDouble(this, "aura_disruptor_power_multiplier", 1.5, "Multiplier applied to Aura Disruptor beam power when draining a projector's aura power.");
 
 	public final SimpleConfigDouble auraRegenPercentPerUpdate =
-			new SimpleConfigDouble(this, "aura_regen_percent_per_update", 0.05, "Fraction of current aura power regenerated each projector update tick.");
+			new SimpleConfigDouble(this, "aura_regen_percent_per_update", 0.05, "Fraction of max aura power regenerated each projector update (300 ticks), whether or not the aura is up. A collapsed aura can't be re-activated until it is full again.");
 
 	public final SimpleConfigDouble auraMinSizePercent =
 			new SimpleConfigDouble(this, "aura_min_size_percent", 0.15, "Minimum projector/target reactor-level ratio for an aura to affect a ship (smaller ships can't aura much larger ones).");

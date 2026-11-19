@@ -134,6 +134,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private static final Vector4f AURA_OFFENSE = new Vector4f(1.0f, 0.5f, 0.1f, 1.0f);
 	/** Base alpha for the translucent aura sphere fill (scaled by aura power). */
 	private static final float AURA_FILL_ALPHA = 0.12f;
+	/** One pulse: a shell expanding from the projector to the aura's edge over this many ms, fading as it goes. */
+	private static final long AURA_PULSE_PERIOD_MS = 2500;
+	/** Peak pulse-shell alpha on the tactical map / in the world view (in-world is fainter: it washes over the screen). */
+	private static final float AURA_PULSE_ALPHA_MAP = 0.22f;
+	private static final float AURA_PULSE_ALPHA_WORLD = 0.10f;
 	private static TacticalMapGUIDrawer instance;
 	public final Vector3f labelOffset;
 	public final ConcurrentHashMap<Integer, TacticalMapEntityIndicator> drawMap = new ConcurrentHashMap<>();
@@ -144,6 +149,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private final javax.vecmath.Matrix3f crBasisT = new javax.vecmath.Matrix3f();
 	private final Vector3f crCamPos = new Vector3f();
 	private final Transform relTransform = new Transform();
+	private final Transform shellTransform = new Transform();
 	/**
 	 * Camera world position captured for the current dotted-line batch.
 	 */
@@ -216,7 +222,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private boolean initialized;
 	private boolean firstTime = true;
 	private long updateTimer;
-	private TacticalMapShaderOverlay shaderOverlay;
 	/** The game camera that was active when the map was opened, restored verbatim on close. */
 	private Camera previousCamera;
 	private int lastKnownWidth = -1;
@@ -238,35 +243,35 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Emits 12 GL_LINES edges of an axis-aligned bounding box. Must be called inside a GL_LINES begin/end or standalone.
 	 */
 	private static void drawAABBLines(float x0, float y0, float z0, float x1, float y1, float z1) {
-		GL11.glBegin(GL11.GL_LINES);
+		Immediate.begin(GL11.GL_LINES);
 		// Bottom face
-		GL11.glVertex3f(x0, y0, z0);
-		GL11.glVertex3f(x1, y0, z0);
-		GL11.glVertex3f(x1, y0, z0);
-		GL11.glVertex3f(x1, y0, z1);
-		GL11.glVertex3f(x1, y0, z1);
-		GL11.glVertex3f(x0, y0, z1);
-		GL11.glVertex3f(x0, y0, z1);
-		GL11.glVertex3f(x0, y0, z0);
+		Immediate.vertex(x0, y0, z0);
+		Immediate.vertex(x1, y0, z0);
+		Immediate.vertex(x1, y0, z0);
+		Immediate.vertex(x1, y0, z1);
+		Immediate.vertex(x1, y0, z1);
+		Immediate.vertex(x0, y0, z1);
+		Immediate.vertex(x0, y0, z1);
+		Immediate.vertex(x0, y0, z0);
 		// Top face
-		GL11.glVertex3f(x0, y1, z0);
-		GL11.glVertex3f(x1, y1, z0);
-		GL11.glVertex3f(x1, y1, z0);
-		GL11.glVertex3f(x1, y1, z1);
-		GL11.glVertex3f(x1, y1, z1);
-		GL11.glVertex3f(x0, y1, z1);
-		GL11.glVertex3f(x0, y1, z1);
-		GL11.glVertex3f(x0, y1, z0);
+		Immediate.vertex(x0, y1, z0);
+		Immediate.vertex(x1, y1, z0);
+		Immediate.vertex(x1, y1, z0);
+		Immediate.vertex(x1, y1, z1);
+		Immediate.vertex(x1, y1, z1);
+		Immediate.vertex(x0, y1, z1);
+		Immediate.vertex(x0, y1, z1);
+		Immediate.vertex(x0, y1, z0);
 		// Vertical edges
-		GL11.glVertex3f(x0, y0, z0);
-		GL11.glVertex3f(x0, y1, z0);
-		GL11.glVertex3f(x1, y0, z0);
-		GL11.glVertex3f(x1, y1, z0);
-		GL11.glVertex3f(x1, y0, z1);
-		GL11.glVertex3f(x1, y1, z1);
-		GL11.glVertex3f(x0, y0, z1);
-		GL11.glVertex3f(x0, y1, z1);
-		GL11.glEnd();
+		Immediate.vertex(x0, y0, z0);
+		Immediate.vertex(x0, y1, z0);
+		Immediate.vertex(x1, y0, z0);
+		Immediate.vertex(x1, y1, z0);
+		Immediate.vertex(x1, y0, z1);
+		Immediate.vertex(x1, y1, z1);
+		Immediate.vertex(x0, y0, z1);
+		Immediate.vertex(x0, y1, z1);
+		Immediate.end();
 	}
 
 	private static Vector4f signatureColor(int relation) {
@@ -339,7 +344,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	private Vector3f loadCameraRelativeModelview() {
-		Transform view = camera.lookAt(false); // compute view (rotation + -basis*eye), don't load it
+		return loadCameraRelativeModelview(camera);
+	}
+
+	private Vector3f loadCameraRelativeModelview(Camera cam) {
+		Transform view = cam.lookAt(false); // compute view (rotation + -basis*eye), don't load it
 		crBasisT.set(view.basis);
 		crBasisT.transpose();
 		crCamPos.set(view.origin);
@@ -380,7 +389,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	/**
 	 * Replace the active-aura set (called from the aura sync packet on the client). Keyed by projecting
-	 * entity id so {@link #drawAuraSpheres()} can look each up against the on-screen entity indicators.
+	 * entity id so {@link #drawAuras} can look each up by projector.
 	 */
 	public void setActiveAuras(java.util.List<AuraState> auras) {
 		java.util.Map<Integer, AuraState> map = new java.util.HashMap<>();
@@ -532,9 +541,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
 		placeCamPos.set(loadCameraRelativeModelview());
-		GL11.glLineWidth(2.0f);
+		GlUtil.glLineWidth(2.0f);
 		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
-		GL11.glDepthMask(false);
+		GlUtil.glDepthMask(false);
 
 		// Range rings on the reference plane around the fleet centroid, each labelled with its distance.
 		if(placeFleetCentroidValid && s > 0) {
@@ -555,21 +564,21 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawPlanarCircle(placeX, placePlaneY, placeZ, markerR, 1.0f, 1.0f, 1.0f, 0.7f);
 			if(placeFleetCentroidValid) {
 				GlUtil.glColor4f(0.6f, 0.8f, 1.0f, 0.5f);
-				GlUtil.glBegin(GL11.GL_LINES);
-				GL11.glVertex3f(placeFleetCentroid.x - placeCamPos.x, placePlaneY - placeCamPos.y, placeFleetCentroid.z - placeCamPos.z);
-				GL11.glVertex3f(placeX - placeCamPos.x, placePlaneY - placeCamPos.y, placeZ - placeCamPos.z);
-				GlUtil.glEnd();
+				Immediate.begin(GL11.GL_LINES);
+				Immediate.vertex(placeFleetCentroid.x - placeCamPos.x, placePlaneY - placeCamPos.y, placeFleetCentroid.z - placeCamPos.z);
+				Immediate.vertex(placeX - placeCamPos.x, placePlaneY - placeCamPos.y, placeZ - placeCamPos.z);
+				Immediate.end();
 			}
 			// Vertical stalk from the plane to the chosen height + a marker at the destination point.
 			GlUtil.glColor4f(0.3f, 1.0f, 0.45f, 0.9f);
-			GlUtil.glBegin(GL11.GL_LINES);
-			GL11.glVertex3f(placeX - placeCamPos.x, placePlaneY - placeCamPos.y, placeZ - placeCamPos.z);
-			GL11.glVertex3f(placeX - placeCamPos.x, placeY - placeCamPos.y, placeZ - placeCamPos.z);
-			GlUtil.glEnd();
+			Immediate.begin(GL11.GL_LINES);
+			Immediate.vertex(placeX - placeCamPos.x, placePlaneY - placeCamPos.y, placeZ - placeCamPos.z);
+			Immediate.vertex(placeX - placeCamPos.x, placeY - placeCamPos.y, placeZ - placeCamPos.z);
+			Immediate.end();
 			drawPlanarCircle(placeX, placeY, placeZ, markerR, 0.3f, 1.0f, 0.45f, 0.9f);
 		}
 
-		GL11.glDepthMask(true);
+		GlUtil.glDepthMask(true);
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GlUtil.glPopMatrix(); // modelview
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
@@ -587,15 +596,15 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	/** A horizontal circle (in the XZ plane at world height {@code cyWorld}), drawn camera-relative. */
 	private void drawPlanarCircle(float cx, float cyWorld, float cz, float r, float cr, float cg, float cb, float ca) {
 		GlUtil.glColor4f(cr, cg, cb, ca);
-		GlUtil.glBegin(GL11.GL_LINE_LOOP);
+		Immediate.begin(GL11.GL_LINE_LOOP);
 		int seg = 48;
 		for(int i = 0; i < seg; i++) {
 			double ang = 2.0 * Math.PI * i / seg;
 			float x = cx + (float) Math.cos(ang) * r;
 			float z = cz + (float) Math.sin(ang) * r;
-			GL11.glVertex3f(x - placeCamPos.x, cyWorld - placeCamPos.y, z - placeCamPos.z);
+			Immediate.vertex(x - placeCamPos.x, cyWorld - placeCamPos.y, z - placeCamPos.z);
 		}
-		GlUtil.glEnd();
+		Immediate.end();
 	}
 
 	/**
@@ -633,7 +642,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glPushMatrix();
 		GlUtil.glMultMatrix(t);
 		float scale = Math.max(1.0f, s * 0.0009f); // world height of the text
-		GL11.glScalef(scale, -scale, scale);       // flip Y so the text isn't upside-down on the plane
+		GlUtil.scaleModelview(scale, -scale, scale);       // flip Y so the text isn't upside-down on the plane
 		GUITextOverlay o = TacticalMapIndicatorPool.getInstance().acquireLabelOverlay();
 		o.setTextSimple(txt);
 		o.updateTextSize();
@@ -683,16 +692,10 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	public void addSelection(TacticalMapEntityIndicator indicator) {
 		selectedEntities.add(indicator.getEntity());
-		if(shaderOverlay != null) {
-			shaderOverlay.addSelected(indicator.getEntity());
-		}
 	}
 
 	public void removeSelection(TacticalMapEntityIndicator indicator) {
 		selectedEntities.remove(indicator.getEntity());
-		if(shaderOverlay != null) {
-			shaderOverlay.removeSelected(indicator.getEntity());
-		}
 	}
 
 	public void removeAll() {
@@ -748,23 +751,14 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	public void addTurretSelection(Ship turret) {
 		selectedTurrets.put(turret.getId(), turret);
-		if(shaderOverlay != null) {
-			shaderOverlay.addSelectedTurret(turret);
-		}
 	}
 
 	public void removeTurretSelection(Ship turret) {
 		selectedTurrets.remove(turret.getId());
-		if(shaderOverlay != null) {
-			shaderOverlay.removeSelectedTurret(turret);
-		}
 	}
 
 	public void clearSelectedTurrets() {
 		selectedTurrets.clear();
-		if(shaderOverlay != null) {
-			shaderOverlay.clearSelectedTurrets();
-		}
 	}
 
 	public boolean isTurretSelected(Ship turret) {
@@ -901,7 +895,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		selectedPos.x = ByteUtil.modU16(selectedPos.x);
 		selectedPos.y = ByteUtil.modU16(selectedPos.y);
 		selectedPos.z = ByteUtil.modU16(selectedPos.z);
-		GlUtil.glBegin(GL11.GL_LINES);
+		Immediate.begin(GL11.GL_LINES);
 		float size = spacing * 3;
 		float end = (start + (1.0f / 3.0f) * size);
 		float lineAlpha;
@@ -917,57 +911,57 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				lineAlphaB = 0;
 			}
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f(selectedPos.x * spacing, selectedPos.y * spacing, start);
+			Immediate.vertex(selectedPos.x * spacing, selectedPos.y * spacing, start);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f(selectedPos.x * spacing, selectedPos.y * spacing, end);
+			Immediate.vertex(selectedPos.x * spacing, selectedPos.y * spacing, end);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f(start, selectedPos.y * spacing, selectedPos.z * spacing);
+			Immediate.vertex(start, selectedPos.y * spacing, selectedPos.z * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f(end, selectedPos.y * spacing, selectedPos.z * spacing);
+			Immediate.vertex(end, selectedPos.y * spacing, selectedPos.z * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f(selectedPos.x * spacing, start, selectedPos.z * spacing);
+			Immediate.vertex(selectedPos.x * spacing, start, selectedPos.z * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f(selectedPos.x * spacing, end, selectedPos.z * spacing);
+			Immediate.vertex(selectedPos.x * spacing, end, selectedPos.z * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f(selectedPos.x * spacing, (selectedPos.y + 1) * spacing, start);
+			Immediate.vertex(selectedPos.x * spacing, (selectedPos.y + 1) * spacing, start);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f(selectedPos.x * spacing, (selectedPos.y + 1) * spacing, end);
+			Immediate.vertex(selectedPos.x * spacing, (selectedPos.y + 1) * spacing, end);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f(start, (selectedPos.y) * spacing, (selectedPos.z + 1) * spacing);
+			Immediate.vertex(start, (selectedPos.y) * spacing, (selectedPos.z + 1) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f(end, (selectedPos.y) * spacing, (selectedPos.z + 1) * spacing);
+			Immediate.vertex(end, (selectedPos.y) * spacing, (selectedPos.z + 1) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f((selectedPos.x) * spacing, start, (selectedPos.z + 1) * spacing);
+			Immediate.vertex((selectedPos.x) * spacing, start, (selectedPos.z + 1) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f((selectedPos.x) * spacing, end, (selectedPos.z + 1) * spacing);
+			Immediate.vertex((selectedPos.x) * spacing, end, (selectedPos.z + 1) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f((selectedPos.x + 1) * spacing, (selectedPos.y) * spacing, start);
+			Immediate.vertex((selectedPos.x + 1) * spacing, (selectedPos.y) * spacing, start);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f((selectedPos.x + 1) * spacing, (selectedPos.y) * spacing, end);
+			Immediate.vertex((selectedPos.x + 1) * spacing, (selectedPos.y) * spacing, end);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f(start, (selectedPos.y + 1) * spacing, (selectedPos.z) * spacing);
+			Immediate.vertex(start, (selectedPos.y + 1) * spacing, (selectedPos.z) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f(end, (selectedPos.y + 1) * spacing, (selectedPos.z) * spacing);
+			Immediate.vertex(end, (selectedPos.y + 1) * spacing, (selectedPos.z) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f((selectedPos.x + 1) * spacing, start, (selectedPos.z) * spacing);
+			Immediate.vertex((selectedPos.x + 1) * spacing, start, (selectedPos.z) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f((selectedPos.x + 1) * spacing, end, (selectedPos.z) * spacing);
+			Immediate.vertex((selectedPos.x + 1) * spacing, end, (selectedPos.z) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f((selectedPos.x + 1) * spacing, (selectedPos.y + 1) * spacing, start);
+			Immediate.vertex((selectedPos.x + 1) * spacing, (selectedPos.y + 1) * spacing, start);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f((selectedPos.x + 1) * spacing, (selectedPos.y + 1) * spacing, end);
+			Immediate.vertex((selectedPos.x + 1) * spacing, (selectedPos.y + 1) * spacing, end);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f(start, (selectedPos.y + 1) * spacing, (selectedPos.z + 1) * spacing);
+			Immediate.vertex(start, (selectedPos.y + 1) * spacing, (selectedPos.z + 1) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f(end, (selectedPos.y + 1) * spacing, (selectedPos.z + 1) * spacing);
+			Immediate.vertex(end, (selectedPos.y + 1) * spacing, (selectedPos.z + 1) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlpha);
-			GL11.glVertex3f((selectedPos.x + 1) * spacing, start, (selectedPos.z + 1) * spacing);
+			Immediate.vertex((selectedPos.x + 1) * spacing, start, (selectedPos.z + 1) * spacing);
 			GlUtil.glColor4fForced(1, 1, 1, lineAlphaB);
-			GL11.glVertex3f((selectedPos.x + 1) * spacing, end, (selectedPos.z + 1) * spacing);
+			Immediate.vertex((selectedPos.x + 1) * spacing, end, (selectedPos.z + 1) * spacing);
 			end += (1.0f / 3.0f) * size;
 			start += (1.0f / 3.0f) * size;
 		}
-		GlUtil.glEnd();
+		Immediate.end();
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPopMatrix();
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
@@ -988,8 +982,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		camera = new TacticalMapCamera();
 		camera.reset();
 		camera.alwaysAllowWheelZoom = true;
-		shaderOverlay = new TacticalMapShaderOverlay();
-		shaderOverlay.onInit();
 		// create FBO now that we're initialising within a (likely) GL context
 		hud = GameClient.getClientState().getWorldDrawer().getGuiDrawer().getHud().getHelpManager();
 		initialized = true;
@@ -1021,9 +1013,6 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 		}
 		selectedEntities.clear();
-		if(shaderOverlay != null) {
-			shaderOverlay.clearSelected();
-		}
 		clearSelectedTurrets(); // keep the turret highlight in lockstep with the order selection
 	}
 
@@ -1365,8 +1354,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
 		pathCamPos.set(loadCameraRelativeModelview()); // capture camera pos for this batch; endpoints drawn relative to it
-		GL11.glLineWidth(2.0f); // Make paths more visible
-		GlUtil.glBegin(GL11.GL_LINES);
+		GlUtil.glLineWidth(2.0f); // Make paths more visible
+		Immediate.begin(GL11.GL_LINES);
 	}
 
 	/**
@@ -1403,8 +1392,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			b.set(dottedDirN);
 			b.scale(segEnd);
 			// Camera-relative: subtract the captured camera position so GPU coords stay small (precision).
-			GL11.glVertex3f(from.x - pathCamPos.x + a.x, from.y - pathCamPos.y + a.y, from.z - pathCamPos.z + a.z);
-			GL11.glVertex3f(from.x - pathCamPos.x + b.x, from.y - pathCamPos.y + b.y, from.z - pathCamPos.z + b.z);
+			Immediate.vertex(from.x - pathCamPos.x + a.x, from.y - pathCamPos.y + a.y, from.z - pathCamPos.z + a.z);
+			Immediate.vertex(from.x - pathCamPos.x + b.x, from.y - pathCamPos.y + b.y, from.z - pathCamPos.z + b.z);
 		}
 	}
 
@@ -1412,8 +1401,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 * Restores GL state after drawing dotted lines.
 	 */
 	private void endDrawDottedLine() {
-		GlUtil.glEnd();
-		GL11.glLineWidth(1.0f); // Restore line width
+		Immediate.end();
+		GlUtil.glLineWidth(1.0f); // Restore line width
 		GlUtil.glPopMatrix();
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
@@ -1466,7 +1455,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawSectorGrid();
 			drawIncomingSignatureLines();
 			drawBoundingBoxWireframes();
-			drawAuraSpheres();
+			drawAuras(camera, false);
 			drawPaths();
 			drawPlacementPreview();
 			drawLabels();
@@ -1477,7 +1466,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawConfigPanel();
 			drawSectorReadout();
 			drawDragSelectRect();
-			GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+			GlUtil.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		} else {
+			drawAuras(Controller.getCamera(), true);
 		}
 		drawHudIndicators();
 	}
@@ -1502,7 +1493,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			int dw = fw[0];
 			int dh = fh[0];
 			if(dw > 0 && dh > 0 && (dw != GLFrame.getWidth() || dh != GLFrame.getHeight())) {
-				GL11.glViewport(0, 0, dw, dh);
+				GlUtil.glViewport(0, 0, dw, dh);
 				Controller.onViewportChange();
 			}
 		} catch(Exception ignored) {
@@ -1544,9 +1535,13 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GL_MODELVIEW.clear();
 		GL_PROJECTION.clear();
 		GL_VIEWPORT.clear();
-		GL11.glGetFloatv(GL11.GL_MODELVIEW_MATRIX, GL_MODELVIEW);
-		GL11.glGetFloatv(GL11.GL_PROJECTION_MATRIX, GL_PROJECTION);
-		GL11.glGetIntegerv(GL11.GL_VIEWPORT, GL_VIEWPORT);
+		// GlUtil's mirrors, not glGet: there is no GL state to query on the Vulkan backend.
+		// (GlUtil.storeMatrix knows the engine's mCR matrix layout; a hand-written column-major store transposes it.)
+		GlUtil.storeMatrix(Controller.modelviewMatrix, GL_MODELVIEW);
+		GlUtil.storeMatrix(Controller.projectionMatrix, GL_PROJECTION);
+		GL_MODELVIEW.rewind();
+		GL_PROJECTION.rewind();
+		GlUtil.getViewport(GL_VIEWPORT);
 
 		GlUtil.glPopMatrix(); // modelview
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
@@ -1721,7 +1716,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
 		Vector3f camPos = loadCameraRelativeModelview();
-		GL11.glLineWidth(2.0f);
+		GlUtil.glLineWidth(2.0f);
 
 		// Pass 1: depth-tested — draw solid lines only where not occluded by geometry
 		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
@@ -1783,7 +1778,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 		}
 
-		GL11.glLineWidth(1.0f);
+		GlUtil.glLineWidth(1.0f);
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
 		GlUtil.glPopMatrix(); // modelview
@@ -1796,15 +1791,18 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	/**
-	 * Draws a bounding sphere around each in-sector ship that is projecting a combat aura, so players can see
-	 * who is auraing and target the projector. Rendered camera-relative like the bounding boxes (two passes:
-	 * solid where visible, faint where occluded), coloured by the projector's relation to the viewer and dimmed
-	 * as the aura's power is disrupted.
+	 * Draws every synced aura. On the tactical map: a translucent sphere at the aura's edge plus a pulse shell. In
+	 * the world view: only the pulse shell (a full sphere would tint the screen whenever you sit inside one).
+	 *
+	 * <p>Driven straight from the synced aura set, not the map's entity indicators, so a sphere stays drawn when its
+	 * projector is off-screen, in a neighbouring sector, or filtered out (turret mode). Rendered camera-relative;
+	 * depth-tested but not depth-written so the shells never occlude ships or each other. Coloured by the
+	 * projector's relation to the viewer and dimmed as the aura's power is drained.</p>
 	 */
-	private void drawAuraSpheres() {
+	private void drawAuras(Camera cam, boolean inWorld) {
 		ensureCfgInit();
 		java.util.Map<Integer, AuraState> auras = activeAuras;
-		if(auras.isEmpty() || !cfgAuras) {
+		if(auras.isEmpty() || cam == null || !(inWorld ? ConfigManager.getMainConfig().auraShowInWorld.getValue() : cfgAuras)) {
 			return;
 		}
 		GlUtil.glDisable(GL11.GL_LIGHTING);
@@ -1812,37 +1810,55 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glEnable(GL11.GL_COLOR_MATERIAL);
 		GlUtil.glEnable(GL11.GL_BLEND);
 		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		// The map sets up its own projection; in the world pass the engine's scene projection is already loaded and
+		// matches the backend's clip/depth conventions (a GL-style perspective here fails the depth test on Vulkan).
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
 		GlUtil.glPushMatrix();
-		float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
-		GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
+		if(!inWorld) {
+			float aspect = (float) GLFrame.getWidth() / GLFrame.getHeight();
+			GlUtil.gluPerspective(Controller.projectionMatrix, sceneFov(), aspect, SCENE_NEAR_PLANE, sceneFarPlane(), true);
+		}
 		GlUtil.glMatrixMode(GL11.GL_MODELVIEW);
 		GlUtil.glPushMatrix();
 		GlUtil.glLoadIdentity();
-		Vector3f camPos = loadCameraRelativeModelview();
+		Vector3f camPos = loadCameraRelativeModelview(cam);
 		int myFac = GameClient.getClientPlayerState().getFactionId();
+		SimpleTransformableSendableObject<?> viewer = GameClient.getCurrentControl() instanceof SimpleTransformableSendableObject<?> c ? c : null;
+		long now = System.currentTimeMillis();
 
-		// Translucent shell: render both faces (we may be inside the sphere) and don't write depth, so the
-		// fill never occludes markers or z-fights with the ship; keep depth TEST so nearer solids cut it.
+		// Both faces (we may be inside the sphere), no depth write (never occlude markers or z-fight the ship),
+		// depth TEST kept so nearer solids cut the shells.
 		GlUtil.glDisable(GL11.GL_CULL_FACE);
 		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
-		GL11.glDepthMask(false);
-		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
-			if(!indicator.screenPosValid) continue;
-			SegmentController e = indicator.getEntity();
-			if(e == null) continue;
-			AuraState a = auras.get(e.getId());
-			if(a == null || a.radius <= 0.0f) continue;
+		GlUtil.glDepthMask(false);
+		AuraShellRenderer shells = AuraShellRenderer.get();
+		boolean shaderBound = shells.begin();
+		for(AuraState a : auras.values()) {
+			if(!shaderBound) break;
+			if(a.radius <= 0.0f) continue;
+			if(!(GameClient.getClientState().getLocalAndRemoteObjectContainer().getLocalObjects().get(a.entityId) instanceof SegmentController e)) continue;
+			if(e.isCloakedFor(viewer)) continue;
+			Transform t = e.getWorldTransformOnClient();
+			if(t == null) continue;
 			Vector4f base = auraColor(e, a, myFac);
 			float power = Math.max(0.0f, Math.min(1.0f, a.powerFraction));
-			GlUtil.glPushMatrix();
-			multCameraRelative(indicator.entityTransform, camPos);
-			GlUtil.glColor4f(base.x, base.y, base.z, AURA_FILL_ALPHA * (0.5f + 0.5f * power));
-			drawSolidSphere(a.radius, 16, 24);
-			GlUtil.glPopMatrix();
+			float dim = 0.5f + 0.5f * power;
+			if(!inWorld) {
+				drawShell(shells, t, camPos, a.radius, base, AURA_FILL_ALPHA * dim);
+			}
+			// Pulse: phase offset per projector so overlapping auras don't beat in lockstep. Radius eases out so the
+			// shell is quick near the ship and slows at the edge; alpha fades in briefly then out toward the edge.
+			float phase = (float) ((now + (long) a.entityId * 397L) % AURA_PULSE_PERIOD_MS) / AURA_PULSE_PERIOD_MS;
+			float eased = 1.0f - (1.0f - phase) * (1.0f - phase);
+			float fade = Math.min(1.0f, phase * 8.0f) * (1.0f - phase);
+			float peak = inWorld ? AURA_PULSE_ALPHA_WORLD : AURA_PULSE_ALPHA_MAP;
+			drawShell(shells, t, camPos, a.radius * (0.1f + 0.9f * eased), base, peak * fade * dim);
+		}
+		if(shaderBound) {
+			shells.end();
 		}
 
-		GL11.glDepthMask(true);
+		GlUtil.glDepthMask(true);
 		GlUtil.glEnable(GL11.GL_CULL_FACE);
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GlUtil.glPopMatrix(); // modelview
@@ -1870,28 +1886,17 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	}
 
 	/**
-	 * Emits three orthogonal great circles (the classic wireframe-sphere gizmo) of the given radius, centred at
-	 * the current modelview origin. Cheap and reads clearly as a sphere from any angle on the tactical map.
+	 * One aura shell of the given radius around {@code projector}, camera-relative: the radius rides in the
+	 * transform's basis (a sphere doesn't care about rotation), so the unit mesh needs no per-shell geometry.
 	 */
-	/**
-	 * Emits a filled UV sphere of radius {@code r} as latitude/longitude quad strips, centred at the current
-	 * modelview origin. Meant to be drawn translucently (blend on, depth-write off, cull off).
-	 */
-	private static void drawSolidSphere(float r, int lat, int lon) {
-		for(int i = 0; i < lat; i++) {
-			double lat0 = Math.PI * (-0.5 + (double) i / lat);
-			double lat1 = Math.PI * (-0.5 + (double) (i + 1) / lat);
-			float y0 = (float) Math.sin(lat0), rad0 = (float) Math.cos(lat0);
-			float y1 = (float) Math.sin(lat1), rad1 = (float) Math.cos(lat1);
-			GL11.glBegin(GL11.GL_QUAD_STRIP);
-			for(int j = 0; j <= lon; j++) {
-				double lng = 2.0 * Math.PI * (double) j / lon;
-				float x = (float) Math.cos(lng), z = (float) Math.sin(lng);
-				GL11.glVertex3f(r * x * rad0, r * y0, r * z * rad0);
-				GL11.glVertex3f(r * x * rad1, r * y1, r * z * rad1);
-			}
-			GL11.glEnd();
-		}
+	private void drawShell(AuraShellRenderer shells, Transform projector, Vector3f camPos, float radius, Vector4f color, float alpha) {
+		shellTransform.setIdentity();
+		shellTransform.basis.mul(radius);
+		shellTransform.origin.sub(projector.origin, camPos);
+		GlUtil.glPushMatrix();
+		GlUtil.glMultMatrix(shellTransform);
+		shells.draw(color.x, color.y, color.z, alpha);
+		GlUtil.glPopMatrix();
 	}
 
 	/**
@@ -1931,7 +1936,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glLoadIdentity();
 		Vector3f camPos = loadCameraRelativeModelview();
 		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
-		GL11.glLineWidth(1.0f);
+		GlUtil.glLineWidth(1.0f);
 
 		// Sector the camera currently sits in (centre-at-origin convention: index = round(coord / s)).
 		int csx = Math.round(camPos.x / s);
@@ -1949,7 +1954,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		float fadeDist = (range + 1.0f) * s; // vertices beyond this are fully transparent
 
-		GlUtil.glBegin(GL11.GL_LINES);
+		Immediate.begin(GL11.GL_LINES);
 		// Segments parallel to X, between adjacent x-faces, at every (y,z) boundary intersection.
 		for(int j = 0; j < faceCount; j++) {
 			for(int k = 0; k < faceCount; k++) {
@@ -1977,7 +1982,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				}
 			}
 		}
-		GlUtil.glEnd();
+		Immediate.end();
 
 		// Dotted sub-grid dividing the sector the camera is over into subsectors (chessboard-style cells).
 		if(subsectorDivisions() >= 2) {
@@ -2025,9 +2030,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		float fadeDist = 1.25f * s; // sub-grid belongs to one sector; fade it out within ~a sector
 
-		GL11.glEnable(GL11.GL_LINE_STIPPLE);
-		GL11.glLineStipple(2, (short) 0xAAAA); // fine dotted pattern
-		GlUtil.glBegin(GL11.GL_LINES);
+		Immediate.dashes(4, 0.5f); // fine dotted pattern (line stipple has no Vulkan equivalent)
+		Immediate.begin(GL11.GL_LINES);
 		float xLo = gx[0], xHi = gx[n], yLo = gy[0], yHi = gy[n], zLo = gz[0], zHi = gz[n];
 		// Faces perpendicular to X (the two y/z faces): grid lines parallel to Y and to Z.
 		for(float xf : new float[]{xLo, xHi}) {
@@ -2044,8 +2048,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			for(int j = 0; j <= n; j++) subGridLine(xLo, gy[j], zf, xHi, gy[j], zf, n, camPos, fadeDist);
 			for(int i = 0; i <= n; i++) subGridLine(gx[i], yLo, zf, gx[i], yHi, zf, n, camPos, fadeDist);
 		}
-		GlUtil.glEnd();
-		GL11.glDisable(GL11.GL_LINE_STIPPLE);
+		Immediate.end();
 	}
 
 	/**
@@ -2077,7 +2080,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		float dist = (float) Math.sqrt(rx * rx + ry * ry + rz * rz);
 		float t = fadeDist > 0 ? Math.max(0.0f, 1.0f - dist / fadeDist) : 1.0f;
 		GlUtil.glColor4fForced(col.x, col.y, col.z, col.w * t);
-		GL11.glVertex3f(rx, ry, rz);
+		Immediate.vertex(rx, ry, rz);
 	}
 
 	/**
@@ -2262,12 +2265,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glLoadIdentity();
 		Vector3f camPos = loadCameraRelativeModelview();
 		GlUtil.glEnable(GL11.GL_DEPTH_TEST);
-		GL11.glLineWidth(2.0f);
-		GL11.glEnable(GL11.GL_LINE_STIPPLE);
-		GL11.glLineStipple(3, (short) 0x7777);
+		GlUtil.glLineWidth(2.0f);
+		Immediate.dashes(12, 0.75f); // 3-on/1-off streak pattern (line stipple has no Vulkan equivalent)
 
 		long now = System.currentTimeMillis();
-		GlUtil.glBegin(GL11.GL_LINES);
+		Immediate.begin(GL11.GL_LINES);
 		for(IncomingSignature sig : sigs) {
 			if(drawMap.containsKey(sig.id)) {
 				continue;
@@ -2288,9 +2290,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				float ux = sig.vel.x / speed, uy = sig.vel.y / speed, uz = sig.vel.z / speed;
 				float streak = Math.max(s * 0.2f, Math.min(s * 1.2f, speed * 6.0f));
 				GlUtil.glColor4fForced(col.x, col.y, col.z, a * 0.06f); // faint tail toward origin
-				GL11.glVertex3f(cx - ux * streak, cy - uy * streak, cz - uz * streak);
+				Immediate.vertex(cx - ux * streak, cy - uy * streak, cz - uz * streak);
 				GlUtil.glColor4fForced(col.x, col.y, col.z, a); // bright head at current position
-				GL11.glVertex3f(cx, cy, cz);
+				Immediate.vertex(cx, cy, cz);
 			} else {
 				// Stationary contact (e.g. freshly jumped in): a faint bearing line toward your sector centre.
 				float len = sig.relPos.length();
@@ -2300,14 +2302,13 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				float ux = sig.relPos.x / len, uy = sig.relPos.y / len, uz = sig.relPos.z / len;
 				float seg = Math.min(len, s * 0.4f);
 				GlUtil.glColor4fForced(col.x, col.y, col.z, a);
-				GL11.glVertex3f(cx, cy, cz);
+				Immediate.vertex(cx, cy, cz);
 				GlUtil.glColor4fForced(col.x, col.y, col.z, a * 0.06f);
-				GL11.glVertex3f(cx - ux * seg, cy - uy * seg, cz - uz * seg);
+				Immediate.vertex(cx - ux * seg, cy - uy * seg, cz - uz * seg);
 			}
 		}
-		GlUtil.glEnd();
-		GL11.glDisable(GL11.GL_LINE_STIPPLE);
-		GL11.glLineWidth(1.0f);
+		Immediate.end();
+		GlUtil.glLineWidth(1.0f);
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GlUtil.glPopMatrix(); // modelview
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
@@ -2621,20 +2622,20 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private void drawHpBar(float x, float y, float w, float h, double frac, Vector4f col) {
 		float f = (float) Math.clamp(frac, 0.0, 1.0);
 		GlUtil.glColor4fForced(0.18f, 0.2f, 0.24f, 0.85f);
-		GL11.glBegin(GL11.GL_QUADS);
-		GL11.glVertex2f(x, y);
-		GL11.glVertex2f(x + w, y);
-		GL11.glVertex2f(x + w, y + h);
-		GL11.glVertex2f(x, y + h);
-		GL11.glEnd();
+		Immediate.begin(GL11.GL_QUADS);
+		Immediate.vertex(x, y);
+		Immediate.vertex(x + w, y);
+		Immediate.vertex(x + w, y + h);
+		Immediate.vertex(x, y + h);
+		Immediate.end();
 		if(f > 0.0f) {
 			GlUtil.glColor4fForced(col.x, col.y, col.z, col.w);
-			GL11.glBegin(GL11.GL_QUADS);
-			GL11.glVertex2f(x, y);
-			GL11.glVertex2f(x + w * f, y);
-			GL11.glVertex2f(x + w * f, y + h);
-			GL11.glVertex2f(x, y + h);
-			GL11.glEnd();
+			Immediate.begin(GL11.GL_QUADS);
+			Immediate.vertex(x, y);
+			Immediate.vertex(x + w * f, y);
+			Immediate.vertex(x + w * f, y + h);
+			Immediate.vertex(x, y + h);
+			Immediate.end();
 		}
 	}
 
@@ -2978,8 +2979,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		if(!collapsed) {
 			// Clip the scrolling rows to the area below the header so they don't spill past it.
 			if(scrollable) {
-				GL11.glEnable(GL11.GL_SCISSOR_TEST);
-				GL11.glScissor((int) panelLeft, (int) (GLFrame.getHeight() - (panelTop + panelH)), (int) panelW, (int) (visibleH + pad));
+				GlUtil.glEnable(GL11.GL_SCISSOR_TEST);
+				GlUtil.glScissor((int) panelLeft, (int) (GLFrame.getHeight() - (panelTop + panelH)), (int) panelW, (int) (visibleH + pad));
 			}
 			float startY = rowsTop - st.scroll;
 
@@ -3039,7 +3040,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			}
 
 			if(scrollable) {
-				GL11.glDisable(GL11.GL_SCISSOR_TEST);
+				GlUtil.glDisable(GL11.GL_SCISSOR_TEST);
 				// Scrollbar track + thumb on the right edge (geometry stored so the thumb can be dragged).
 				float sbX = panelLeft + panelW - pad - scrollbarW;
 				float trackTop = rowsTop;
@@ -3226,22 +3227,22 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private void drawRoundedRect(float x, float y, float w, float h, float r, Vector4f col) {
 		r = Math.min(r, Math.min(w, h) * 0.5f);
 		GlUtil.glColor4fForced(col.x, col.y, col.z, col.w);
-		GL11.glBegin(GL11.GL_TRIANGLE_FAN);
-		GL11.glVertex2f(x + w * 0.5f, y + h * 0.5f); // centre
+		Immediate.begin(GL11.GL_TRIANGLE_FAN);
+		Immediate.vertex(x + w * 0.5f, y + h * 0.5f); // centre
 		final int cseg = 5;
 		// Trace the perimeter clockwise (screen y is down): TL, TR, BR, BL corner arcs.
 		roundedCorner(x + r, y + r, r, (float) Math.PI, (float) (1.5 * Math.PI), cseg);       // top-left
 		roundedCorner(x + w - r, y + r, r, (float) (1.5 * Math.PI), (float) (2.0 * Math.PI), cseg); // top-right
 		roundedCorner(x + w - r, y + h - r, r, 0.0f, (float) (0.5 * Math.PI), cseg);            // bottom-right
 		roundedCorner(x + r, y + h - r, r, (float) (0.5 * Math.PI), (float) Math.PI, cseg);     // bottom-left
-		GL11.glVertex2f(x, y + r); // close back to the top-left arc start
-		GL11.glEnd();
+		Immediate.vertex(x, y + r); // close back to the top-left arc start
+		Immediate.end();
 	}
 
 	private void roundedCorner(float cx, float cy, float r, float a0, float a1, int seg) {
 		for(int i = 0; i <= seg; i++) {
 			float a = a0 + (a1 - a0) * i / seg;
-			GL11.glVertex2f(cx + (float) Math.cos(a) * r, cy + (float) Math.sin(a) * r);
+			Immediate.vertex(cx + (float) Math.cos(a) * r, cy + (float) Math.sin(a) * r);
 		}
 	}
 
@@ -3249,15 +3250,15 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	private void strokeRoundedRect(float x, float y, float w, float h, float r, Vector4f col) {
 		r = Math.min(r, Math.min(w, h) * 0.5f);
 		GlUtil.glColor4fForced(col.x, col.y, col.z, col.w);
-		GL11.glLineWidth(1.5f);
-		GL11.glBegin(GL11.GL_LINE_LOOP);
+		GlUtil.glLineWidth(1.5f);
+		Immediate.begin(GL11.GL_LINE_LOOP);
 		final int cseg = 5;
 		roundedCorner(x + r, y + r, r, (float) Math.PI, (float) (1.5 * Math.PI), cseg);
 		roundedCorner(x + w - r, y + r, r, (float) (1.5 * Math.PI), (float) (2.0 * Math.PI), cseg);
 		roundedCorner(x + w - r, y + h - r, r, 0.0f, (float) (0.5 * Math.PI), cseg);
 		roundedCorner(x + r, y + h - r, r, (float) (0.5 * Math.PI), (float) Math.PI, cseg);
-		GL11.glEnd();
-		GL11.glLineWidth(1.0f);
+		Immediate.end();
+		GlUtil.glLineWidth(1.0f);
 	}
 
 	/** Label for a config row, including its current value. */
@@ -3376,7 +3377,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GlUtil.glDisable(GL11.GL_DEPTH_TEST);
 		GlUtil.glEnable(GL11.GL_BLEND);
 		GlUtil.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-		GL11.glLineWidth(3.0f);
+		GlUtil.glLineWidth(3.0f);
 		for(TacticalMapEntityIndicator indicator : drawMap.values()) {
 			if(!indicator.screenPosValid || indicator.getEntity() == null) {
 				continue;
@@ -3397,7 +3398,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			drawHpRing(cx, cy, HP_RING_ARMOR_R, tmpHp.armorMax > 0 ? tmpHp.armorCur / tmpHp.armorMax : 0, HP_ARMOR);
 			drawHpRing(cx, cy, HP_RING_SHIELD_R, tmpHp.shieldMax > 0 ? tmpHp.shieldCur / tmpHp.shieldMax : 0, HP_SHIELD);
 		}
-		GL11.glLineWidth(1.0f);
+		GlUtil.glLineWidth(1.0f);
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GUIElement.disableOrthogonal();
 	}
@@ -3412,12 +3413,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		final float start = (float) (-Math.PI / 2.0); // 12 o'clock
 		// Background ring.
 		GlUtil.glColor4f(0.08f, 0.09f, 0.11f, 0.5f);
-		GL11.glBegin(GL11.GL_LINE_LOOP);
+		Immediate.begin(GL11.GL_LINE_LOOP);
 		for(int i = 0; i < seg; i++) {
 			float a = start + tau * i / seg;
-			GL11.glVertex2f(cx + (float) Math.cos(a) * radius, cy + (float) Math.sin(a) * radius);
+			Immediate.vertex(cx + (float) Math.cos(a) * radius, cy + (float) Math.sin(a) * radius);
 		}
-		GL11.glEnd();
+		Immediate.end();
 		// Filled arc.
 		float f = (float) Math.max(0.0, Math.min(1.0, frac));
 		if(f <= 0.0f) {
@@ -3425,12 +3426,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 		int fillSeg = Math.max(1, Math.round(seg * f));
 		GlUtil.glColor4f(col.x, col.y, col.z, col.w);
-		GL11.glBegin(GL11.GL_LINE_STRIP);
+		Immediate.begin(GL11.GL_LINE_STRIP);
 		for(int i = 0; i <= fillSeg; i++) {
 			float a = start + tau * i / seg;
-			GL11.glVertex2f(cx + (float) Math.cos(a) * radius, cy + (float) Math.sin(a) * radius);
+			Immediate.vertex(cx + (float) Math.cos(a) * radius, cy + (float) Math.sin(a) * radius);
 		}
-		GL11.glEnd();
+		Immediate.end();
 	}
 
 	/**
@@ -3447,23 +3448,23 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 		// Semi-transparent fill
 		GlUtil.glColor4f(DRAG_FILL.x, DRAG_FILL.y, DRAG_FILL.z, DRAG_FILL.w);
-		GL11.glBegin(GL11.GL_QUADS);
-		GL11.glVertex2f(dragMinX, dragMinY);
-		GL11.glVertex2f(dragMaxX, dragMinY);
-		GL11.glVertex2f(dragMaxX, dragMaxY);
-		GL11.glVertex2f(dragMinX, dragMaxY);
-		GL11.glEnd();
+		Immediate.begin(GL11.GL_QUADS);
+		Immediate.vertex(dragMinX, dragMinY);
+		Immediate.vertex(dragMaxX, dragMinY);
+		Immediate.vertex(dragMaxX, dragMaxY);
+		Immediate.vertex(dragMinX, dragMaxY);
+		Immediate.end();
 
 		// Border
-		GL11.glLineWidth(1.5f);
+		GlUtil.glLineWidth(1.5f);
 		GlUtil.glColor4f(DRAG_BORDER.x, DRAG_BORDER.y, DRAG_BORDER.z, DRAG_BORDER.w);
-		GL11.glBegin(GL11.GL_LINE_LOOP);
-		GL11.glVertex2f(dragMinX, dragMinY);
-		GL11.glVertex2f(dragMaxX, dragMinY);
-		GL11.glVertex2f(dragMaxX, dragMaxY);
-		GL11.glVertex2f(dragMinX, dragMaxY);
-		GL11.glEnd();
-		GL11.glLineWidth(1.0f);
+		Immediate.begin(GL11.GL_LINE_LOOP);
+		Immediate.vertex(dragMinX, dragMinY);
+		Immediate.vertex(dragMaxX, dragMinY);
+		Immediate.vertex(dragMaxX, dragMaxY);
+		Immediate.vertex(dragMinX, dragMaxY);
+		Immediate.end();
+		GlUtil.glLineWidth(1.0f);
 
 		GlUtil.glColor4f(1, 1, 1, 1);
 		GlUtil.glDisable(GL11.GL_BLEND);

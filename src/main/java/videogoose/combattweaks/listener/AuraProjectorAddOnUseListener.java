@@ -1,18 +1,15 @@
 package videogoose.combattweaks.listener;
 
-import api.common.GameCommon;
 import api.event.systems.CustomAddOnUseListener;
-import api.entity.SegmentControllerUtils;
-import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.controller.elements.ShipManagerContainer;
 import org.schema.schine.graphicsengine.core.Timer;
-import org.schema.schine.network.objects.Sendable;
 import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
 
 /**
- * Activates a ship's Aura Projector when the player triggers the addon — but only if there's actually a
- * friendly ship in the sector for it to buff, so it doesn't fire (and drain power) for nothing.
+ * Lets AI-controlled ships activate their Aura Projector (fired from {@code ShipAIEntity}'s update), but only when
+ * something in range qualifies for the aura — friends for Support, enemies for Offense — so it doesn't fire (and
+ * drain power) for nothing.
  */
 public class AuraProjectorAddOnUseListener implements CustomAddOnUseListener {
 
@@ -21,30 +18,10 @@ public class AuraProjectorAddOnUseListener implements CustomAddOnUseListener {
 		if(entity.railController.isDocked()) {
 			return;
 		}
-		AuraProjectorAddOn auraProjectorAddOn = getAddOn(entity);
-		if(auraProjectorAddOn != null && auraProjectorAddOn.isPlayerUsable() && !auraProjectorAddOn.isActive()) {
-			if(checkForFriendlies(entity)) {
-				auraProjectorAddOn.executeModule();
-			}
+		// getActiveAura matches by instanceof; SegmentControllerUtils.getAddon matches the exact (abstract) class and never hits.
+		AuraProjectorAddOn aura = AuraProjectorAddOn.getActiveAura(entity);
+		if(aura != null) {
+			aura.tryAiActivate();
 		}
-	}
-
-	private boolean checkForFriendlies(Ship entity) {
-		try {
-			for(Sendable sendable : entity.getState().getLocalAndRemoteObjectContainer().getLocalObjects().values()) {
-				if(sendable instanceof SegmentController) {
-					SegmentController segmentController = (SegmentController) sendable;
-					if(segmentController.getFactionId() != 0 && entity.getFactionId() != 0 && (GameCommon.getGameState().getFactionManager().isFriend(entity.getFactionId(), segmentController.getFactionId()) || entity.getFactionId() == segmentController.getFactionId())) {
-						return true;
-					}
-				}
-			}
-		} catch(Exception ignored) {
-		}
-		return false;
-	}
-
-	private AuraProjectorAddOn getAddOn(Ship entity) {
-		return SegmentControllerUtils.getAddon(entity, AuraProjectorAddOn.class);
 	}
 }

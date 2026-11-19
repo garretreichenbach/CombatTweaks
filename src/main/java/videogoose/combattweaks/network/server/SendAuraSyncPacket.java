@@ -1,10 +1,13 @@
 package videogoose.combattweaks.network.server;
 
+import api.common.GameClient;
 import api.network.Packet;
 import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
+import org.schema.game.common.data.ManagedSegmentController;
 import org.schema.game.common.data.player.PlayerState;
 import videogoose.combattweaks.gui.tacticalmap.TacticalMapGUIDrawer;
+import videogoose.combattweaks.system.aura.AuraProjectorAddOn;
 import videogoose.combattweaks.system.aura.AuraState;
 
 import java.io.IOException;
@@ -36,6 +39,8 @@ public class SendAuraSyncPacket extends Packet {
 			a.radius = buf.readFloat();
 			a.auraKind = buf.readInt();
 			a.powerFraction = buf.readFloat();
+			a.collapsed = buf.readBoolean();
+			a.targetMass = buf.readFloat();
 			auras.add(a);
 		}
 	}
@@ -48,11 +53,21 @@ public class SendAuraSyncPacket extends Packet {
 			buf.writeFloat(a.radius);
 			buf.writeInt(a.auraKind);
 			buf.writeFloat(a.powerFraction);
+			buf.writeBoolean(a.collapsed);
+			buf.writeFloat(a.targetMass);
 		}
 	}
 
 	@Override
 	public void processPacketOnClient() {
+		for(AuraState a : auras) {
+			if(GameClient.getClientState().getLocalAndRemoteObjectContainer().getLocalObjects().get(a.entityId) instanceof ManagedSegmentController<?> ship) {
+				AuraProjectorAddOn addOn = AuraProjectorAddOn.getAuraOfKind(ship, a.auraKind);
+				if(addOn != null) {
+					addOn.applySync(a);
+				}
+			}
+		}
 		TacticalMapGUIDrawer drawer = TacticalMapGUIDrawer.getInstance();
 		if(drawer != null) {
 			drawer.setActiveAuras(auras);

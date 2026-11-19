@@ -1,0 +1,150 @@
+{
+  "id": "aura/offense_jams_enemy",
+  "timeout": 900,
+  "faction": 900001,
+  "blocks": [
+    {
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        1,
+        1,
+        1
+      ],
+      "block": "REACTOR_POWER"
+    },
+    {
+      "from": [
+        2,
+        0,
+        0
+      ],
+      "to": [
+        3,
+        0,
+        0
+      ],
+      "block": "REACTOR_CONDUIT",
+      "orient": 4
+    },
+    {
+      "at": [
+        4,
+        0,
+        0
+      ],
+      "block": "videogoose.combattweaks~Offense Aura"
+    },
+    {
+      "from": [
+        5,
+        0,
+        0
+      ],
+      "to": [
+        6,
+        0,
+        0
+      ],
+      "block": "REACTOR_CONDUIT",
+      "orient": 4
+    },
+    {
+      "at": [
+        7,
+        0,
+        0
+      ],
+      "block": "videogoose.combattweaks~Targeting Jammer Aura 1"
+    }
+  ],
+  "aura": [
+    {
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "activate": true,
+      "warWith": 900002
+    }
+  ],
+  "entities": [
+    {
+      "id": "enemy",
+      "offset": [
+        0,
+        0,
+        60
+      ],
+      "faction": 900002,
+      "blocks": [
+        {
+          "from": [
+            0,
+            0,
+            0
+          ],
+          "to": [
+            1,
+            1,
+            1
+          ],
+          "block": "REACTOR_POWER"
+        }
+      ]
+    },
+    {
+      "id": "friend",
+      "offset": [
+        0,
+        0,
+        120
+      ],
+      "faction": 900001,
+      "blocks": [
+        {
+          "from": [
+            0,
+            0,
+            0
+          ],
+          "to": [
+            1,
+            1,
+            1
+          ],
+          "block": "REACTOR_POWER"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "entity": "enemy",
+      "aura": [
+        0,
+        0,
+        0
+      ],
+      "measure": "effect",
+      "group": "TARGETING_JAMMER_AURA_EFFECT_1",
+      "count": 1,
+      "by": 900
+    },
+    {
+      "entity": "friend",
+      "aura": [
+        0,
+        0,
+        0
+      ],
+      "measure": "effect",
+      "group": "TARGETING_JAMMER_AURA_EFFECT_1",
+      "count": 0
+    }
+  ]
+}

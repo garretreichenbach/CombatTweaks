@@ -18,7 +18,8 @@
 		"BottomBarBuildMixin",
 		"FleetMiningMixin",
 		"FactionManagerMixin",
-		"Vector3fToolsMixin"
+		"Vector3fToolsMixin",
+		"ShipAuraAttritionMixin"
 	],
 	"client": [],
 	"server": []

@@ -3,23 +3,24 @@ package videogoose.combattweaks.manager;
 import api.common.GameServer;
 import api.network.packets.PacketUtil;
 import org.schema.game.common.controller.SegmentController;
+import org.schema.common.util.linAlg.Vector3i;
 import org.schema.game.common.data.player.PlayerState;
+import org.schema.game.common.data.world.Sector;
+import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.network.objects.Sendable;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.network.server.SendAuraSyncPacket;
 import videogoose.combattweaks.system.aura.AuraState;
+import videogoose.combattweaks.utils.ServerTicker;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Server-side registry + broadcaster of active auras. Each {@link videogoose.combattweaks.system.aura.AuraProjectorAddOn}
  * reports its current sphere here while active and clears it when it deactivates; this manager streams, per
- * tick, the auras in each player's sector to that player so the tactical map can draw them as bounding spheres.
+ * tick, the auras whose sphere can reach each player's sector to that player so the tactical map can draw them as bounding spheres.
  *
  * <p>Kept deliberately cheap: projectors push their own state (no full entity sweep), and we only prune entries
  * whose projector has unloaded. When no auras exist anywhere we send one clearing broadcast and then go quiet.</p>
@@ -39,17 +40,12 @@ public class AuraManager {
 	 * leaves range or the aura stops; stale claims (owner unloaded) are pruned each tick.
 	 */
 	private final ConcurrentHashMap<Long, Integer> claims = new ConcurrentHashMap<>();
-	private final ScheduledExecutorService scheduler;
 	/** True once we've broadcast the empty state to all players, so we don't spam empty packets while idle. */
 	private boolean clearedClients;
 
 	private AuraManager() {
-		scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-			Thread t = new Thread(r, "CombatTweaks-AuraManager");
-			t.setDaemon(true);
-			return t;
-		});
-		scheduler.scheduleAtFixedRate(this::tick, TICK_INTERVAL_MS, TICK_INTERVAL_MS, TimeUnit.MILLISECONDS);
+		// Server thread, not a private executor: the tick reads the live object/player maps and sends packets.
+		ServerTicker.every(TICK_INTERVAL_MS, this::tick);
 	}
 
 	public static AuraManager getInstance() {
@@ -94,22 +90,44 @@ public class AuraManager {
 		claims.remove(claimKey(targetId, kind), projectorId);
 	}
 
-	/** Release every claim held by this projector (called when its aura stops). */
-	public void releaseAll(int projectorId) {
-		claims.values().removeIf(owner -> owner == projectorId);
+	/** Forget all auras and claims. Called when a server (world) starts, since entity ids are reused across worlds. */
+	public void reset() {
+		active.clear();
+		claims.clear();
+		clearedClients = false;
 	}
 
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Whether an aura's sphere can reach into {@code playerSector}: its projector is within (radius / sector size,
+	 * rounded up, at least 1) sectors on every axis. Lets players see and feel auras straddling a sector border.
+	 */
+	private static boolean reaches(AuraState a, Vector3i playerSector) {
+		Sector sector = GameServer.getServerState().getUniverse().getSector(a.sectorId);
+		if(sector == null || playerSector == null) {
+			return false;
+		}
+		int sectorSize = (Integer) ServerConfig.SECTOR_SIZE.getCurrentState();
+		int reach = Math.max(1, (int) Math.ceil(a.radius / sectorSize));
+		return Math.abs(sector.pos.x - playerSector.x) <= reach
+				&& Math.abs(sector.pos.y - playerSector.y) <= reach
+				&& Math.abs(sector.pos.z - playerSector.z) <= reach;
+	}
 
 	private void tick() {
 		try {
 			if(GameServer.getServerState() == null) {
 				return;
 			}
-			// Drop auras whose projector has unloaded/despawned without an explicit clear.
-			active.keySet().removeIf(id -> {
-				Sendable s = GameServer.getServerState().getLocalAndRemoteObjectContainer().getLocalObjects().get(id);
-				return !(s instanceof SegmentController);
+			// Drop auras whose projector has unloaded/despawned without an explicit clear, and refresh the rest's
+			// sector live: projectors only report every few seconds and may have crossed a border since.
+			active.values().removeIf(a -> {
+				if(GameServer.getServerState().getLocalAndRemoteObjectContainer().getLocalObjects().get(a.entityId) instanceof SegmentController sc) {
+					a.sectorId = sc.getSectorId();
+					return false;
+				}
+				return true;
 			});
 			// Drop no-stacking claims whose owning projector has unloaded, so its targets free up for other auras.
 			claims.values().removeIf(ownerId -> {
@@ -120,7 +138,9 @@ public class AuraManager {
 			if(active.isEmpty()) {
 				if(!clearedClients) {
 					for(PlayerState p : GameServer.getServerState().getPlayerStatesByName().values()) {
-						PacketUtil.sendPacket(p, new SendAuraSyncPacket(new ArrayList<>()));
+						if(GameServer.getServerClient(p) != null) {
+							PacketUtil.sendPacket(p, new SendAuraSyncPacket(new ArrayList<>()));
+						}
 					}
 					clearedClients = true;
 				}
@@ -129,14 +149,18 @@ public class AuraManager {
 			clearedClients = false;
 
 			for(PlayerState p : GameServer.getServerState().getPlayerStatesByName().values()) {
-				int sector = p.getCurrentSectorId();
-				List<AuraState> inSector = new ArrayList<>();
+				// Players still logging in have no server client; sendPacket would throw and abort the whole tick.
+				if(GameServer.getServerClient(p) == null) {
+					continue;
+				}
+				Vector3i playerSector = p.getCurrentSector();
+				List<AuraState> nearby = new ArrayList<>();
 				for(AuraState a : active.values()) {
-					if(a.sectorId == sector) {
-						inSector.add(a);
+					if(a.sectorId == p.getCurrentSectorId() || reaches(a, playerSector)) {
+						nearby.add(a);
 					}
 				}
-				PacketUtil.sendPacket(p, new SendAuraSyncPacket(inSector));
+				PacketUtil.sendPacket(p, new SendAuraSyncPacket(nearby));
 			}
 		} catch(Exception e) {
 			CombatTweaks.getInstance().logException("AuraManager tick error", e);
