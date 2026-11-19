@@ -4,7 +4,7 @@ import api.common.GameCommon;
 import api.network.Packet;
 import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
-import api.utils.game.SegmentControllerUtils;
+import api.entity.SegmentControllerUtils;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.PlayerUsableInterface;
 import org.schema.game.common.controller.elements.effectblock.EffectAddOn;

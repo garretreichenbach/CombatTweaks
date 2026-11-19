@@ -1,8 +1,8 @@
 package videogoose.combattweaks.config;
 
 import api.mod.StarMod;
-import api.utils.simpleconfig.SimpleConfigContainer;
-import api.utils.simpleconfig.SimpleConfigDouble;
+import api.config.simpleconfig.SimpleConfigContainer;
+import api.config.simpleconfig.SimpleConfigDouble;
 
 public class SystemConfig extends SimpleConfigContainer {
 

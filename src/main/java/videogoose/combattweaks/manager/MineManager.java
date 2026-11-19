@@ -1,5 +1,6 @@
 package videogoose.combattweaks.manager;
 
+import videogoose.combattweaks.utils.ServerTicker;
 import api.common.GameCommon;
 import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.Ship;
@@ -12,9 +13,6 @@ import videogoose.combattweaks.utils.AIUtils;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Tracks mining assignments (ship -> asteroid).
@@ -31,15 +29,9 @@ public class MineManager {
 	private static MineManager instance;
 	/** Maps ship entity ID → asteroid entity ID. */
 	private final ConcurrentHashMap<Integer, Integer> assignments = new ConcurrentHashMap<>();
-	private final ScheduledExecutorService scheduler;
 
 	private MineManager() {
-		scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-			Thread t = new Thread(r, "CombatTweaks-MineManager");
-			t.setDaemon(true);
-			return t;
-		});
-		scheduler.scheduleAtFixedRate(this::tick, TICK_INTERVAL_SECONDS, TICK_INTERVAL_SECONDS, TimeUnit.SECONDS);
+		ServerTicker.every(TICK_INTERVAL_SECONDS * 1000L, this::tick);
 	}
 
 	public static MineManager getInstance() {

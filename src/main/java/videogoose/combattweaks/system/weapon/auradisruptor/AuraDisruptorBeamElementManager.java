@@ -1,7 +1,7 @@
 package videogoose.combattweaks.system.weapon.auradisruptor;
 
-import api.utils.game.module.CustomModuleUtils;
-import api.utils.sound.AudioUtils;
+import api.entity.module.CustomModuleUtils;
+import api.sound.AudioUtils;
 import com.bulletphysics.linearmath.Transform;
 import it.unimi.dsi.fastutil.shorts.ShortOpenHashSet;
 import org.schema.common.util.StringTools;

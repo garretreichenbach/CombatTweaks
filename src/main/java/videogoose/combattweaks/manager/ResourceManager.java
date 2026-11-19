@@ -1,6 +1,6 @@
 package videogoose.combattweaks.manager;
 
-import api.utils.textures.StarLoaderTexture;
+import api.render.texture.StarLoaderTexture;
 import org.schema.schine.graphicsengine.shader.Shader;
 import org.schema.schine.graphicsengine.texture.TGALoader;
 import videogoose.combattweaks.CombatTweaks;

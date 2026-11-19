@@ -17,6 +17,7 @@ import org.schema.game.common.data.element.ElementInformation;
 import org.schema.game.common.data.element.ElementKeyMap;
 import org.schema.game.common.data.player.PlayerState;
 import org.schema.schine.common.language.Lng;
+import org.schema.schine.network.server.ServerMessage;
 import org.schema.schine.graphicsengine.core.Timer;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
@@ -349,7 +350,7 @@ public class ArmorHPCollection extends ElementCollectionManager<ArmorHPUnit, Arm
 		currentHP = Math.max(0, Math.min(maxHP, hp));
 		if(!isOnServer() && currentHP == 0 && prev > 0) {
 			if(getSegmentController().isClientOwnObject()) {
-				GameClient.getClientState().message(Lng.astr("Armor integrity is fully compromised!"), 2);
+				GameClient.getClientState().message(new ServerMessage(Lng.astr("Armor integrity is fully compromised!"), ServerMessage.MESSAGE_TYPE_WARNING));
 			}
 		}
 	}

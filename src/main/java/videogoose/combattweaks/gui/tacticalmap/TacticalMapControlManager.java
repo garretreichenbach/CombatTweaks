@@ -4,9 +4,9 @@ import api.common.GameClient;
 import api.common.GameCommon;
 import api.network.packets.PacketUtil;
 import com.bulletphysics.linearmath.Transform;
-import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.Display;
+import org.schema.schine.input.Keyboard;
+import org.schema.schine.graphicsengine.core.GLFW;
+import org.schema.schine.input.Mouse;
 import org.schema.common.util.linAlg.Vector3fTools;
 import org.schema.game.client.controller.manager.AbstractControlManager;
 import org.schema.game.client.controller.manager.ingame.PlayerInteractionControlManager;
@@ -18,6 +18,7 @@ import org.schema.game.server.data.GameServerState;
 import org.schema.game.server.data.ServerConfig;
 import org.schema.schine.graphicsengine.camera.CameraMouseState;
 import org.schema.schine.graphicsengine.core.GLFrame;
+import org.schema.schine.graphicsengine.core.GraphicsContext;
 import org.schema.schine.graphicsengine.core.MouseEvent;
 import org.schema.schine.graphicsengine.core.Timer;
 import org.schema.schine.input.KeyEventInterface;
@@ -114,7 +115,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 
 	@Override
 	public void update(Timer timer) {
-		if(!Display.isActive()) {
+		if(!GraphicsContext.isFocused()) {
 			// Window lost focus — release mouse grab and reset stuck input state
 			CameraMouseState.setGrabbed(false);
 			wasLeftMouseDown = false;
@@ -168,8 +169,8 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	 */
 	private void handleMovementTaps() {
 		// Don't fire while a modifier owns the movement keys (Ctrl+A etc.), but keep edge state fresh.
-		boolean modifier = Keyboard.isKeyDown(Keyboard.KEY_LMETA) || Keyboard.isKeyDown(Keyboard.KEY_LCONTROL);
-		boolean shift = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT);
+		boolean modifier = Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_SUPER) || Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL);
+		boolean shift = Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT);
 		float s = guiDrawer.getSectorSize();
 		int div = Math.max(1, Math.min(8, (int) Math.round(ConfigManager.getMainConfig().tacticalMapSubsectorDivisions.getValue())));
 		float jumpDist = shift ? s : s / div;
@@ -410,17 +411,17 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			updateFocusTracking();
 			updateFaceRotation(timer.getDelta());
 			Vector3f movement = new Vector3f();
-			int amount = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) ? 1000 : 100;
-			if(Keyboard.isKeyDown(Keyboard.KEY_X)) {
+			int amount = Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT) ? 1000 : 100;
+			if(Keyboard.isKeyDown(GLFW.GLFW_KEY_X)) {
 				guiDrawer.camera.reset();
 				focusedEntityId = -1; // reset camera also stops tracking
 				faceAnimId = -1;
 				hasTrackPos = false;
 			}
 			// Edge-detected Ctrl+A / Ctrl+S commands
-			boolean aDown = Keyboard.isKeyDown(Keyboard.KEY_A);
-			boolean sDown = Keyboard.isKeyDown(Keyboard.KEY_S);
-			if(Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
+			boolean aDown = Keyboard.isKeyDown(GLFW.GLFW_KEY_A);
+			boolean sDown = Keyboard.isKeyDown(GLFW.GLFW_KEY_S);
+			if(Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
 				if(aDown && !wasADown) {
 					guiDrawer.toggleSelectAllFriendly();
 				} else if(sDown && !wasSDown) {
@@ -439,9 +440,9 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			wasSDown = sDown;
 
 			// Control groups: Ctrl+1..0 assigns the current selection to a group; 1..0 selects it (0 = group 10).
-			boolean ctrlForGroups = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL);
+			boolean ctrlForGroups = Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL);
 			for(int n = 1; n <= 10; n++) {
-				int key = n < 10 ? Keyboard.KEY_1 + (n - 1) : Keyboard.KEY_0;
+				int key = n < 10 ? GLFW.GLFW_KEY_1 + (n - 1) : GLFW.GLFW_KEY_0;
 				boolean down = Keyboard.isKeyDown(key);
 				if(down && !groupKeyWasDown[n]) {
 					if(ctrlForGroups) {
@@ -454,7 +455,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			}
 
 			// Skip camera movement when Ctrl or Meta is held to avoid conflicts with selection commands
-			if(!Keyboard.isKeyDown(Keyboard.KEY_LMETA) && !Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) {
+			if(!Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_SUPER) && !Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL)) {
 				if(Keyboard.isKeyDown(KeyboardMappings.FORWARD.getMapping())) {
 					movement.add(new Vector3f(0, 0, amount));
 				}
@@ -483,14 +484,15 @@ public class TacticalMapControlManager extends AbstractControlManager {
 			move(movement);
 			// Double-tap-to-jump is disabled — it triggered too easily during normal panning.
 			// handleMovementTaps();
-			if(Mouse.hasWheel() && Mouse.getEventDWheel() != 0 && guiDrawer.isOverSelectionPanel(Mouse.getX(), GLFrame.getHeight() - Mouse.getY())) {
+			int wheel = Mouse.getDWheel();
+			if(wheel != 0 && guiDrawer.isOverSelectionPanel(Mouse.getX(), GLFrame.getHeight() - Mouse.getY())) {
 				// Hovering a roster panel: scroll it instead of zooming the map.
-				guiDrawer.scrollSelectionPanel(Mouse.getX(), GLFrame.getHeight() - Mouse.getY(), Mouse.getEventDWheel() > 0 ? -48.0f : 48.0f);
-			} else if(Mouse.hasWheel() && Mouse.getEventDWheel() != 0) {
-				float wheelAmount = (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) ? 1000 : 100;
-				if(Mouse.getEventDWheel() == 0) {
+				guiDrawer.scrollSelectionPanel(Mouse.getX(), GLFrame.getHeight() - Mouse.getY(), wheel > 0 ? -48.0f : 48.0f);
+			} else if(wheel != 0) {
+				float wheelAmount = (Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT)) ? 1000 : 100;
+				if(wheel == 0) {
 					wheelAmount = 0;
-				} else if(Mouse.getEventDWheel() < 0) {
+				} else if(wheel < 0) {
 					wheelAmount *= -1;
 				}
 				float newRange = guiDrawer.selectedRange + wheelAmount;
@@ -643,7 +645,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	}
 
 	private boolean hasModifierKeyPressed() {
-		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_LMENU);
+		return Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT) || Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL) || Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_ALT);
 	}
 
 	// --- Move-to-position placement (Phase 6a) ---
@@ -730,7 +732,7 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	 * the fleet centroid) so they don't all pile onto the same spot; a single ship goes exactly to the point.
 	 */
 	private void commitPlacement() {
-		boolean queue = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
+		boolean queue = Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT) || Keyboard.isKeyDown(GLFW.GLFW_KEY_RIGHT_SHIFT);
 		int sectorId = GameClient.getClientPlayerState() != null ? GameClient.getClientPlayerState().getCurrentSectorId() : -1;
 		Vector3f point = new Vector3f(guiDrawer.placeX, guiDrawer.placeY, guiDrawer.placeZ);
 
@@ -815,8 +817,8 @@ public class TacticalMapControlManager extends AbstractControlManager {
 	 * Handle turret targeting mode when Ctrl+Click is used.
 	 */
 	private void handleTurretTargeting(SegmentController entity) {
-		if(entity == null) {
-			return;
+		if(entity == null || !guiDrawer.canSelect(entity)) {
+			return; // only your own faction's turrets/ships
 		}
 
 		// The map shows one marker per turret unit (the entity docked to the ship); clicking it toggles

@@ -1,5 +1,6 @@
 package videogoose.combattweaks.manager;
 
+import videogoose.combattweaks.utils.ServerTicker;
 import api.common.GameCommon;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
@@ -11,9 +12,6 @@ import videogoose.combattweaks.utils.CTLog;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Tracks repair assignments (ship -> target).
@@ -30,15 +28,9 @@ public class RepairManager {
 	private static RepairManager instance;
 	/** Maps ship entity ID → target entity ID. */
 	private final ConcurrentHashMap<Integer, Integer> assignments = new ConcurrentHashMap<>();
-	private final ScheduledExecutorService scheduler;
 
 	private RepairManager() {
-		scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-			Thread t = new Thread(r, "CombatTweaks-RepairManager");
-			t.setDaemon(true);
-			return t;
-		});
-		scheduler.scheduleAtFixedRate(this::tick, TICK_INTERVAL_SECONDS, TICK_INTERVAL_SECONDS, TimeUnit.SECONDS);
+		ServerTicker.every(TICK_INTERVAL_SECONDS * 1000L, this::tick);
 	}
 
 	public static RepairManager getInstance() {

@@ -2,8 +2,8 @@ package videogoose.combattweaks.listener;
 
 import api.common.GameCommon;
 import api.common.GameServer;
-import api.listener.fastevents.ShipAIEntityAttemptToShootListener;
-import api.utils.game.SegmentControllerUtils;
+import api.event.weapon.ShipAIEntityAttemptToShootListener;
+import api.entity.SegmentControllerUtils;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.elements.beam.repair.RepairBeamCollectionManager;

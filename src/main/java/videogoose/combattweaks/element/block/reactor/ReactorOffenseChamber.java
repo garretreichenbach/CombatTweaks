@@ -1,7 +1,7 @@
 package videogoose.combattweaks.element.block.reactor;
 
-import api.config.BlockConfig;
-import api.utils.element.Blocks;
+import api.block.BlockConfig;
+import api.block.Blocks;
 import org.schema.game.common.data.element.FactoryResource;
 import videogoose.combattweaks.element.block.Block;
 import videogoose.combattweaks.manager.ResourceManager;

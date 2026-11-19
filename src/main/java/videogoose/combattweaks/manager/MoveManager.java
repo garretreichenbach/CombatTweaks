@@ -1,5 +1,6 @@
 package videogoose.combattweaks.manager;
 
+import videogoose.combattweaks.utils.ServerTicker;
 import api.common.GameCommon;
 import api.common.GameServer;
 import org.schema.common.util.linAlg.Vector3fTools;
@@ -21,9 +22,6 @@ import videogoose.combattweaks.utils.CTLog;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Manages one-shot "move to position" orders server-side.
@@ -62,7 +60,6 @@ public class MoveManager {
 	private final ConcurrentHashMap<Integer, Integer> entityTargets = new ConcurrentHashMap<>();
 	/** Tracks which ships have arrived and are holding position. */
 	private final ConcurrentHashMap<Integer, Boolean> arrivedStates = new ConcurrentHashMap<>();
-	private final ScheduledExecutorService scheduler;
 	private final Vector3f tmpMoveDir = new Vector3f();
 	/**
 	 * Maximum iterations for the conflict-resolution loop.
@@ -97,12 +94,7 @@ public class MoveManager {
 	}
 
 	private MoveManager() {
-		scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-			Thread t = new Thread(r, "CombatTweaks-MoveManager");
-			t.setDaemon(true);
-			return t;
-		});
-		scheduler.scheduleAtFixedRate(this::tick, TICK_INTERVAL_MS, TICK_INTERVAL_MS, TimeUnit.MILLISECONDS);
+		ServerTicker.every(TICK_INTERVAL_MS, this::tick);
 	}
 
 	/**

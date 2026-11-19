@@ -1,7 +1,7 @@
 package videogoose.combattweaks.element.block.chamber;
 
-import api.config.BlockConfig;
-import api.utils.element.Blocks;
+import api.block.BlockConfig;
+import api.block.Blocks;
 import org.schema.game.common.data.element.ElementInformation;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.element.block.ElementInterface;

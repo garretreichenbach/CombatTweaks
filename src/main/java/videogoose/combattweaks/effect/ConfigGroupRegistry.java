@@ -1,6 +1,5 @@
 package videogoose.combattweaks.effect;
 
-import it.unimi.dsi.fastutil.objects.ObjectArrayFIFOQueue;
 import org.schema.game.common.data.blockeffects.config.ConfigGroup;
 import videogoose.combattweaks.effect.defense.armor.ArmorHPAbsorptionEffect1;
 import videogoose.combattweaks.effect.defense.armor.ArmorHPAbsorptionEffect2;
@@ -13,6 +12,7 @@ import videogoose.combattweaks.effect.support.aura.AuraRangeBoostEffect1;
 import videogoose.combattweaks.effect.support.aura.AuraRangeBoostEffect2;
 import videogoose.combattweaks.effect.support.shield.ShieldAuraCapacityEffect1;
 import videogoose.combattweaks.effect.support.shield.ShieldAuraCapacityEffect2;
+import java.util.Collection;
 
 public enum ConfigGroupRegistry {
 	//Defense
@@ -47,12 +47,12 @@ public enum ConfigGroupRegistry {
 		return configEffectGroup.id;
 	}
 
-	public static void registerEffects(ObjectArrayFIFOQueue<ConfigGroup> configGroups) {
+	public static void registerEffects(Collection<ConfigGroup> configGroups) {
 		// Ensure custom status-effect types (e.g. AURA_RANGE) are registered before any effect references them.
 		StatusEffectRegistry.touch();
 		for(ConfigGroupRegistry registry : values()) {
 			registry.configEffectGroup.createElements();
-			configGroups.enqueue(registry.configEffectGroup);
+			configGroups.add(registry.configEffectGroup);
 		}
 	}
 }

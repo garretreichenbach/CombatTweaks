@@ -1,5 +1,6 @@
 package videogoose.combattweaks.manager;
 
+import videogoose.combattweaks.utils.ServerTicker;
 import api.common.GameCommon;
 import org.schema.game.common.controller.SegmentController;
 import videogoose.combattweaks.CombatTweaks;
@@ -8,9 +9,6 @@ import videogoose.combattweaks.utils.CTLog;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Lets a player queue several orders for a ship — hold shift when issuing an order to append it — that
@@ -55,15 +53,9 @@ public class OrderQueueManager {
 	private final Map<Integer, Deque<QueuedOrder>> queues = new ConcurrentHashMap<>();
 	/** The order each ship is currently executing. */
 	private final Map<Integer, QueuedOrder> active = new ConcurrentHashMap<>();
-	private final ScheduledExecutorService scheduler;
 
 	private OrderQueueManager() {
-		scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-			Thread t = new Thread(r, "CombatTweaks-OrderQueue");
-			t.setDaemon(true);
-			return t;
-		});
-		scheduler.scheduleAtFixedRate(this::tick, TICK_INTERVAL_MS, TICK_INTERVAL_MS, TimeUnit.MILLISECONDS);
+		ServerTicker.every(TICK_INTERVAL_MS, this::tick);
 	}
 
 	public static OrderQueueManager getInstance() {

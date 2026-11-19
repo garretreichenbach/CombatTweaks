@@ -3,7 +3,7 @@ package videogoose.combattweaks.network.client;
 import api.network.Packet;
 import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
-import api.utils.game.PlayerUtils;
+import api.player.PlayerUtils;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
@@ -54,7 +54,7 @@ public class SendSupportingFirePacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
-		if(!AIUtils.canReceiveOrders(entityId, playerState)) {
+		if(!AIUtils.canReceiveOrders(entityId, playerState) || !AIUtils.canAttack(entityId, targetId, playerState)) {
 			return;
 		}
 		// Supporting Fire is still a combat order — a weaponless ship has nothing to support with.

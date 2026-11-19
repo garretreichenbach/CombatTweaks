@@ -5,7 +5,7 @@ import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
-import api.utils.game.PlayerUtils;
+import api.player.PlayerUtils;
 import org.schema.game.common.data.player.PlayerState;
 import videogoose.combattweaks.manager.OrderQueueManager;
 import videogoose.combattweaks.utils.AIUtils;

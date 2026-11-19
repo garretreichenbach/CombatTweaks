@@ -2,8 +2,8 @@ package videogoose.combattweaks.listener;
 
 import api.common.GameCommon;
 import api.common.GameServer;
-import api.listener.fastevents.CustomAddOnUseListener;
-import api.utils.game.PlayerUtils;
+import api.event.systems.CustomAddOnUseListener;
+import api.player.PlayerUtils;
 import com.bulletphysics.linearmath.Transform;
 import org.schema.common.util.linAlg.Vector3b;
 import org.schema.common.util.linAlg.Vector3fTools;

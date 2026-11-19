@@ -1,26 +1,28 @@
 package videogoose.combattweaks.manager;
 
 import api.common.GameClient;
-import api.listener.Listener;
-import api.listener.events.block.SegmentPieceAddByMetadataEvent;
-import api.listener.events.block.SegmentPieceAddEvent;
-import api.listener.events.block.SegmentPieceRemoveEvent;
-import api.listener.events.draw.RegisterWorldDrawersEvent;
-import api.listener.events.entity.ShipJumpEngageEvent;
-import api.listener.events.gui.HudCreateEvent;
-import api.listener.events.gui.StructureStatsGroupsAddEvent;
-import api.listener.events.gui.TargetPanelCreateEvent;
-import api.listener.events.input.KeyPressEvent;
-import api.listener.events.register.ManagerContainerRegisterEvent;
-import api.listener.events.register.RegisterAddonsEvent;
-import api.listener.events.register.RegisterConfigGroupsEvent;
-import api.listener.events.systems.ReactorRecalibrateEvent;
-import api.listener.fastevents.FastListenerCommon;
-import api.mod.StarLoader;
+import api.entity.SegmentControllerUtils;
+import api.event.EventResult;
+import api.event.block.SegmentPieceAddByMetadataListener;
+import api.event.block.SegmentPieceAddListener;
+import api.event.block.SegmentPieceRemoveListener;
+import api.event.entity.ShipJumpEngageListener;
+import api.event.gui.HudCreateListener;
+import api.event.gui.StructureStatsGroupsAddListener;
+import api.event.gui.TargetPanelCreateListener;
+import api.event.input.KeyPressListener;
+import api.event.lifecycle.ManagerContainerRegisterListener;
+import api.event.lifecycle.RegisterAddonsListener;
+import api.event.lifecycle.RegisterConfigGroupsListener;
+import api.event.render.RegisterWorldDrawersListener;
+import api.event.systems.CustomAddOnUseListener;
+import api.event.systems.ReactorRecalibrateListener;
+import api.event.weapon.DamageReductionByArmorCalcListener;
+import api.event.weapon.ShipAIEntityAttemptToShootListener;
 import api.network.packets.PacketUtil;
-import api.utils.game.PlayerUtils;
-import api.utils.game.SegmentControllerUtils;
-import org.lwjgl.input.Keyboard;
+import api.player.PlayerUtils;
+import org.schema.game.common.controller.SegmentController;
+import org.schema.schine.graphicsengine.core.GLFW;
 import org.schema.schine.input.KeyboardMappings;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.elements.ManagerModuleCollection;
@@ -61,203 +63,134 @@ public class EventManager {
 
 	public static void initialize(CombatTweaks instance) {
 
-		FastListenerCommon.shipAIEntityAttemptToShootListeners.add(shipAIShootListener = new ShipAIShootListenerImpl());
-		FastListenerCommon.damageReductionByArmorCalcListeners.add(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl());
-		FastListenerCommon.customAddOnUseListeners.add(miningSalvageListener = new MiningSalvageListener());
-		FastListenerCommon.customAddOnUseListeners.add(new AuraProjectorAddOnUseListener());
+		ShipAIEntityAttemptToShootListener.TYPE.register(shipAIShootListener = new ShipAIShootListenerImpl(), instance);
+		DamageReductionByArmorCalcListener.TYPE.register(damageReductionByArmorCalcListener = new DamageReductionByArmorCalcListenerImpl(), instance);
+		CustomAddOnUseListener.TYPE.register(miningSalvageListener = new MiningSalvageListener(), instance);
+		CustomAddOnUseListener.TYPE.register(new AuraProjectorAddOnUseListener(), instance);
 
-		StarLoader.registerListener(HudCreateEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(HudCreateEvent event) {
-				HudManager.initializeHud(event);
-			}
-		}, instance);
+		HudCreateListener.TYPE.register((hud, state, elements, isServer) -> HudManager.initializeHud(state, elements), instance);
 
-		StarLoader.registerListener(ShipJumpEngageEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(ShipJumpEngageEvent event) {
-				try {
-					if(event.getController() != null && event.getNewSector() != null) {
-						IncomingSignatureManager.getInstance().recordJump(event.getController().getId(), event.getNewSector());
-					}
-				} catch(Exception ignored) {
+		ShipJumpEngageListener.TYPE.register((context, isServer) -> {
+			try {
+				if(context.getController() != null && context.getNewSector() != null) {
+					IncomingSignatureManager.getInstance().recordJump(context.getController().getId(), context.getNewSector());
 				}
+			} catch(Exception ignored) {
 			}
+			return EventResult.CONTINUE;
 		}, instance);
 
-		StarLoader.registerListener(TargetPanelCreateEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(TargetPanelCreateEvent event) {
-				HudManager.initializeTargetPanel(event);
-			}
-		}, instance);
+		TargetPanelCreateListener.TYPE.register((panel, elements, isServer) -> HudManager.initializeTargetPanel(panel, elements), instance);
 
-		StarLoader.registerListener(KeyPressEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(KeyPressEvent event) {
-				if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
-					if(GameClient.getClientPlayerState().getFirstControlledTransformableWOExc() != null && event.isKeyDown()) {
-						boolean isTacticalKey = event.isMapping(CombatTweaks.getInstance().tacticalMapKey);
-						if((event.getKey() == Keyboard.KEY_ESCAPE || isTacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
-							if(event.getKey() == Keyboard.KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().placementActive) {
-								// Esc during placement cancels the placement and keeps the tactical map open.
-								TacticalMapGUIDrawer.getInstance().requestCancelPlacement = true;
-							} else {
+		KeyPressListener.TYPE.register((event, isServer) -> {
+			if(GameClient.getClientState().getController().getPlayerInputs().isEmpty() && !GameClient.getClientState().getGlobalGameControlManager().getIngameControlManager().getChatControlManager().isActive()) {
+				if(GameClient.getClientPlayerState().getFirstControlledTransformableWOExc() != null && event.isPressed()) {
+					KeyboardMappings tacticalKey = CombatTweaks.getInstance().tacticalMapKey;
+					boolean isTacticalKey = tacticalKey != null && event.getKey() == tacticalKey.getMapping();
+					if((event.getKey() == GLFW.GLFW_KEY_ESCAPE || isTacticalKey) && TacticalMapGUIDrawer.getInstance().toggleDraw) {
+						if(event.getKey() == GLFW.GLFW_KEY_ESCAPE && TacticalMapGUIDrawer.getInstance().placementActive) {
+							// Esc during placement cancels the placement and keeps the tactical map open.
+							TacticalMapGUIDrawer.getInstance().requestCancelPlacement = true;
+						} else {
+							TacticalMapGUIDrawer.getInstance().toggleDraw();
+						}
+					} else {
+						try {
+							if(isTacticalKey && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
 								TacticalMapGUIDrawer.getInstance().toggleDraw();
 							}
-						} else {
-							try {
-								if(isTacticalKey && event.isKeyDown() && GameClient.getClientState().getController().getPlayerInputs().isEmpty()) {
-									TacticalMapGUIDrawer.getInstance().toggleDraw();
-								}
-							} catch(Exception exception) {
-								CombatTweaks.getInstance().logException("Error processing tactical map key press", exception);
-							}
+						} catch(Exception exception) {
+							CombatTweaks.getInstance().logException("Error processing tactical map key press", exception);
 						}
 					}
 				}
 			}
 		}, instance);
-
 
 		// Thrust Blast: double-tapping a movement key while piloting in flight fires the vanilla Take-Off effect.
-		StarLoader.registerListener(KeyPressEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(KeyPressEvent event) {
-				try {
-					int key = KeyboardMappings.getEventKeySingle(event.getRawEvent());
-					if(lastThrustKey == key) {
-						if(lastThrustKeyMs > 0 && System.currentTimeMillis() - lastThrustKeyMs < THRUST_DOUBLE_TAP_MS) {
-							if(GameClient.getClientState() != null
-									&& GameClient.getClientState().isInFlightMode()
-									&& PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> control) {
-								for(KeyboardMappings mapping : THRUST_BLAST_KEYS) {
-									if(mapping.getMapping() == key && mapping.isDown(GameClient.getClientState())) {
-										PacketUtil.sendPacketToServer(new SendThrustBlastPacket(control));
-										break;
-									}
+		KeyPressListener.TYPE.register((event, isServer) -> {
+			try {
+				int key = KeyboardMappings.getEventKeySingle(event);
+				if(lastThrustKey == key) {
+					if(lastThrustKeyMs > 0 && System.currentTimeMillis() - lastThrustKeyMs < THRUST_DOUBLE_TAP_MS) {
+						if(GameClient.getClientState() != null
+								&& GameClient.getClientState().isInFlightMode()
+								&& PlayerUtils.getCurrentControl(GameClient.getClientPlayerState()) instanceof ManagedUsableSegmentController<?> control) {
+							for(KeyboardMappings mapping : THRUST_BLAST_KEYS) {
+								if(mapping.getMapping() == key && mapping.isDown(GameClient.getClientState())) {
+									PacketUtil.sendPacketToServer(new SendThrustBlastPacket(control));
+									break;
 								}
 							}
 						}
-						lastThrustKeyMs = System.currentTimeMillis();
 					}
-					lastThrustKey = key;
-				} catch(Exception exception) {
-					CombatTweaks.getInstance().logException("Error processing thrust blast key press", exception);
+					lastThrustKeyMs = System.currentTimeMillis();
 				}
+				lastThrustKey = key;
+			} catch(Exception exception) {
+				CombatTweaks.getInstance().logException("Error processing thrust blast key press", exception);
 			}
 		}, instance);
 
-		StarLoader.registerListener(RegisterConfigGroupsEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(RegisterConfigGroupsEvent event) {
-				ConfigGroupRegistry.registerEffects(event.getModConfigGroups());
-			}
-		}, instance);
+		RegisterConfigGroupsListener.TYPE.register((pool, groups, isServer) -> ConfigGroupRegistry.registerEffects(groups), instance);
 
 		// Attach both aura projector addons (support + offense) to every ship's manager container so either can be
 		// player-activated. They're mutually exclusive at the chamber level, so at most one is ever usable.
-		StarLoader.registerListener(RegisterAddonsEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(RegisterAddonsEvent event) {
-				event.addModule(new SupportAuraAddOn(event.getContainer()));
-				event.addModule(new OffenseAuraAddOn(event.getContainer()));
-			}
+		// The addons register themselves with the container in their constructor.
+		RegisterAddonsListener.TYPE.register((container, isServer) -> {
+			new SupportAuraAddOn(container);
+			new OffenseAuraAddOn(container);
 		}, instance);
 
 		// Recompute aura range/effects when a ship's reactor (chambers) changes — for whichever aura it runs.
-		StarLoader.registerListener(ReactorRecalibrateEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(ReactorRecalibrateEvent event) {
-				if(event.getImplementation().getSegmentController() instanceof ManagedUsableSegmentController<?>) {
-					AuraProjectorAddOn.recalibrateAll((ManagedUsableSegmentController<?>) event.getImplementation().getSegmentController(), event);
-				}
+		ReactorRecalibrateListener.TYPE.register((implementation, isServer) -> {
+			if(implementation.getSegmentController() instanceof ManagedUsableSegmentController<?> controller) {
+				AuraProjectorAddOn.recalibrateAll(controller, implementation);
 			}
 		}, instance);
 
-		StarLoader.registerListener(RegisterWorldDrawersEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(RegisterWorldDrawersEvent event) {
-				if(TacticalMapGUIDrawer.getInstance() == null) {
-					event.getModDrawables().add(new TacticalMapGUIDrawer());
-				}
+		RegisterWorldDrawersListener.TYPE.register((worldDrawer, drawers, isServer) -> {
+			if(TacticalMapGUIDrawer.getInstance() == null) {
+				drawers.add(new TacticalMapGUIDrawer());
 			}
 		}, instance);
 
-		StarLoader.registerListener(ManagerContainerRegisterEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(ManagerContainerRegisterEvent event) {
-				VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager = new VoidElementManager<>(event.getSegmentController(), ArmorHPCollection.class);
-				event.addModuleCollection(new ManagerModuleSingle<>(armorHPManager, ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID) {
-					@Override
-					public boolean needsAnyUpdate() {
-						return getCollectionManager().needsUpdate();
-					}
-				});
-				// Attach the Aura Disruptor weapon system (computer/module pair) so ships can mount and fire it.
-				event.addModuleCollection(new ManagerModuleCollection(new AuraDisruptorBeamElementManager(event.getSegmentController()), BlockRegistry.AURA_DISRUPTOR_COMPUTER.getId(), BlockRegistry.AURA_DISRUPTOR_MODULE.getId()));
-				if(event.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
-					ArmorHPCollection.enqueueRecalc(event.getSegmentController());
+		ManagerContainerRegisterListener.TYPE.register((context, isServer) -> {
+			VoidElementManager<ArmorHPUnit, ArmorHPCollection> armorHPManager = new VoidElementManager<>(context.getSegmentController(), ArmorHPCollection.class);
+			context.addModuleCollection(new ManagerModuleSingle<>(armorHPManager, ElementKeyMap.CORE_ID, ElementKeyMap.CORE_ID) {
+				@Override
+				public boolean needsAnyUpdate() {
+					return getCollectionManager().needsUpdate();
 				}
+			});
+			// Attach the Aura Disruptor weapon system (computer/module pair) so ships can mount and fire it.
+			context.addModuleCollection(new ManagerModuleCollection(new AuraDisruptorBeamElementManager(context.getSegmentController()), BlockRegistry.AURA_DISRUPTOR_COMPUTER.getId(), BlockRegistry.AURA_DISRUPTOR_MODULE.getId()));
+			if(context.getSegmentController() instanceof ManagedUsableSegmentController<?>) {
+				ArmorHPCollection.enqueueRecalc(context.getSegmentController());
 			}
 		}, instance);
 
-		StarLoader.registerListener(StructureStatsGroupsAddEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(StructureStatsGroupsAddEvent event) {
-				event.addGroup(new AdvancedStructureStatsArmor(event.getAdvancedStructureStats()));
-			}
-		}, instance);
+		StructureStatsGroupsAddListener.TYPE.register((stats, groups, isServer) -> groups.add(new AdvancedStructureStatsArmor(stats)), instance);
 
-		StarLoader.registerListener(SegmentPieceAddByMetadataEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(SegmentPieceAddByMetadataEvent event) {
-				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) {
-					return;
-				}
-				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) {
-					return;
-				}
-				if(event.getSegment().getSegmentController().railController.isDocked()) {
-					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController().railController.getRoot());
-				} else {
-					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController());
-				}
-			}
-		}, instance);
+		SegmentPieceAddByMetadataListener.TYPE.register((newType, orientation, x, y, z, absIndex, controller, onServer) -> onArmorChanged(newType, controller), instance);
 
-		StarLoader.registerListener(SegmentPieceAddEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(SegmentPieceAddEvent event) {
-				if(!ElementKeyMap.getInfo(event.getNewType()).isArmor()) {
-					return;
-				}
-				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) {
-					return;
-				}
-				if(event.getSegment().getSegmentController().railController.isDocked()) {
-					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController().railController.getRoot());
-				} else {
-					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController());
-				}
-			}
-		}, instance);
+		SegmentPieceAddListener.TYPE.register((controller, newType, orientation, x, y, z, segment, updateSegmentBuffer, absIndex, isServer) -> onArmorChanged(newType, controller), instance);
 
-		StarLoader.registerListener(SegmentPieceRemoveEvent.class, new Listener<>() {
-			@Override
-			public void onEvent(SegmentPieceRemoveEvent event) {
-				if(!ElementKeyMap.getInfo(event.getType()).isArmor()) {
-					return;
-				}
-				if(!(event.getSegment().getSegmentController() instanceof ManagedUsableSegmentController<?>)) {
-					return;
-				}
-				if(event.getSegment().getSegmentController().railController.isDocked()) {
-					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController().railController.getRoot());
-				} else {
-					ArmorHPCollection.enqueueRecalc(event.getSegment().getSegmentController());
-				}
-			}
-		}, instance);
+		SegmentPieceRemoveListener.TYPE.register((type, segmentSize, x, y, z, orientation, segment, preserveControl, isServer) -> onArmorChanged(type, segment.getSegmentController()), instance);
+	}
+
+	/** Queues an armor-HP recalc on the root entity when an armor block is added or removed. Hot path: cheap rejects first. */
+	private static void onArmorChanged(short type, SegmentController controller) {
+		if(!ElementKeyMap.isValidType(type) || !ElementKeyMap.getInfo(type).isArmor()) {
+			return;
+		}
+		if(!(controller instanceof ManagedUsableSegmentController<?>)) {
+			return;
+		}
+		if(controller.railController.isDocked()) {
+			ArmorHPCollection.enqueueRecalc(controller.railController.getRoot());
+		} else {
+			ArmorHPCollection.enqueueRecalc(controller);
+		}
 	}
 }

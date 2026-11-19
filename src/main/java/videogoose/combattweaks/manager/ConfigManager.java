@@ -1,6 +1,5 @@
 package videogoose.combattweaks.manager;
 
-import org.lwjgl.input.Keyboard;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.config.MainConfig;
 import videogoose.combattweaks.config.SystemConfig;

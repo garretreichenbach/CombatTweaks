@@ -3,15 +3,16 @@ package videogoose.combattweaks.gui.tacticalmap;
 import api.common.GameClient;
 import api.common.GameCommon;
 import api.network.packets.PacketUtil;
-import api.utils.draw.ModWorldDrawer;
-import api.utils.game.PlayerUtils;
+import api.render.ModWorldDrawer;
+import api.player.PlayerUtils;
 import com.bulletphysics.linearmath.Transform;
 import org.lwjgl.BufferUtils;
-import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.Display;
+import org.schema.schine.input.Keyboard;
+import org.schema.schine.graphicsengine.core.GLFW;
+
+import static org.lwjgl.glfw.GLFW.glfwGetFramebufferSize;
+import org.schema.schine.input.Mouse;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.util.glu.Project;
 import org.schema.common.util.ByteUtil;
 import org.schema.common.util.StringTools;
 import org.schema.common.util.linAlg.Vector3fTools;
@@ -39,7 +40,7 @@ import org.schema.schine.input.InputType;
 import org.schema.schine.input.KeyboardMappings;
 import videogoose.combattweaks.CombatTweaks;
 import videogoose.combattweaks.manager.ConfigManager;
-import api.utils.game.SegmentControllerUtils;
+import api.entity.SegmentControllerUtils;
 import org.schema.game.common.controller.elements.ElementCollectionManager;
 import org.schema.game.common.controller.elements.ShieldAddOn;
 import org.schema.game.common.controller.elements.ShieldContainerInterface;
@@ -459,12 +460,12 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			return false;
 		}
 		GL_OBJ_COORDS.clear();
-		if(!Project.gluUnProject(winX, winY, 0.0f, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_OBJ_COORDS)) {
+		if(!GlUtil.gluUnProject(winX, winY, 0.0f, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_OBJ_COORDS)) {
 			return false;
 		}
 		float nx = GL_OBJ_COORDS.get(0), ny = GL_OBJ_COORDS.get(1), nz = GL_OBJ_COORDS.get(2);
 		GL_OBJ_COORDS.clear();
-		if(!Project.gluUnProject(winX, winY, 1.0f, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_OBJ_COORDS)) {
+		if(!GlUtil.gluUnProject(winX, winY, 1.0f, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_OBJ_COORDS)) {
 			return false;
 		}
 		float fx = GL_OBJ_COORDS.get(0), fy = GL_OBJ_COORDS.get(1), fz = GL_OBJ_COORDS.get(2);
@@ -665,8 +666,8 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		float pad = 8.0f;
 		float panelW = o.getMaxLineWidth() + pad * 2.0f;
 		float panelH = o.getTextHeight() + pad * 2.0f;
-		float px = org.lwjgl.input.Mouse.getX() + 22.0f;
-		float py = GLFrame.getHeight() - org.lwjgl.input.Mouse.getY() + 22.0f;
+		float px = Mouse.getX() + 22.0f;
+		float py = GLFrame.getHeight() - Mouse.getY() + 22.0f;
 		if(px + panelW > GLFrame.getWidth()) {
 			px = GLFrame.getWidth() - panelW - 4.0f;
 		}
@@ -1063,18 +1064,18 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			// Show the key the player actually has bound (respects remapping in the Controls settings) rather
 			// than a fixed config value, now that the binding is owned by StarMade's keybind system.
 			KeyboardMappings mapping = CombatTweaks.getInstance().tacticalMapKey;
-			int hintKey = mapping != null ? mapping.getMapping() : Keyboard.KEY_BACKSLASH;
+			int hintKey = mapping != null ? mapping.getMapping() : GLFW.GLFW_KEY_BACKSLASH;
 			hud.addHelper(InputType.KEYBOARD, hintKey, "Toggle Tactical Map", HudContextHelperContainer.Hos.RIGHT, ContextFilter.IMPORTANT);
 		}
 		if(toggleDraw) {
 			hud.addHelper(InputType.MOUSE, 0, "Drag: Select / Deselect | Double-click: Focus", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.MOUSE, 2, "Open Orders (Radial)", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_LSHIFT, "(Hold) Queue Order", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, GLFW.GLFW_KEY_LEFT_SHIFT, "(Hold) Queue Order", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 			hud.addHelper(InputType.MOUSE, 1, "(Hold) Rotate Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_S, "(Ctrl) Toggle Turret Mode", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_A, "(Ctrl) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_1, "Select Control Group (Ctrl: Set) 1-0", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
-			hud.addHelper(InputType.KEYBOARD, Keyboard.KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, GLFW.GLFW_KEY_S, "(Ctrl) Toggle Turret Mode", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, GLFW.GLFW_KEY_A, "(Ctrl) Select All", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, GLFW.GLFW_KEY_1, "Select Control Group (Ctrl: Set) 1-0", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
+			hud.addHelper(InputType.KEYBOARD, GLFW.GLFW_KEY_X, "Reset Camera", HudContextHelperContainer.Hos.RIGHT, ContextFilter.NORMAL);
 		}
 	}
 
@@ -1489,7 +1490,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 *
 	 * <p>The map projects entities to screen with the live {@code GL_VIEWPORT} but positions labels and
 	 * sizes its perspective from the cached viewport. The engine only refreshes that cache when it catches
-	 * a {@code Display.wasResized()} event — and a maximize/resize that lands during startup (before the GL
+	 * a framebuffer-resize event — and a maximize/resize that lands during startup (before the GL
 	 * context is tracking resizes) can be missed, leaving the cache stuck at the initial size for the rest
 	 * of the session. Everything the map draws then ends up offset/mis-scaled. We self-heal: if the real
 	 * window size differs from the cached viewport, set the GL viewport and refresh the cache so all the
@@ -1497,8 +1498,11 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 */
 	private void syncViewport() {
 		try {
-			int dw = Display.getWidth();
-			int dh = Display.getHeight();
+			int[] fw = new int[1];
+			int[] fh = new int[1];
+			glfwGetFramebufferSize(GraphicsContext.getWindowId(), fw, fh);
+			int dw = fw[0];
+			int dh = fh[0];
 			if(dw > 0 && dh > 0 && (dw != GLFrame.getWidth() || dh != GLFrame.getHeight())) {
 				GL11.glViewport(0, 0, dw, dh);
 				Controller.onViewportChange();
@@ -1542,9 +1546,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		GL_MODELVIEW.clear();
 		GL_PROJECTION.clear();
 		GL_VIEWPORT.clear();
-		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, GL_MODELVIEW);
-		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, GL_PROJECTION);
-		GL11.glGetInteger(GL11.GL_VIEWPORT, GL_VIEWPORT);
+		GL11.glGetFloatv(GL11.GL_MODELVIEW_MATRIX, GL_MODELVIEW);
+		GL11.glGetFloatv(GL11.GL_PROJECTION_MATRIX, GL_PROJECTION);
+		GL11.glGetIntegerv(GL11.GL_VIEWPORT, GL_VIEWPORT);
 
 		GlUtil.glPopMatrix(); // modelview
 		GlUtil.glMatrixMode(GL11.GL_PROJECTION);
@@ -1557,7 +1561,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 			// Project entity center for label placement (camera-relative: subtract camera position)
 			Vector3f pos = indicator.entityTransform.origin;
 			GL_WIN_COORDS.clear();
-			boolean ok = Project.gluProject(pos.x - camPos.x, pos.y - camPos.y, pos.z - camPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+			boolean ok = GlUtil.gluProject(pos.x - camPos.x, pos.y - camPos.y, pos.z - camPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS) == 1;
 			float depth = GL_WIN_COORDS.get(2);
 			indicator.screenPosValid = ok && depth > 0.0f && depth < 1.0f;
 			if(!indicator.screenPosValid) continue;
@@ -1585,7 +1589,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 				t.transform(tmpBboxCorner);
 				tmpBboxCorner.sub(camPos); // camera-relative
 				GL_WIN_COORDS.clear();
-				boolean cornerOk = Project.gluProject(tmpBboxCorner.x, tmpBboxCorner.y, tmpBboxCorner.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+				boolean cornerOk = GlUtil.gluProject(tmpBboxCorner.x, tmpBboxCorner.y, tmpBboxCorner.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS) == 1;
 				if(!cornerOk) continue;
 				float cx = GL_WIN_COORDS.get(0);
 				float cy = vpH - GL_WIN_COORDS.get(1);
@@ -2180,7 +2184,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	 */
 	private void drawWorldLabel(float wx, float wy, float wz, String text) {
 		GL_WIN_COORDS.clear();
-		boolean ok = Project.gluProject(wx - lastCamPos.x, wy - lastCamPos.y, wz - lastCamPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+		boolean ok = GlUtil.gluProject(wx - lastCamPos.x, wy - lastCamPos.y, wz - lastCamPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS) == 1;
 		if(!ok) {
 			return;
 		}
@@ -2382,7 +2386,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 	/** Projects {@code relPos} and draws the label for a contact group (single contact or merged cluster). */
 	private void drawSignatureGroupLabel(java.util.List<IncomingSignature> group, Vector3f relPos) {
 		GL_WIN_COORDS.clear();
-		boolean ok = Project.gluProject(relPos.x - lastCamPos.x, relPos.y - lastCamPos.y, relPos.z - lastCamPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS);
+		boolean ok = GlUtil.gluProject(relPos.x - lastCamPos.x, relPos.y - lastCamPos.y, relPos.z - lastCamPos.z, GL_MODELVIEW, GL_PROJECTION, GL_VIEWPORT, GL_WIN_COORDS) == 1;
 		if(!ok) {
 			return;
 		}
@@ -2616,7 +2620,7 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 
 	private static float safeRecon(SegmentController sc) {
 		try {
-			return sc == null ? 0 : sc.getReconStrength();
+			return sc == null ? 0 : sc.getReconStrengthRaw();
 		} catch(Exception e) {
 			return 0;
 		}
@@ -3518,7 +3522,9 @@ public class TacticalMapGUIDrawer extends ModWorldDrawer {
 		}
 	}
 
-	private boolean canSelect(SegmentController entity) {
-		return GameCommon.getGameState().getFactionManager().isFriend(entity.getFactionId(), GameClient.getClientState().getPlayer().getFactionId()) && entity.getFactionId() != 0;
+	boolean canSelect(SegmentController entity) {
+		// Own faction only: allies' ships aren't ours to command (the server rejects those orders anyway).
+		int myFac = GameClient.getClientState().getPlayer().getFactionId();
+		return myFac != 0 && entity.getFactionId() == myFac;
 	}
 }

@@ -3,10 +3,12 @@ package videogoose.combattweaks.network.client;
 import api.network.Packet;
 import api.network.PacketReadBuffer;
 import api.network.PacketWriteBuffer;
+import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.data.player.PlayerState;
 import videogoose.combattweaks.manager.OrderQueueManager;
 import videogoose.combattweaks.utils.AIUtils;
+import videogoose.combattweaks.utils.EntityUtils;
 
 import java.io.IOException;
 
@@ -41,6 +43,10 @@ public class SendIdlePacket extends Packet {
 
 	@Override
 	public void processPacketOnServer(PlayerState playerState) {
+		SegmentController ship = EntityUtils.getEntityById(shipId);
+		if(ship != null && !AIUtils.isCommandableBy(ship, playerState)) {
+			return; // only the owner may idle a ship (a vanished ship still gets its orders cleared below)
+		}
 		OrderQueueManager.getInstance().clear(shipId); // wipe any queued orders too
 		AIUtils.clearAllOrders(shipId);
 		AIUtils.haltShip(shipId); // stop residual drift/spin so "idle" actually parks the ship

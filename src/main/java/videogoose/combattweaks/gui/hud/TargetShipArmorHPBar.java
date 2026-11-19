@@ -1,7 +1,7 @@
 package videogoose.combattweaks.gui.hud;
 
 import api.common.GameClient;
-import api.utils.game.SegmentControllerUtils;
+import api.entity.SegmentControllerUtils;
 import org.schema.common.config.ConfigurationElement;
 import org.schema.common.util.StringTools;
 import org.schema.common.util.linAlg.Vector4i;

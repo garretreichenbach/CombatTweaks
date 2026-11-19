@@ -9,7 +9,8 @@ import org.schema.game.client.view.gui.RadialMenuDialog;
 import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
-import org.lwjgl.input.Keyboard;
+import org.schema.schine.input.Keyboard;
+import org.schema.schine.graphicsengine.core.GLFW;
 import org.schema.schine.graphicsengine.core.MouseEvent;
 import org.schema.schine.graphicsengine.forms.font.FontLibrary;
 import org.schema.schine.graphicsengine.forms.gui.GUIActivationCallback;
@@ -31,7 +32,7 @@ public class TacticalMapRadial extends RadialMenuDialog {
 
 	/** Whether shift is held — issue this order as a queued (append) order rather than replacing. */
 	private static boolean isQueueModifier() {
-		return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
+		return Keyboard.isKeyDown(GLFW.GLFW_KEY_LEFT_SHIFT) || Keyboard.isKeyDown(GLFW.GLFW_KEY_RIGHT_SHIFT);
 	}
 
 	/** The attack-order action, reused for the direct (hostile) item and the neutral confirmation item. */

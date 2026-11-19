@@ -1,8 +1,7 @@
 package videogoose.combattweaks.element.block;
 
 import api.common.GameCommon;
-import api.config.BlockConfig;
-import org.newdawn.slick.Game;
+import api.block.BlockConfig;
 import org.schema.game.common.data.element.ElementInformation;
 import org.schema.game.server.controller.gameConfig.GameConfig;
 import videogoose.combattweaks.element.block.chamber.defense.ArmorHPAbsorptionChamber1;

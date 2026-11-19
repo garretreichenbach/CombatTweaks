@@ -1,8 +1,8 @@
 package videogoose.combattweaks.listener;
 
 import api.common.GameCommon;
-import api.listener.fastevents.CustomAddOnUseListener;
-import api.utils.game.SegmentControllerUtils;
+import api.event.systems.CustomAddOnUseListener;
+import api.entity.SegmentControllerUtils;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.controller.elements.ShipManagerContainer;

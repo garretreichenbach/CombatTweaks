@@ -1,5 +1,6 @@
 package videogoose.combattweaks.manager;
 
+import videogoose.combattweaks.utils.ServerTicker;
 import api.common.GameCommon;
 import api.common.GameServer;
 import org.schema.common.util.linAlg.Vector3fTools;
@@ -16,9 +17,6 @@ import javax.vecmath.Vector3f;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Manages active defense orders server-side.
@@ -38,18 +36,12 @@ public class DefenseManager {
 
 	/** Maps defender entity ID → protected entity ID. */
 	private final ConcurrentHashMap<Integer, Integer> assignments = new ConcurrentHashMap<>();
-	private final ScheduledExecutorService scheduler;
 	// Reused per-tick to avoid allocation
 	private final Vector3f tmpVec = new Vector3f();
 	private final Vector3i tmpSector = new Vector3i();
 
 	private DefenseManager() {
-		scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-			Thread t = new Thread(r, "CombatTweaks-DefenseManager");
-			t.setDaemon(true);
-			return t;
-		});
-		scheduler.scheduleAtFixedRate(this::tick, TICK_INTERVAL_SECONDS, TICK_INTERVAL_SECONDS, TimeUnit.SECONDS);
+		ServerTicker.every(TICK_INTERVAL_SECONDS * 1000L, this::tick);
 	}
 
 	public static DefenseManager getInstance() {

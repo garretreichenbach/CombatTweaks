@@ -3,11 +3,11 @@ package videogoose.combattweaks.system.aura;
 import api.common.GameClient;
 import api.common.GameCommon;
 import api.common.GameServer;
-import api.listener.events.systems.ReactorRecalibrateEvent;
-import api.utils.addon.SimpleAddOn;
-import api.utils.game.PlayerUtils;
-import api.utils.game.SegmentControllerUtils;
-import api.utils.sound.AudioUtils;
+import org.schema.game.common.controller.elements.power.reactor.PowerImplementation;
+import api.entity.module.SimpleAddOn;
+import api.player.PlayerUtils;
+import api.entity.SegmentControllerUtils;
+import api.sound.AudioUtils;
 import it.unimi.dsi.fastutil.objects.ObjectCollection;
 import org.schema.game.client.data.GameClientState;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
@@ -111,13 +111,13 @@ public abstract class AuraProjectorAddOn extends SimpleAddOn {
 	}
 
 	/** Recalibrate every aura projector on a ship (both roles) in response to a reactor change. */
-	public static void recalibrateAll(ManagedUsableSegmentController<?> ent, ReactorRecalibrateEvent event) {
+	public static void recalibrateAll(ManagedUsableSegmentController<?> ent, PowerImplementation implementation) {
 		if(ent == null || ent.getManagerContainer() == null) {
 			return;
 		}
 		for(PlayerUsableInterface i : ent.getManagerContainer().getPlayerUsable()) {
 			if(i instanceof AuraProjectorAddOn aura) {
-				aura.onReactorRecalibrate(event);
+				aura.onReactorRecalibrate(implementation);
 			}
 		}
 	}
@@ -139,7 +139,7 @@ public abstract class AuraProjectorAddOn extends SimpleAddOn {
 	}
 
 	@Override
-	public void onReactorRecalibrate(ReactorRecalibrateEvent event) {
+	public void onReactorRecalibrate(PowerImplementation implementation) {
 		try {
 			if(!(getSegmentController() instanceof ManagedUsableSegmentController<?>)) {
 				return; //Prevents asteroid-related crashes

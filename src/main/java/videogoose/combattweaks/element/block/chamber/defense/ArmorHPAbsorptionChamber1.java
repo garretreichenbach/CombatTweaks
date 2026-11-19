@@ -1,6 +1,6 @@
 package videogoose.combattweaks.element.block.chamber.defense;
 
-import api.utils.element.Blocks;
+import api.block.Blocks;
 import videogoose.combattweaks.effect.ConfigGroupRegistry;
 import videogoose.combattweaks.element.block.BlockRegistry;
 import videogoose.combattweaks.element.block.chamber.ChamberBlock;

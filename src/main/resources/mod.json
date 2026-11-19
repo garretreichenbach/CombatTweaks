@@ -1,16 +1,16 @@
 {
+	"id": "videogoose.combattweaks",
 	"name": "CombatTweaks",
 	"author": "VideoGoose",
-	"description": "RTS-style tactical fleet command, an armor HP defense layer, and combat reactor systems: projector auras (support buffs + ECW jamming) with takedown counterplay, the Aura Disruptor, Warhead Pre-Charger chambers, and Thrust Blast.",
-	"version": "2.3.5",
-	"starmade_version": "0.303.4",
-	"client_mod": false,
-	"server_mod": false,
+	"description": "RTS-style tactical fleet commands, combat reactor systems: projector auras (support buffs + ECW jamming) with takedown counterplay, the Aura Disruptor, Warhead Pre-Charger chambers, and Thrust Blast.",
+	"version": "3.0.0",
+	"starmade_version": "0.4.622",
+	"starloader_version": "2.0",
+	"client_mod": true,
+	"server_mod": true,
 	"main_class": "videogoose.combattweaks.CombatTweaks",
 	"smd_resource_id": 8559,
-	"dependencies": [
-		-1
-	],
+	"dependencies": [],
 	"mixin_configs": [
 		"mixins.combattweaks.json"
 	]

@@ -216,7 +216,7 @@ public class IncomingSignatureManager {
 
 	private static float safeRecon(SegmentController sc) {
 		try {
-			return sc.getReconStrength();
+			return sc.getReconStrengthRaw();
 		} catch(Exception e) {
 			return 0;
 		}

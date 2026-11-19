@@ -1,6 +1,6 @@
 package videogoose.combattweaks.system.weapon.auradisruptor;
 
-import api.utils.game.module.CustomModuleUtils;
+import api.entity.module.CustomModuleUtils;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelpManager;
 import org.schema.game.client.view.gui.shiphud.newhud.HudContextHelperContainer;
 import org.schema.game.common.controller.SegmentController;

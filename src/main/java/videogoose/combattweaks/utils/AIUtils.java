@@ -5,7 +5,7 @@ import com.bulletphysics.linearmath.Transform;
 import org.schema.game.common.controller.FloatingRock;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
-import api.utils.game.SegmentControllerUtils;
+import api.entity.SegmentControllerUtils;
 import org.schema.game.common.controller.Ship;
 import org.schema.game.common.controller.elements.WeaponElementManagerInterface;
 import org.schema.game.common.controller.elements.beam.repair.RepairElementManager;
@@ -27,7 +27,9 @@ import org.schema.game.common.data.player.PlayerState;
 import org.schema.schine.ai.stateMachines.FSMException;
 import org.schema.schine.ai.stateMachines.State;
 import org.schema.schine.ai.stateMachines.Transition;
-import api.utils.game.PlayerUtils;
+import api.player.PlayerUtils;
+import api.common.GameCommon;
+import org.schema.game.common.data.fleet.Fleet;
 import videogoose.combattweaks.manager.DefenseManager;
 import videogoose.combattweaks.manager.MineManager;
 import videogoose.combattweaks.manager.MoveManager;
@@ -424,14 +426,45 @@ public class AIUtils {
 	 */
 	public static boolean canReceiveOrders(int entityId, PlayerState issuer) {
 		SegmentController entity = EntityUtils.getEntityById(entityId);
+		if(entity == null || issuer == null || !isCommandableBy(entity, issuer)) {
+			return false; // not yours (or gone) — a client can't command another player's/faction's ships
+		}
 		if(canReceiveOrders(entity)) {
 			return true;
 		}
-		if(issuer != null) {
-			String name = entity != null ? entity.getName() : "Ship";
-			PlayerUtils.sendMessage(issuer, name + " must be in a fleet to receive orders.");
-		}
+		PlayerUtils.sendMessage(issuer, entity.getName() + " must be in a fleet to receive orders.");
 		return false;
+	}
+
+	/**
+	 * Whether {@code issuer} may command {@code entity}: they own its fleet, or it belongs to their (non-zero)
+	 * faction. Turrets resolve to the ship they're docked on. Allies' ships are deliberately excluded.
+	 */
+	public static boolean isCommandableBy(SegmentController entity, PlayerState issuer) {
+		SegmentController root = entity.railController != null && entity.railController.getRoot() != null ? entity.railController.getRoot() : entity;
+		Fleet fleet = root.getFleet();
+		if(fleet != null && issuer.getName().equalsIgnoreCase(fleet.getOwner())) {
+			return true;
+		}
+		return issuer.getFactionId() != 0 && root.getFactionId() == issuer.getFactionId();
+	}
+
+	/**
+	 * Guard for attack-type orders: the target must exist and must not be the issuer's own or a faction-friend
+	 * of the attacking ship. The engine's specific-target acquisition has no relation check, so without this an
+	 * attack order sends ships (and their turrets) after friendlies.
+	 */
+	public static boolean canAttack(int shipId, int targetId, PlayerState issuer) {
+		SegmentController ship = EntityUtils.getEntityById(shipId);
+		SegmentController target = EntityUtils.getEntityById(targetId);
+		if(ship == null || target == null) {
+			return false;
+		}
+		if(isCommandableBy(target, issuer) || GameCommon.getGameState().getFactionManager().isFriend(ship.getFactionId(), target.getFactionId())) {
+			PlayerUtils.sendMessage(issuer, "Can't order an attack on a friendly ship.");
+			return false;
+		}
+		return true;
 	}
 
 	/**
@@ -699,6 +732,30 @@ public class AIUtils {
 		RepairManager.getInstance().removeRepair(shipId);
 		MoveManager.getInstance().removeMove(shipId);
 		clearTarget(shipId);
+		clearDockedTargets(EntityUtils.getEntityById(shipId));
+	}
+
+	/**
+	 * Undo {@link #setAttackTarget}'s cascade: drop the specific target it pushed onto every docked ship
+	 * (turrets). Without this, turrets kept engaging the old attack target after Idle or a new order.
+	 */
+	private static void clearDockedTargets(SegmentController parent) {
+		if(parent == null || parent.railController == null || parent.railController.next == null) {
+			return;
+		}
+		for(RailRelation child : parent.railController.next) {
+			if(child.docked == null || !(child.docked.getSegmentController() instanceof Ship docked) || docked.equals(parent)) {
+				continue;
+			}
+			try {
+				if(docked.getAiConfiguration().getAiEntityState().getCurrentProgram() instanceof TargetProgram<?> tp) {
+					tp.setTarget(null);
+					tp.setSpecificTargetId(-1);
+				}
+			} catch(Exception ignored) {
+			}
+			clearDockedTargets(docked);
+		}
 	}
 
 	public static void setAttackTarget(SegmentController from, SegmentController to) {

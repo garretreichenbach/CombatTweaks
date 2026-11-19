@@ -1,6 +1,6 @@
 package videogoose.combattweaks.system.aura;
 
-import api.utils.game.SegmentControllerUtils;
+import api.entity.SegmentControllerUtils;
 import org.schema.game.common.controller.elements.ManagerContainer;
 import org.schema.game.common.controller.elements.power.reactor.tree.ReactorElement;
 import org.schema.game.common.data.element.ElementInformation;

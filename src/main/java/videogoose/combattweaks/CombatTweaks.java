@@ -1,10 +1,10 @@
 package videogoose.combattweaks;
 
-import api.config.BlockConfig;
+import api.block.BlockConfig;
 import api.mod.StarMod;
 import api.network.packets.PacketUtil;
-import api.utils.registry.UniversalRegistry;
-import api.utils.textures.StarLoaderTexture;
+import api.config.registry.UniversalRegistry;
+import api.render.texture.StarLoaderTexture;
 import org.schema.game.client.view.mainmenu.GuidesRegistry;
 import org.schema.schine.graphicsengine.core.GLFW;
 import org.schema.schine.graphicsengine.core.GraphicsContext;
@@ -102,18 +102,18 @@ public class CombatTweaks extends StarMod {
 	}
 
 	private void registerPackets() {
-		PacketUtil.registerPacket(SendAttackPacket.class);
-		PacketUtil.registerPacket(SendDefensePacket.class);
-		PacketUtil.registerPacket(SendIdlePacket.class);
-		PacketUtil.registerPacket(SendMinePacket.class);
-		PacketUtil.registerPacket(SendRepairPacket.class);
-		PacketUtil.registerPacket(SendMoveToPacket.class);
-		PacketUtil.registerPacket(SendMoveToPositionPacket.class);
-		PacketUtil.registerPacket(SendThrustBlastPacket.class);
-		PacketUtil.registerPacket(SendSupportingFirePacket.class);
-		PacketUtil.registerPacket(SendArmorHPSyncPacket.class);
-		PacketUtil.registerPacket(SendAuraSyncPacket.class);
-		PacketUtil.registerPacket(SendIncomingSignaturesPacket.class);
-		PacketUtil.registerPacket(RequestArmorSyncPacket.class);
+		PacketUtil.registerPacket(this, SendAttackPacket.class);
+		PacketUtil.registerPacket(this, SendDefensePacket.class);
+		PacketUtil.registerPacket(this, SendIdlePacket.class);
+		PacketUtil.registerPacket(this, SendMinePacket.class);
+		PacketUtil.registerPacket(this, SendRepairPacket.class);
+		PacketUtil.registerPacket(this, SendMoveToPacket.class);
+		PacketUtil.registerPacket(this, SendMoveToPositionPacket.class);
+		PacketUtil.registerPacket(this, SendThrustBlastPacket.class);
+		PacketUtil.registerPacket(this, SendSupportingFirePacket.class);
+		PacketUtil.registerPacket(this, SendArmorHPSyncPacket.class);
+		PacketUtil.registerPacket(this, SendAuraSyncPacket.class);
+		PacketUtil.registerPacket(this, SendIncomingSignaturesPacket.class);
+		PacketUtil.registerPacket(this, RequestArmorSyncPacket.class);
 	}
 }

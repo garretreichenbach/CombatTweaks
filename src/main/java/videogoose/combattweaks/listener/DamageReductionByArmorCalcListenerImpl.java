@@ -1,6 +1,6 @@
 package videogoose.combattweaks.listener;
 
-import api.listener.fastevents.segmentpiece.DamageReductionByArmorCalcListener;
+import api.event.weapon.DamageReductionByArmorCalcListener;
 import org.schema.game.common.controller.ManagedUsableSegmentController;
 import org.schema.game.common.controller.SegmentController;
 import org.schema.game.common.controller.elements.ShieldAddOn;
